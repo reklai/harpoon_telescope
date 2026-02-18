@@ -40,7 +40,7 @@ Press Alt+Y to see your most-used tabs ranked by how often and how recently you 
 Every keybinding can be changed in the options page. Collision detection warns you before you create conflicts.
 
 **Optional vim motions**
-Toggle vim-enhanced navigation with Alt+V. This adds j/k movement and Ctrl+U/D scrolling on top of the standard arrow keys — it never replaces them. A badge in the panel titlebar shows whether vim mode is on or off.
+Toggle vim-enhanced navigation with Alt+V. This adds j/k movement on top of the standard arrow keys — it never replaces them. A badge in the panel titlebar shows whether vim mode is on or off.
 
 **Sessions**
 Save your current set of pinned tabs as a named session. Load it later to restore your workspace. Keep up to 3 sessions.

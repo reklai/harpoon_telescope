@@ -50,7 +50,7 @@ This extension brings two Neovim plugins to the browser:
 - **Telescope** (nvim-telescope) — fuzzy find anything. Here: fuzzy search the current page's visible text with structural filters and a preview pane.
 - **Frecency** — a Mozilla-coined algorithm for ranking items by a combination of frequency and recency, used here for a tab switcher.
 
-The extension runs on Firefox (Manifest V2), Chrome (Manifest V3), and Zen (Firefox fork, inherits MV2 support). Every overlay is a Shadow DOM panel injected into the active page. All keybindings are user-configurable with per-scope collision detection. Navigation modes: basic (arrows) and vim (adds j/k/Ctrl+U/D on top of basic).
+The extension runs on Firefox (Manifest V2), Chrome (Manifest V3), and Zen (Firefox fork, inherits MV2 support). Every overlay is a Shadow DOM panel injected into the active page. All keybindings are user-configurable with per-scope collision detection. Navigation modes: basic (arrows) and vim (adds j/k on top of basic).
 
 ### File Structure
 
@@ -973,7 +973,6 @@ const VIM_ENHANCED_ALIASES: Record<string, Record<string, string[]>> = {
   harpoon: { moveUp: ["K"], moveDown: ["J"] },
   search: {
     moveUp: ["K"], moveDown: ["J"],
-    scrollPreviewUp: ["Ctrl+U"], scrollPreviewDown: ["Ctrl+D"],
   },
 };
 ```

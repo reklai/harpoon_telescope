@@ -33,14 +33,13 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 - **Max 50 entries** — lowest-scored entry evicted when full
 
 ### Navigation Modes
-- **Basic** (default) — arrow keys, PageUp/PageDown, mouse
-- **Vim-enhanced** (`Alt+V` to toggle) — adds j/k, Ctrl+U/D on top of basic keys
+- **Basic** (default) — arrow keys, mouse
+- **Vim-enhanced** (`Alt+V` to toggle) — adds j/k on top of basic keys
 - Green **vim** badge in titlebar of all panels shows current mode
 
 | Action | Basic Mode | Vim Mode (adds) |
 |--------|-----------|-----------------|
 | Navigate results | Arrow Up/Down | j/k |
-| Scroll preview | PageUp/PageDown | Ctrl+U/D |
 | Jump to selected | Enter | Enter |
 | Remove (harpoon) | d | d |
 | Swap mode (harpoon) | w | w |

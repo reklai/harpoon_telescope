@@ -299,6 +299,7 @@ export async function openTelescope(
     let currentQuery = "";
     let activeFilters: SearchFilter[] = [];
     let activeItemEl: HTMLElement | null = null; // direct ref, no querySelector
+    let focusedPane: "input" | "results" = "input"; // tracks which pane has focus
 
     // rAF throttle for preview updates
     let previewRafId: number | null = null;
@@ -666,6 +667,10 @@ export async function openTelescope(
     backdrop.addEventListener("click", close);
     backdrop.addEventListener("mousedown", (e) => e.preventDefault());
 
+    // Sync focusedPane on mouse clicks
+    input.addEventListener("focus", () => { focusedPane = "input"; });
+    resultsList.addEventListener("focus", () => { focusedPane = "results"; }, true);
+
     // -- Search input --
 
     input.addEventListener("input", () => {
@@ -735,7 +740,7 @@ export async function openTelescope(
       }
 
       // Backspace on empty input removes the last active filter pill
-      if (e.key === "Backspace" && host.shadowRoot?.activeElement === input
+      if (e.key === "Backspace" && focusedPane === "input"
           && input.value === "" && activeFilters.length > 0) {
         e.preventDefault();
         activeFilters.pop();
@@ -754,16 +759,17 @@ export async function openTelescope(
       if (matchesAction(e, config, "search", "switchPane")) {
         e.preventDefault();
         e.stopPropagation();
-        const shadowActive = host.shadowRoot?.activeElement;
-        if (shadowActive === input) {
+        if (focusedPane === "input") {
           if (activeItemEl) {
             activeItemEl.focus();
           } else {
             const first = resultsList.querySelector(".ht-result-item") as HTMLElement;
             if (first) first.focus();
           }
+          focusedPane = "results";
         } else {
           input.focus();
+          focusedPane = "input";
         }
         return;
       }
@@ -775,12 +781,9 @@ export async function openTelescope(
         return;
       }
 
-      const shadowActive = host.shadowRoot?.activeElement;
-      const inputFocused = shadowActive === input;
-
       if (matchesAction(e, config, "search", "moveDown")) {
         const lk = e.key.toLowerCase();
-        if ((lk === "j" || lk === "k") && inputFocused) return;
+        if ((lk === "j" || lk === "k") && focusedPane === "input") return;
         e.preventDefault();
         e.stopPropagation();
         if (results.length > 0) {
@@ -790,26 +793,12 @@ export async function openTelescope(
       }
       if (matchesAction(e, config, "search", "moveUp")) {
         const lk = e.key.toLowerCase();
-        if ((lk === "j" || lk === "k") && inputFocused) return;
+        if ((lk === "j" || lk === "k") && focusedPane === "input") return;
         e.preventDefault();
         e.stopPropagation();
         if (results.length > 0) {
           setActiveIndex(Math.max(activeIndex - 1, 0));
         }
-        return;
-      }
-
-      if (matchesAction(e, config, "search", "scrollPreviewUp")) {
-        e.preventDefault();
-        e.stopPropagation();
-        previewContent.scrollTop -= previewContent.clientHeight * 0.5;
-        return;
-      }
-
-      if (matchesAction(e, config, "search", "scrollPreviewDown")) {
-        e.preventDefault();
-        e.stopPropagation();
-        previewContent.scrollTop += previewContent.clientHeight * 0.5;
         return;
       }
 
@@ -828,13 +817,6 @@ export async function openTelescope(
       } else {
         setActiveIndex(Math.max(activeIndex - 1, 0));
       }
-    });
-
-    // Mouse wheel on preview pane: scroll content, block page scroll
-    previewPane.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      previewContent.scrollTop += e.deltaY;
     });
 
     // Focus input

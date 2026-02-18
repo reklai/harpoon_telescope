@@ -36,8 +36,6 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
     search: {
       moveUp:            { key: "ArrowUp",     default: "ArrowUp"     },
       moveDown:          { key: "ArrowDown",   default: "ArrowDown"   },
-      scrollPreviewUp:   { key: "PageUp",      default: "PageUp"      },
-      scrollPreviewDown: { key: "PageDown",    default: "PageDown"    },
       switchPane:        { key: "Tab",         default: "Tab"         },
       accept:            { key: "Enter",       default: "Enter"       },
       close:             { key: "Escape",      default: "Escape"      },
@@ -54,8 +52,6 @@ const VIM_ENHANCED_ALIASES: Record<string, Record<string, string[]>> = {
   search: {
     moveUp:            ["K"],
     moveDown:          ["J"],
-    scrollPreviewUp:   ["Ctrl+U"],
-    scrollPreviewDown: ["Ctrl+D"],
   },
 };
 
@@ -89,8 +85,6 @@ export const ACTION_LABELS: Record<string, Record<string, string>> = {
   search: {
     moveUp:            "Move up",
     moveDown:          "Move down",
-    scrollPreviewUp:   "Scroll preview up",
-    scrollPreviewDown: "Scroll preview down",
     switchPane:        "Switch pane",
     accept:            "Accept / jump",
     close:             "Close",

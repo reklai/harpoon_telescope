@@ -1,55 +1,735 @@
-# Harpoon Telescope — What I Built and Why
+# Harpoon Telescope — Complete Implementation Guide
 
-A deep-dive into every major decision, pattern, and concept used in this browser extension. Written so I can internalize these patterns for future projects and articulate them in interviews.
+A ground-up walkthrough of every file, every decision, and every pattern in this browser extension. Written so I can rebuild this from scratch, articulate every choice in interviews, and apply these patterns to future projects.
+
+This is not a JavaScript tutorial. It assumes working knowledge of JS/TS, the DOM, async/await, and basic data structures. What it covers is: why the project is structured the way it is, what every config option does, how every module works internally, and what problems each pattern solves.
 
 ---
 
 ## Table of Contents
 
-1. [The Big Picture](#the-big-picture)
-2. [Browser Extension Architecture](#browser-extension-architecture)
-3. [Cross-Browser Compatibility](#cross-browser-compatibility)
-4. [Shadow DOM Isolation](#shadow-dom-isolation)
-5. [Keybinding System](#keybinding-system)
-6. [Fuzzy Search Engine](#fuzzy-search-engine)
-7. [Virtual Scrolling](#virtual-scrolling)
-8. [Frecency Algorithm](#frecency-algorithm)
-9. [Session Management](#session-management)
-10. [Performance Patterns](#performance-patterns)
-11. [State Management](#state-management)
-12. [Event Handling Patterns](#event-handling-patterns)
-13. [DOM Rendering Strategies](#dom-rendering-strategies)
-14. [Build System](#build-system)
-15. [Debugging Lessons](#debugging-lessons)
-16. [Patterns Worth Reusing](#patterns-worth-reusing)
+1. [Project Overview](#project-overview)
+2. [Project Configuration — package.json](#project-configuration--packagejson)
+3. [TypeScript Configuration — tsconfig.json](#typescript-configuration--tsconfigjson)
+4. [Build System — build.mjs](#build-system--buildmjs)
+5. [Manifests — MV2 and MV3](#manifests--mv2-and-mv3)
+6. [Type Declarations — types.d.ts](#type-declarations--typesd-ts)
+7. [Architecture — How Extension Contexts Work](#architecture--how-extension-contexts-work)
+8. [Content Script — content-script.ts](#content-script--content-scriptts)
+9. [Background Script — background.ts](#background-script--backgroundts)
+10. [Keybinding System — keybindings.ts](#keybinding-system--keybindingsts)
+11. [Panel Host — panel-host.ts](#panel-host--panel-hostts)
+12. [Helpers — helpers.ts](#helpers--helpersts)
+13. [Feedback — feedback.ts](#feedback--feedbackts)
+14. [Fuzzy Search Engine — grep.ts](#fuzzy-search-engine--grepts)
+15. [Scroll-to-Text — scroll.ts](#scroll-to-text--scrollts)
+16. [Frecency Algorithm — frecency.ts](#frecency-algorithm--frecencyts)
+17. [Session Management — sessions.ts](#session-management--sessionsts)
+18. [Harpoon Overlay — harpoon-overlay.ts](#harpoon-overlay--harpoon-overlayts)
+19. [Telescope Overlay — search-overlay.ts](#telescope-overlay--search-overlayts)
+20. [Frecency Overlay — frecency-overlay.ts](#frecency-overlay--frecency-overlayts)
+21. [Session Views — session-views.ts](#session-views--session-viewsts)
+22. [Popup — popup.ts](#popup--popupts)
+23. [Options Page — options.ts](#options-page--optionsts)
+24. [CSS Architecture](#css-architecture)
+25. [Cross-Browser Compatibility](#cross-browser-compatibility)
+26. [Performance Patterns](#performance-patterns)
+27. [State Management](#state-management)
+28. [Event Handling Patterns](#event-handling-patterns)
+29. [DOM Rendering Strategies](#dom-rendering-strategies)
+30. [Debugging Lessons](#debugging-lessons)
+31. [Patterns Worth Reusing](#patterns-worth-reusing)
 
 ---
 
-## The Big Picture
+## Project Overview
 
 This extension brings two Neovim plugins to the browser:
 
 - **Harpoon** (ThePrimeagen) — pin a small set of files/buffers and instantly jump between them. Here: pin up to 6 tabs with scroll memory.
-- **Telescope** (nvim-telescope) — fuzzy find anything. Here: fuzzy search the current page's visible text with structural filters.
+- **Telescope** (nvim-telescope) — fuzzy find anything. Here: fuzzy search the current page's visible text with structural filters and a preview pane.
+- **Frecency** — a Mozilla-coined algorithm for ranking items by a combination of frequency and recency, used here for a tab switcher.
 
-Plus **Frecency** — a Mozilla-coined algorithm for ranking items by a combination of frequency and recency.
+The extension runs on Firefox (Manifest V2), Chrome (Manifest V3), and Zen (Firefox fork, inherits MV2 support). Every overlay is a Shadow DOM panel injected into the active page. All keybindings are user-configurable with per-scope collision detection. Navigation modes: basic (arrows) and vim (adds j/k/Ctrl+U/D on top of basic).
 
-The extension runs on Firefox (MV2), Chrome (MV3), and Zen (Firefox fork). Every overlay is a Shadow DOM panel injected into the active page. All keybindings are user-configurable with collision detection. There are two navigation modes: basic (arrows) and vim (adds j/k/Ctrl+U/D on top).
+### File Structure
+
+```
+harpoon_telescope/
+├── build.mjs                    # esbuild build script (86 lines)
+├── package.json                 # project metadata and dependencies (25 lines)
+├── tsconfig.json                # TypeScript config — type-checking only (20 lines)
+├── learn.md                     # this file
+├── README.md                    # user-facing documentation
+├── .gitignore                   # git exclusions
+├── src/
+│   ├── background.ts            # central hub: state, commands, message routing (514 lines)
+│   ├── content-script.ts        # per-page entry: key handler, message router (197 lines)
+│   ├── types.d.ts               # shared TypeScript interfaces (85 lines)
+│   ├── manifest_v2.json         # Firefox/Zen manifest (78 lines)
+│   ├── manifest_v3.json         # Chrome manifest (55 lines)
+│   ├── icons/
+│   │   ├── tab-search.png       # source icon (512x512)
+│   │   ├── icon-48.png          # resized for manifest
+│   │   ├── icon-96.png          # resized for manifest
+│   │   └── icon-128.png         # resized for Chrome Web Store
+│   ├── lib/
+│   │   ├── keybindings.ts       # config, defaults, matching, collision detection (269 lines)
+│   │   ├── panel-host.ts        # Shadow DOM host creation, base styles (132 lines)
+│   │   ├── harpoon-overlay.ts   # Tab Manager panel (526 lines)
+│   │   ├── search-overlay.ts    # Telescope search panel (858 lines)
+│   │   ├── frecency-overlay.ts  # Frequency Tabs panel (403 lines)
+│   │   ├── session-views.ts     # Session save/load/replace/restore views (594 lines)
+│   │   ├── grep.ts              # Fuzzy search engine with line cache (551 lines)
+│   │   ├── scroll.ts            # Scroll-to-text with temporary highlight (111 lines)
+│   │   ├── frecency.ts          # Frecency scoring algorithm (124 lines)
+│   │   ├── sessions.ts          # Session CRUD handlers (101 lines)
+│   │   ├── helpers.ts           # escapeHtml, escapeRegex, extractDomain (24 lines)
+│   │   └── feedback.ts          # Toast notification system (35 lines)
+│   ├── popup/
+│   │   ├── popup.ts             # Popup script (94 lines)
+│   │   ├── popup.html           # Popup markup
+│   │   └── popup.css            # Popup styles
+│   └── options/
+│       ├── options.ts           # Options page script (207 lines)
+│       ├── options.html         # Options page markup
+│       └── options.css          # Options page styles
+└── dist/                        # build output (gitignored)
+```
+
+Total: ~3,500 lines of TypeScript across 15 source files, plus HTML/CSS for popup and options.
 
 ---
 
-## Browser Extension Architecture
+## Project Configuration — package.json
 
-A browser extension has distinct execution contexts with different privileges:
+```json
+{
+  "name": "harpoon-telescope",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Harpoon + Telescope inspired Firefox extension",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:firefox": "node build.mjs --target firefox",
+    "build:chrome": "node build.mjs --target chrome",
+    "watch": "node build.mjs --watch",
+    "watch:firefox": "node build.mjs --watch --target firefox",
+    "watch:chrome": "node build.mjs --watch --target chrome",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/webextension-polyfill": "^0.12.4",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "webextension-polyfill": "^0.12.0"
+  }
+}
+```
 
-### Background Script (`background.ts`)
-- **Runs in its own context** — no access to page DOM
-- **Has full browser API access** — `browser.tabs`, `browser.storage`, etc.
-- **Coordinates everything** — it's the "server" that all other contexts talk to
-- In MV2 (Firefox): a persistent background page
-- In MV3 (Chrome): a **service worker** that can be terminated at any time
+### Field-by-field breakdown
 
-This is why `ensureHarpoonLoaded()` exists. On Chrome, if the service worker wakes up from being terminated, all in-memory state is gone. Every function that touches `harpoonList` calls `ensureHarpoonLoaded()` first to reload from `browser.storage.local` if needed.
+**`"private": true`** — Prevents accidental `npm publish`. This is a browser extension, not an npm package. Without this flag, `npm publish` would upload it to the public npm registry.
+
+**`"scripts"`** — npm scripts that abstract build commands:
+
+- `build` / `build:firefox` — Runs `build.mjs` targeting Firefox (MV2). This is the default because Firefox was the primary development browser.
+- `build:chrome` — Runs `build.mjs` targeting Chrome (MV3). Copies `manifest_v3.json` instead of `manifest_v2.json`.
+- `watch` / `watch:firefox` / `watch:chrome` — Same as build but with esbuild's file watcher. Recompiles on every source file change. The `--watch` flag is parsed by `build.mjs`, not esbuild directly.
+- `typecheck` — Runs the TypeScript compiler in check-only mode (`--noEmit`). This is separate from the build because esbuild strips types without checking them. You run `typecheck` manually or in CI to catch type errors.
+- `clean` — Deletes the `dist/` directory. Useful when switching between Firefox and Chrome targets to avoid stale manifest files.
+
+**`"devDependencies"`** — Tools needed only during development:
+
+- `@types/webextension-polyfill` — TypeScript type definitions for the `webextension-polyfill` package. Without these, every `browser.*` call would be `any`-typed and you'd get no autocomplete or type errors.
+- `esbuild` — The bundler. Compiles TypeScript to JavaScript and resolves imports into single files. Written in Go, 10-100x faster than webpack/rollup. We use it because the build script is 86 lines instead of hundreds.
+- `typescript` — The TypeScript compiler. Used only for type-checking (via `tsc --noEmit`), never for code generation. esbuild handles all transpilation.
+
+**`"dependencies"`** — Runtime code bundled into the extension:
+
+- `webextension-polyfill` — Wraps Chrome's callback-based `chrome.*` APIs to return Promises via `browser.*`. This lets us write one codebase that works on both Firefox (which natively uses `browser.*` with Promises) and Chrome (which uses `chrome.*` with callbacks). esbuild bundles this into every output JS file — it doesn't ship as a separate file.
+
+### Why no framework?
+
+No React, Vue, Svelte, or any UI framework. Why:
+
+1. **Bundle size** — Frameworks add 30-100KB. The entire extension JS output is smaller than React alone.
+2. **Extension constraints** — Content scripts inject into every page. Adding framework overhead to every tab load is wasteful.
+3. **Shadow DOM** — Frameworks have varying levels of Shadow DOM support. Vanilla JS gives full control.
+4. **Learning value** — Building without frameworks forces understanding of DOM manipulation, event handling, and state management that frameworks abstract away.
+5. **Complexity** — The UI is keyboard-driven with simple state. A framework would be overkill.
+
+---
+
+## TypeScript Configuration — tsconfig.json
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": ["webextension-polyfill"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
+```
+
+### Option-by-option breakdown
+
+**`"target": "ES2022"`**
+
+The JavaScript language version tsc emits. Since we set `noEmit: true` and use esbuild for actual compilation, this primarily affects which built-in type definitions tsc loads. ES2022 includes:
+- Top-level `await` (not used, but available)
+- `Array.at()` method types
+- `Object.hasOwn()` types
+- `Error.cause` types
+- Class fields and private methods
+
+We chose ES2022 because all modern browsers (Firefox 89+, Chrome 94+) support it natively. No transpilation of modern features to older syntax is needed.
+
+esbuild also targets `es2022` in its config (`target: "es2022"` in `build.mjs`). These should match — if tsconfig targeted ES2024 but esbuild targeted ES2020, tsc would accept syntax that esbuild would reject.
+
+**`"module": "ESNext"`**
+
+Tells tsc to treat source files as ES modules (using `import`/`export`). `ESNext` means "latest module syntax" — in practice, standard ES modules with `import` and `export`. Alternatives:
+- `"CommonJS"` — would expect `require()` and `module.exports`. Wrong for us since esbuild handles ES module imports.
+- `"ES2022"` — would be fine too, but `ESNext` future-proofs against new module features.
+
+This setting matters because it determines how tsc validates import/export statements. It doesn't affect output since `noEmit: true`.
+
+**`"moduleResolution": "bundler"`**
+
+How tsc resolves `import "./lib/keybindings"` to a file on disk. `"bundler"` tells tsc to resolve like a bundler (esbuild, webpack, etc.) rather than like Node.js. Key differences:
+- Allows extensionless imports (`import "./lib/keybindings"` finds `keybindings.ts`)
+- Allows `import` of `.ts` files (Node resolution would require `.js` extension)
+- Allows package.json `exports` field resolution
+
+Without `"bundler"`, tsc would use `"node"` resolution which requires explicit `.js` extensions on relative imports — even though the source files are `.ts`. This is a common foot-gun. `"bundler"` mode matches how esbuild actually resolves imports.
+
+**`"strict": true`**
+
+Enables all strict type-checking flags at once. This is the most important setting for catching bugs. It turns on:
+- `strictNullChecks` — `null` and `undefined` are distinct types. `let x: string = null` is an error. This catches null reference bugs at compile time instead of runtime.
+- `strictFunctionTypes` — Function parameter types are checked contravariantly. Prevents passing a handler that expects `string` where one expecting `string | null` is needed.
+- `strictPropertyInitialization` — Class properties must be initialized in the constructor. Catches "forgot to assign" bugs.
+- `noImplicitAny` — Forces explicit typing when tsc can't infer. Prevents accidental `any` types from silently disabling type checking.
+- `noImplicitThis` — Errors on `this` with implicit `any` type. Catches detached method bugs.
+- `strictBindCallApply` — Type-checks `bind()`, `call()`, `apply()` arguments.
+- `alwaysStrict` — Emits `"use strict"` in every file. (Irrelevant with `noEmit`.)
+- `useUnknownInCatchVariables` — `catch (e)` gives `e` type `unknown` instead of `any`. Forces you to check the error type before accessing properties.
+
+Every one of these has caught real bugs in this project. `strictNullChecks` alone caught dozens of cases where DOM queries could return `null`.
+
+**`"noEmit": true`**
+
+tsc never writes output files. It's purely a type checker. esbuild handles all code generation. This is the recommended setup when using esbuild — tsc checks types, esbuild compiles.
+
+Why not just use tsc for everything? Because tsc is slow (entire-project type resolution) and doesn't bundle imports into single files. esbuild is fast and bundles. Splitting the responsibilities gives us fast builds + thorough type checking.
+
+**`"skipLibCheck": true`**
+
+Skips type-checking `.d.ts` files in `node_modules`. Without this, tsc would check every type definition file from every dependency, including `webextension-polyfill`'s types and transitive dependencies. This slows compilation significantly and occasionally produces false positives from third-party type definitions that have minor issues.
+
+This is a tradeoff: we lose type-checking of library internals in exchange for faster `tsc` runs. Since we only import from well-tested libraries, this is the right tradeoff.
+
+**`"esModuleInterop": true`**
+
+Enables interop between CommonJS and ES module import styles. Without it, importing a CommonJS module would require:
+
+```typescript
+import * as browser from "webextension-polyfill";
+```
+
+With `esModuleInterop`, you can write:
+
+```typescript
+import browser from "webextension-polyfill";
+```
+
+This matches how esbuild handles the import at bundle time. Without this flag, tsc would error on the `import browser from` syntax for CommonJS packages.
+
+**`"forceConsistentCasingInFileNames": true`**
+
+Prevents importing `"./Keybindings"` when the file is `keybindings.ts`. macOS's filesystem is case-insensitive by default — the import would resolve correctly on Mac but fail on Linux (case-sensitive). This flag catches the mismatch at compile time.
+
+Essential for projects that might be developed on Mac but deployed (or CI'd) on Linux.
+
+**`"resolveJsonModule": true`**
+
+Allows `import data from "./data.json"`. Not currently used in this project, but enabled as a convenience for potential future use (e.g., importing manifest data).
+
+**`"isolatedModules": true`**
+
+Requires every file to be independently compilable — no features that require cross-file type information. This is required for esbuild compatibility because esbuild compiles files individually (it doesn't do cross-file type analysis).
+
+Things this disallows:
+- `const enum` — requires cross-file inlining (regular `enum` is fine)
+- `export =` / `import =` — CommonJS-specific syntax
+- Re-exporting types without `export type`
+
+If you write code that violates `isolatedModules`, tsc catches it immediately. Without this flag, you could write code that tsc compiles fine but esbuild silently miscompiles.
+
+**`"rootDir": "src"`**
+
+All source files live under `src/`. This affects the output directory structure — `src/lib/grep.ts` would output to `dist/lib/grep.js`. Since we set `noEmit: true`, this doesn't matter for output, but it tells tsc the expected source layout.
+
+**`"outDir": "dist"`**
+
+Where tsc would emit files if it emitted. With `noEmit: true`, this is purely informational — it tells tsc that `dist/` is the output location so it doesn't try to include compiled files as source.
+
+**`"types": ["webextension-polyfill"]`**
+
+Explicitly lists which `@types/*` packages to include in the compilation. Without this, tsc would auto-discover all `@types/*` packages in `node_modules`. By specifying only `webextension-polyfill`, we:
+1. Get `browser.*` API types throughout the project
+2. Exclude any other ambient type packages that might conflict or add unwanted globals
+
+**`"include": ["src/**/*.ts"]`**
+
+Only type-check `.ts` files under `src/`. Without this, tsc would check every `.ts` file it can find, including build scripts and config files.
+
+**`"exclude": ["node_modules", "dist"]`**
+
+Never look inside these directories for source files. `node_modules` is obvious. `dist` is excluded because it contains compiled output that shouldn't be re-processed.
+
+---
+
+## Build System — build.mjs
+
+```javascript
+import { build, context } from "esbuild";
+import { cpSync, mkdirSync } from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const dist = resolve(__dirname, "dist");
+const watching = process.argv.includes("--watch");
+
+const targetIdx = process.argv.indexOf("--target");
+const target = targetIdx !== -1 ? process.argv[targetIdx + 1] : "firefox";
+if (!["firefox", "chrome"].includes(target)) {
+  console.error(`[build] Unknown target "${target}".`);
+  process.exit(1);
+}
+
+const manifestFile = target === "chrome" ? "manifest_v3.json" : "manifest_v2.json";
+
+const shared = {
+  bundle: true,
+  format: "iife",
+  target: "es2022",
+  minify: false,
+  sourcemap: false,
+};
+
+const entryPoints = [
+  { in: "src/background.ts", out: "background" },
+  { in: "src/content-script.ts", out: "content-script" },
+  { in: "src/popup/popup.ts", out: "popup/popup" },
+  { in: "src/options/options.ts", out: "options/options" },
+];
+
+const staticFiles = [
+  [`src/${manifestFile}`, "manifest.json"],
+  ["src/popup/popup.html", "popup/popup.html"],
+  ["src/popup/popup.css", "popup/popup.css"],
+  ["src/options/options.html", "options/options.html"],
+  ["src/options/options.css", "options/options.css"],
+  ["src/icons/icon-48.png", "icons/icon-48.png"],
+  ["src/icons/icon-96.png", "icons/icon-96.png"],
+  ["src/icons/icon-128.png", "icons/icon-128.png"],
+];
+
+function copyStatic() {
+  for (const [from, to] of staticFiles) {
+    const dest = resolve(dist, to);
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(resolve(__dirname, from), dest);
+  }
+}
+
+async function main() {
+  mkdirSync(dist, { recursive: true });
+  copyStatic();
+  const buildOptions = { ...shared, entryPoints: ..., outdir: dist };
+  if (watching) {
+    const ctx = await context(buildOptions);
+    await ctx.watch();
+  } else {
+    await build(buildOptions);
+  }
+}
+```
+
+### Line-by-line
+
+**`import { build, context } from "esbuild"`** — Two esbuild APIs:
+- `build()` — One-shot compilation. Reads source, writes output, exits.
+- `context()` — Creates a long-running build context for watch mode. Calls `ctx.watch()` to start monitoring files.
+
+**`const __dirname = dirname(fileURLToPath(import.meta.url))`** — ES modules don't have `__dirname` (that's a CommonJS global). This reconstructs it from `import.meta.url`, which gives the file's URL (e.g., `file:///path/to/build.mjs`). `fileURLToPath` converts it to a path, `dirname` extracts the directory.
+
+**`const watching = process.argv.includes("--watch")`** — Simple flag parsing. `process.argv` contains `["node", "build.mjs", "--watch", "--target", "firefox"]`. `includes("--watch")` checks if the flag is present.
+
+**Target parsing** — `process.argv.indexOf("--target")` finds the flag position, then reads the next argument as the value. Defaults to `"firefox"` if not specified. Validates against a whitelist. This is why `npm run build:chrome` works — the npm script passes `--target chrome`.
+
+**`const manifestFile`** — Selects which manifest to copy based on target. Chrome gets MV3, Firefox gets MV2. The build output is always `manifest.json` — the browser doesn't know about our dual-manifest setup.
+
+### esbuild shared options
+
+**`bundle: true`** — Resolves all `import` statements and inlines dependencies into the output files. Without this, the output would still have `import` statements, which browsers can't execute in extension contexts (there's no module loader).
+
+**`format: "iife"`** — Wraps output in an Immediately Invoked Function Expression: `(() => { ...code... })()`. This prevents variable leakage into the global scope. Without it, `let harpoonList = []` in `background.ts` would become a global variable. IIFE ensures each script has its own scope.
+
+Why IIFE and not ESM? Browser extension scripts (content scripts, background scripts) run in the global scope by default. MV3 service workers could use ESM, but MV2 background pages cannot. IIFE works universally.
+
+**`target: "es2022"`** — Tells esbuild what JavaScript features it can assume the runtime supports. ES2022 means: keep `??`, `?.`, class fields, `Promise.allSettled()`, etc. as-is. Don't transpile them to older syntax. Must match `tsconfig.json`'s target.
+
+**`minify: false`** — Don't minify output. Keeps the code readable for:
+1. **Debugging** — You can read the compiled JS in browser devtools.
+2. **Store review** — Firefox AMO reviewers read your code. Minified code triggers extra scrutiny and can delay review.
+
+Set to `true` for production if you want smaller files (saves ~30-40% size).
+
+**`sourcemap: false`** — Don't generate source maps. Source maps link compiled JS back to TypeScript source for debugging. Disabled here because:
+1. Extension content scripts load source maps relative to the page's origin, which fails
+2. The unminified output is readable enough without maps
+3. Reduces build output size
+
+### Entry points
+
+Four separate builds, four output files:
+- `background.ts` → `dist/background.js` — Background script/service worker
+- `content-script.ts` → `dist/content-script.js` — Injected into every page
+- `popup/popup.ts` → `dist/popup/popup.js` — Popup page script
+- `options/options.ts` → `dist/options/options.js` — Options page script
+
+Each entry point gets its own IIFE bundle. `webextension-polyfill` is bundled into each one independently. This means it's duplicated across files, but each file is self-contained — no shared runtime dependency.
+
+### Static file copying
+
+HTML, CSS, icons, and the manifest are not processed by esbuild — they're copied verbatim using Node's `cpSync`. `mkdirSync` with `{ recursive: true }` creates parent directories (e.g., `dist/popup/`) if they don't exist.
+
+### Watch mode
+
+`context()` creates a persistent build context. `ctx.watch()` starts a file system watcher that recompiles on any source change. This is faster than running `build()` repeatedly because the context keeps esbuild's internal state warm.
+
+Note: watch mode only watches TypeScript files (esbuild's entry points and their imports). Static files (HTML, CSS, icons) are only copied once at startup. If you change `popup.html` while watching, you need to restart the build.
+
+---
+
+## Manifests — MV2 and MV3
+
+Browser extensions require a `manifest.json` that declares permissions, scripts, icons, and commands. Firefox and Chrome use different manifest versions with different schemas.
+
+### manifest_v2.json (Firefox/Zen)
+
+```json
+{
+  "manifest_version": 2,
+  "name": "Harpoon Telescope",
+  "version": "2.0.0",
+  "description": "...",
+  "permissions": ["tabs", "activeTab", "storage", "<all_urls>"],
+  "background": { "scripts": ["background.js"], "persistent": false },
+  "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content-script.js"], "run_at": "document_idle" }],
+  "commands": { ... },
+  "options_ui": { "page": "options/options.html", "open_in_tab": true },
+  "browser_action": { "default_icon": { "48": "icons/icon-48.png", "96": "icons/icon-96.png" }, "default_popup": "popup/popup.html" },
+  "icons": { "48": "icons/icon-48.png", "96": "icons/icon-96.png", "128": "icons/icon-128.png" }
+}
+```
+
+### Key manifest fields
+
+**`"permissions"`** — What browser APIs the extension can use:
+- `"tabs"` — Access `browser.tabs.query()`, `browser.tabs.update()`, `browser.tabs.create()`, `browser.tabs.get()`, tab events (`onActivated`, `onUpdated`, `onRemoved`). Required for all harpoon and frecency functionality.
+- `"activeTab"` — Permission to access the currently active tab when the user invokes the extension. More restrictive than `<all_urls>` but we need both.
+- `"storage"` — Access `browser.storage.local` for persisting harpoon list, sessions, frecency data, and keybindings.
+- `"<all_urls>"` — Permission to inject content scripts and send messages to tabs on any URL. Required because our content script runs on every page. This triggers a "can read and change all your data" warning to users.
+
+**`"background": { "scripts": ["background.js"], "persistent": false }`** — In MV2, the background page runs `background.js`. `persistent: false` makes it an "event page" — the browser can unload it when idle. This saves memory but means in-memory state can be lost (hence `ensureHarpoonLoaded()`).
+
+**`"content_scripts"`** — Declares scripts to inject into web pages:
+- `"matches": ["<all_urls>"]` — Inject on every page.
+- `"run_at": "document_idle"` — Inject after the DOM is complete and the page is mostly loaded. Alternatives: `"document_start"` (before DOM), `"document_end"` (DOM complete but resources still loading). We use `idle` to avoid slowing down page load.
+
+**`"commands"`** — Keyboard shortcuts registered with the browser. Firefox allows 8+ commands, Chrome MV3 limits to 4.
+
+Each command has `"suggested_key"` — the default shortcut. Users can rebind these in the browser's extension shortcut settings (`about:addons` → gear icon → Manage Extension Shortcuts in Firefox, `chrome://extensions/shortcuts` in Chrome).
+
+**`"browser_action"` (MV2) vs `"action"` (MV3)** — The toolbar button. `default_icon` shows the icon, `default_popup` opens the popup HTML when clicked.
+
+**`"options_ui": { "open_in_tab": true }`** — The settings page opens as a full tab, not a popup. This gives enough space for the keybinding editor grid.
+
+### manifest_v3.json (Chrome) — Key differences
+
+```json
+{
+  "manifest_version": 3,
+  "permissions": ["tabs", "activeTab", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { ... },
+  "commands": { /* only 4 */ }
+}
+```
+
+- **`"host_permissions"`** — MV3 splits URL-based permissions out of `"permissions"` into `"host_permissions"`. Same effect, different key.
+- **`"service_worker"`** — MV3 replaces the background page with a service worker. Service workers can be terminated at any time by the browser. This is why `ensureHarpoonLoaded()` exists — every function must be able to reload state from scratch.
+- **`"action"`** — MV3 renames `browser_action` to `action`. Same fields.
+- **Commands limit** — Chrome MV3 allows only 4 commands total. We register the most critical: `open-harpoon`, `harpoon-add`, `open-telescope-current`. Everything else (slot jumps 1-6, cycling, frecency, vim toggle) is handled by the content script's `keydown` listener.
+
+---
+
+## Type Declarations — types.d.ts
+
+```typescript
+interface HarpoonEntry {
+  tabId: number;
+  url: string;
+  title: string;
+  scrollX: number;
+  scrollY: number;
+  slot: number;
+  closed?: boolean;
+}
+```
+
+This is an **ambient declaration file** (`.d.ts`). Interfaces declared here are globally available to all `.ts` files without importing. This is intentional — these types are used across all contexts (background, content, popup, options).
+
+### Why `.d.ts` instead of a regular `.ts` file?
+
+A `.d.ts` file contains only type declarations, no runtime code. TypeScript treats it as ambient — the interfaces are available everywhere without `import`. A regular `.ts` file would require `export` and `import` statements.
+
+For shared interfaces used across 10+ files, ambient declarations reduce boilerplate. The tradeoff: you can't have naming collisions with other ambient types.
+
+### Key interfaces
+
+**`HarpoonEntry`** — One pinned tab. `closed?: boolean` tracks tabs that the user closed but the harpoon entry preserves. When you jump to a closed entry, it re-opens the URL in a new tab. This is critical for browser restarts where all previous tab IDs become invalid.
+
+**`KeybindingsConfig`** — The full keybinding state. `navigationMode` is `"basic"` or `"vim"`. `bindings` is nested by scope (`global`, `harpoon`, `search`), then by action name, then contains `key` (current) and `default` (original). Storing both enables per-binding reset.
+
+**`SearchFilter`** — A string literal union type: `"code" | "headings" | "links"`. Using a union type instead of a plain string means TypeScript catches typos at compile time — `"cod"` would be a type error.
+
+**`GrepResult`** — A single search result. Notable fields:
+- `nodeRef?: WeakRef<Node>` — A weak reference to the DOM node. See [State Management](#state-management) for why `WeakRef` matters here.
+- `domContext?: string[]` — Context lines extracted from the same DOM parent (not just adjacent array items). This gives better preview context for code blocks.
+- `ancestorHeading?: string` — The nearest `<h1>`-`<h6>` above this result in the DOM tree. Used in the preview breadcrumb.
+- `href?: string` — For `<a>` tags, the link's destination URL. Shown in the preview breadcrumb.
+
+**`FrecencyEntry`** — A tab visit record. `frecencyScore` is precomputed and stored (not computed on read) because it's used for both sorting and eviction decisions.
+
+**`HarpoonSession`** — A saved snapshot of the harpoon list. Stores `HarpoonSessionEntry[]` (URLs, titles, scroll positions) but NOT `tabId` — tab IDs are meaningless after browser restart.
+
+---
+
+## Architecture — How Extension Contexts Work
+
+A browser extension has multiple execution contexts that run in separate OS processes:
+
+```
+┌─────────────────────┐
+│   Background Script  │  ← browser.tabs, browser.storage, browser.commands
+│   (background.ts)    │     One instance for the entire extension
+│                     │     MV2: event page | MV3: service worker
+└────────┬────────────┘
+         │  browser.runtime.sendMessage (content → background)
+         │  browser.tabs.sendMessage    (background → content)
+         │
+┌────────┴────────────┐  ┌───────────────────┐  ┌───────────────────┐
+│  Content Script      │  │  Content Script    │  │  Content Script    │
+│  (Tab 1)             │  │  (Tab 2)           │  │  (Tab 3)           │
+│  content-script.ts   │  │  content-script.ts  │  │  content-script.ts  │
+│  + overlay panels    │  │  + overlay panels   │  │  + overlay panels   │
+└──────────────────────┘  └───────────────────┘  └───────────────────┘
+                                                         │
+                                                  ┌──────┴──────────┐
+                                                  │  Popup / Options │
+                                                  │  (own HTML page) │
+                                                  └─────────────────┘
+```
+
+### Why message passing?
+
+Each context runs in a separate process (for security isolation). You cannot:
+- Call functions in another context
+- Share variables
+- Pass DOM nodes, functions, or circular references
+
+All communication is JSON serialization over IPC. `browser.runtime.sendMessage()` sends from content/popup/options to background. `browser.tabs.sendMessage()` sends from background to a specific tab's content script.
+
+Messages are plain objects with a `type` field that acts as a discriminator:
+
+```typescript
+{ type: "HARPOON_ADD" }
+{ type: "HARPOON_JUMP", slot: 3 }
+{ type: "GREP", query: "api", filters: ["code"] }
+```
+
+Both sides use a `switch` on `m.type` to route to handlers. This is the simplest pattern that scales to dozens of message types.
+
+### Content script constraints
+
+Content scripts have access to the page's DOM but limited browser API access:
+- **Can**: `browser.runtime.sendMessage()`, `browser.storage.onChanged`, `document.*`
+- **Cannot**: `browser.tabs.*`, `browser.commands.*` (background-only APIs)
+
+This is why the content script sends messages to the background for tab operations (add, jump, remove, cycle) — it can't manipulate tabs directly.
+
+---
+
+## Content Script — content-script.ts
+
+The content script is the entry point for every web page. It does three things:
+
+1. **Routes messages** from the background to the right handler
+2. **Handles keybindings** that can't go through `browser.commands` (Chrome's 4-command limit)
+3. **Manages the lifecycle** of overlay panels
+
+### Injection cleanup
+
+```typescript
+declare global {
+  interface Window {
+    __harpoonTelescopeCleanup?: () => void;
+  }
+}
+
+(() => {
+  if (window.__harpoonTelescopeCleanup) {
+    window.__harpoonTelescopeCleanup();
+  }
+  // ... setup ...
+  window.__harpoonTelescopeCleanup = () => {
+    document.removeEventListener("keydown", globalKeyHandler);
+    document.removeEventListener("visibilitychange", visibilityHandler);
+    browser.runtime.onMessage.removeListener(messageHandler);
+    const host = document.getElementById("ht-panel-host");
+    if (host) host.remove();
+  };
+})();
+```
+
+**Problem**: Firefox caches content scripts aggressively. When you reload the extension during development, the old content script stays alive in memory alongside the new one. Both respond to messages.
+
+**Wrong fix**: `if (window.__harpoonTelescopeInjected) return;` — This prevents the NEW code from loading after a reload. The old (possibly buggy) code keeps running.
+
+**Right fix**: Store a cleanup function. New injection calls the old cleanup first, then sets up fresh listeners. The old event handlers are removed, old panels are destroyed, and the new code takes over.
+
+The `declare global` block extends the `Window` interface to include our cleanup function. Without this, TypeScript would error on `window.__harpoonTelescopeCleanup` since it's not part of the standard `Window` type.
+
+The entire script is wrapped in an IIFE `(() => { ... })()` to avoid polluting the global scope. esbuild also wraps in IIFE (via `format: "iife"`), so this is double-wrapped — harmless but explicit about intent.
+
+### Config caching
+
+```typescript
+let cachedConfig: KeybindingsConfig | null = null;
+
+async function getConfig(): Promise<KeybindingsConfig> {
+  if (!cachedConfig) {
+    cachedConfig = (await browser.runtime.sendMessage({
+      type: "GET_KEYBINDINGS",
+    })) as KeybindingsConfig;
+  }
+  return cachedConfig;
+}
+
+browser.storage.onChanged.addListener((changes) => {
+  if (changes.keybindings) cachedConfig = null;
+});
+```
+
+Every keypress calls `getConfig()`. Without caching, that's a message round-trip to the background (async IPC) on every keypress — noticeable latency. The cache loads once and stays in memory.
+
+`storage.onChanged` fires in ALL contexts when ANY context writes to storage. When the options page saves new keybindings, this listener fires in every open tab's content script, invalidating their caches. Next keypress fetches the fresh config.
+
+This is a **read-through cache with event-driven invalidation** — a pattern that works anywhere you have a shared data store with change notifications.
+
+### Global key handler
+
+```typescript
+async function globalKeyHandler(e: KeyboardEvent): Promise<void> {
+  const config = await getConfig();
+
+  // toggleVim must work regardless of whether a panel is open
+  if (matchesAction(e, config, "global", "toggleVim")) { ... }
+
+  // Skip if a panel is open (panel has its own handler)
+  if (document.getElementById("ht-panel-host")) return;
+
+  if (matchesAction(e, config, "global", "openHarpoon")) { ... }
+  else if (matchesAction(e, config, "global", "searchInPage")) { ... }
+  // ... etc
+}
+
+document.addEventListener("keydown", globalKeyHandler);
+```
+
+This handler runs on every keypress on every page. It's intentionally lightweight — the `getConfig()` call usually hits the cache (synchronous return), and the `matchesAction` checks are simple string comparisons.
+
+**The `toggleVim` check comes first and doesn't skip when a panel is open.** This is because `Alt+V` must work everywhere — with or without a panel. The panel's own key handler also intercepts `Alt+V` (in capturing phase, before `stopPropagation` kills the event), but this handler serves as the fallback when no panel is open.
+
+**Panel guard**: `if (document.getElementById("ht-panel-host")) return;` — When a panel is open, its own key handler (registered with `capture: true`) handles all keys. The global handler bails to avoid double-handling. The `getElementById` check is a DOM query on every keypress, but it's fast (direct ID lookup, O(1) in modern browsers).
+
+### Message router
+
+```typescript
+function messageHandler(msg: unknown): Promise<unknown> | undefined {
+  const m = msg as Record<string, unknown>;
+  switch (m.type) {
+    case "GET_SCROLL":
+      return Promise.resolve({ scrollX: window.scrollX, scrollY: window.scrollY });
+    case "SET_SCROLL":
+      window.scrollTo(m.scrollX as number, m.scrollY as number);
+      return Promise.resolve({ ok: true });
+    case "GREP":
+      return Promise.resolve(grepPage(m.query as string, (m.filters as SearchFilter[]) || []));
+    // ... more cases
+  }
+}
+```
+
+**Return type `Promise<unknown> | undefined`** — The browser's message passing expects handlers to return a Promise (or undefined to indicate "not handled"). Returning `undefined` lets other listeners handle the message. Returning a Promise sends the resolved value as the response.
+
+**`msg: unknown`** — The message could be anything. We cast to `Record<string, unknown>` and check `m.type`. This is safe because all our messages follow the `{ type: string, ...data }` convention.
+
+**Synchronous operations wrapped in `Promise.resolve()`** — `GET_SCROLL` just reads `window.scrollX` (synchronous), but the handler must return a Promise. `Promise.resolve()` wraps the value without adding a microtask — it resolves immediately.
+
+### Visibility change auto-close
+
+```typescript
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    const host = document.getElementById("ht-panel-host");
+    if (host) host.remove();
+  }
+});
+```
+
+When the user switches tabs or minimizes the browser, `visibilitychange` fires. We close any open panel to prevent stale overlays. Without this, switching to Tab 2 and back to Tab 1 would show the old panel still open with potentially outdated data.
+
+---
+
+## Background Script — background.ts
+
+The background script is the "server" of the extension. It manages all persistent state, coordinates actions between tabs, and routes messages.
+
+### State management pattern
 
 ```typescript
 let harpoonList: HarpoonEntry[] = [];
@@ -62,281 +742,452 @@ async function ensureHarpoonLoaded(): Promise<void> {
     harpoonLoaded = true;
   }
 }
+
+async function saveHarpoon(): Promise<void> {
+  await browser.storage.local.set({ harpoonList });
+}
 ```
 
-**Key insight**: The boolean flag `harpoonLoaded` is safe because once loaded, the in-memory copy is the source of truth until the process dies. On Chrome, when the service worker terminates, `harpoonLoaded` resets to `false` because all module-level variables are re-initialized.
+This is a **lazy-load guard**. The pattern:
+1. Module-level variable starts empty
+2. Every function that touches the variable calls `ensureLoaded()` first
+3. `ensureLoaded()` is idempotent — safe to call 100 times, only loads once
+4. On MV3 (Chrome), the service worker can be killed. When it restarts, `harpoonLoaded` resets to `false`, triggering a fresh load
 
-### Content Script (`content-script.ts`)
-- **Runs on every web page** — has access to the page's DOM
-- **Limited browser API access** — can use `browser.runtime.sendMessage` but not `browser.tabs`
-- **Injected by the browser** according to manifest's `content_scripts` declaration
-- **Shares the DOM** with the page but has its own JS execution context (page scripts can't access content script variables and vice versa)
+**Why not load eagerly on startup?** We do call `ensureHarpoonLoaded()` at the bottom of the file (eager start), but the guard is still needed because in MV3, the service worker can restart between any two calls. The eager load is an optimization, not a guarantee.
 
-The content script does three things:
-1. **Routes messages** from background to the right handler (grep, scroll, open overlay)
-2. **Handles keybindings** that can't go through `browser.commands` (Chrome's 4-command limit)
-3. **Injects UI overlays** into the page via Shadow DOM
-
-### Options Page / Popup (`options.ts`, `popup.ts`)
-- Each has its own HTML page, loaded in the extension's own context
-- Can use `browser.runtime.sendMessage` to talk to background
-- The options page renders a keybinding editor; the popup shows the harpoon list
-
-### Message Passing
-
-All communication between contexts uses `browser.runtime.sendMessage()` (content/popup/options → background) and `browser.tabs.sendMessage()` (background → content). Messages are plain JSON objects with a `type` field:
+### Reconciliation
 
 ```typescript
-// Content script → Background
-browser.runtime.sendMessage({ type: "HARPOON_ADD" });
-
-// Background → Content script
-browser.tabs.sendMessage(tabId, { type: "SET_SCROLL", scrollX: 0, scrollY: 100 });
+async function reconcileHarpoon(): Promise<void> {
+  await ensureHarpoonLoaded();
+  const tabs = await browser.tabs.query({});
+  const tabIds = new Set(tabs.map((t) => t.id));
+  for (const entry of harpoonList) {
+    entry.closed = !tabIds.has(entry.tabId);
+  }
+  recompactSlots();
+  await saveHarpoon();
+}
 ```
 
-The background script has a big `switch` on `m.type` that routes to the right handler. This is the standard pattern for browser extension message routing.
+Tab IDs are ephemeral — they're reassigned by the browser and don't persist across restarts. `reconcileHarpoon()` queries all currently open tabs and marks harpoon entries as `closed` if their tab no longer exists.
 
-**Why not direct function calls?** Because these contexts run in separate OS processes. The browser serializes messages to JSON, sends them over IPC, and deserializes on the other end. You can't pass functions, DOM nodes, or circular references — only plain data.
+This is called before every `HARPOON_LIST` response and before `harpoonAdd()`. It's the source of truth for which entries are live vs closed.
 
----
+**`recompactSlots()`** — Re-numbers slots sequentially (1, 2, 3...) after any list mutation. Without this, deleting slot 2 from [1, 2, 3] would leave [1, 3] instead of [1, 2].
 
-## Cross-Browser Compatibility
-
-### webextension-polyfill
-
-Chrome uses `chrome.*` APIs with callbacks. Firefox uses `browser.*` APIs with Promises. Rather than writing both:
+### Harpoon jump with closed tab re-opening
 
 ```typescript
-// Without polyfill:
-chrome.tabs.query({active: true}, (tabs) => { ... });  // Chrome
-const tabs = await browser.tabs.query({active: true});   // Firefox
+async function harpoonJump(slot: number): Promise<void> {
+  const entry = harpoonList.find((e) => e.slot === slot);
+  if (!entry) return;
+
+  if (entry.closed) {
+    await saveCurrentTabScroll();
+    const newTab = await browser.tabs.create({ url: entry.url, active: true });
+    entry.tabId = newTab.id!;
+    entry.closed = false;
+    await saveHarpoon();
+
+    const onUpdated = (tabId, info) => {
+      if (tabId === newTab.id && info.status === "complete") {
+        browser.tabs.onUpdated.removeListener(onUpdated);
+        browser.tabs.sendMessage(newTab.id!, {
+          type: "SET_SCROLL", scrollX: entry.scrollX, scrollY: entry.scrollY,
+        }).catch(() => {});
+      }
+    };
+    browser.tabs.onUpdated.addListener(onUpdated);
+    setTimeout(() => browser.tabs.onUpdated.removeListener(onUpdated), 10000);
+    return;
+  }
+  // Tab is open — switch to it
+  // ...
+}
 ```
 
-We use `webextension-polyfill`, which wraps Chrome's callback APIs to return Promises:
+When jumping to a closed entry:
+1. Save current tab's scroll position (so you can come back)
+2. Create a new tab with the saved URL
+3. Update the entry's `tabId` to the new tab's ID
+4. Wait for the tab to finish loading (`status === "complete"`)
+5. Restore scroll position
+
+The `onUpdated` listener is a one-shot callback — it removes itself after firing. The `setTimeout(..., 10000)` is a safety net: if the tab never completes loading (e.g., network error), remove the listener after 10 seconds to prevent memory leaks.
+
+### Tab lifecycle listeners
 
 ```typescript
-import browser from "webextension-polyfill";
-const tabs = await browser.tabs.query({active: true}); // Works everywhere
+browser.tabs.onRemoved.addListener(async (tabId) => {
+  const entry = harpoonList.find((e) => e.tabId === tabId);
+  if (entry) {
+    entry.closed = true;
+    await saveHarpoon();
+  }
+  await removeFrecencyEntry(tabId);
+});
 ```
 
-The polyfill is bundled by esbuild into each JS output file. At runtime, it detects whether it's in Chrome or Firefox and adapts.
-
-### Dual Manifests
-
-Firefox uses Manifest V2 (`manifest_v2.json`), Chrome uses Manifest V3 (`manifest_v3.json`). Key differences:
-
-| Feature | MV2 (Firefox) | MV3 (Chrome) |
-|---------|---------------|--------------|
-| Background | `"scripts": ["background.js"]` | `"service_worker": "background.js"` |
-| Commands limit | 8+ | 4 |
-| API style | Promise-based | Callback (polyfilled) |
-| Permissions | `"permissions"` only | Split `"permissions"` / `"host_permissions"` |
-
-The build script copies the right manifest as `manifest.json` into `dist/`.
-
-### Chrome's 4-Command Limit
-
-Chrome MV3 only allows 4 entries in the `commands` manifest key. We register the most critical ones as commands (open harpoon, add tab, search page, and one slot jump). Everything else — slot jumps 1-6, cycling, frecency, vim toggle — is handled by a `document.addEventListener("keydown", ...)` in the content script.
-
-On Firefox, where all 8+ commands can be registered, `browser.commands.onCommand` intercepts the key event before it reaches the page, so the content script's `keydown` handler never fires for those keys. No double-firing.
-
-### CSS Differences
-
-`caret-shape: block` is Firefox-only. Chrome silently ignores it. We set both `caret-color: #ffffff` (works everywhere) and `caret-shape: block` (Firefox bonus). This is the right approach for progressive enhancement — use the feature where available, degrade gracefully elsewhere.
-
----
-
-## Shadow DOM Isolation
-
-Every overlay (harpoon, telescope, frecency) is injected as a Shadow DOM element. Why?
-
-### The Problem
-
-Content scripts share the page's DOM. If we inject a `<div class="panel">` directly, the page's CSS might style it unexpectedly (`* { margin: 10px; }` or `.panel { display: none; }`). Our CSS could also leak out and break the page.
-
-### The Solution
-
-Shadow DOM creates an isolated DOM subtree with its own style scope:
+When a tab closes, mark its harpoon entry as `closed` (don't delete it — the user can re-open it). Also remove it from frecency tracking.
 
 ```typescript
-const host = document.createElement("div");
-host.id = "ht-panel-host";
-const shadow = host.attachShadow({ mode: "open" });
-document.body.appendChild(host);
-
-// Styles inside shadow don't leak out, page styles don't leak in
-const style = document.createElement("style");
-style.textContent = `/* our panel styles */`;
-shadow.appendChild(style);
-```
-
-### Focus Trapping
-
-Shadow DOM has quirks with focus management. `host.contains(element)` doesn't find elements inside the shadow tree — you must also check `host.shadowRoot.contains(element)`:
-
-```typescript
-host.addEventListener("focusout", (e: FocusEvent) => {
-  const related = e.relatedTarget as Node | null;
-  const staysInPanel =
-    related &&
-    (host.contains(related) || host.shadowRoot!.contains(related));
-  if (!staysInPanel) {
-    setTimeout(() => { host.focus(); }, 0);
+browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+  const entry = harpoonList.find((e) => e.tabId === tabId);
+  if (entry) {
+    if (changeInfo.url) entry.url = changeInfo.url;
+    if (changeInfo.title) entry.title = changeInfo.title;
+    if (changed) {
+      if (onUpdatedSaveTimer) clearTimeout(onUpdatedSaveTimer);
+      onUpdatedSaveTimer = setTimeout(() => saveHarpoon(), 500);
+    }
   }
 });
 ```
 
-Without this, pressing Tab could move focus to the browser's address bar, and keyboard navigation would stop working.
+When a tab's URL or title changes (e.g., SPA navigation), update the harpoon entry. The save is **debounced** — SPAs can fire dozens of URL/title changes per navigation. Without the 500ms debounce, we'd hammer `browser.storage.local.set()`.
 
-### `:host` Selector
-
-Inside Shadow DOM, `:host` targets the shadow host element itself. We use it to reset all inherited styles:
-
-```css
-:host {
-  all: initial;
-  font-family: 'SF Mono', ...;
-}
+```typescript
+browser.tabs.onActivated.addListener(async (activeInfo) => {
+  const prevTabId = lastActiveTabId;
+  lastActiveTabId = activeInfo.tabId;
+  await recordFrecencyVisit(tab);
+  // Save scroll for previously active harpooned tab
+  // ...
+});
 ```
 
-`all: initial` resets every CSS property to its initial value, preventing inheritance from the page.
+**`lastActiveTabId`** — Tracks the previously active tab. On activation, we save the previous tab's scroll position (if it's in harpoon) and record a frecency visit for the newly active tab.
+
+### Session restore on startup
+
+```typescript
+browser.runtime.onStartup.addListener(async () => {
+  const sessions = ...;
+  if (sessions.length === 0) return;
+
+  harpoonList = [];
+  await saveHarpoon();
+
+  let attempts = 0;
+  const tryPrompt = async () => {
+    attempts++;
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    try {
+      await browser.tabs.sendMessage(tab.id, { type: "SHOW_SESSION_RESTORE" });
+    } catch (_) {
+      if (attempts < 5) setTimeout(tryPrompt, 1000);
+    }
+  };
+  setTimeout(tryPrompt, 1500);
+});
+```
+
+On browser startup, all previous tab IDs are invalid. The harpoon list is cleared. If saved sessions exist, we show a restore prompt.
+
+The retry logic (5 attempts, 1s apart) handles the race condition where tabs are loading and content scripts aren't ready yet. The initial 1.5s delay gives the browser time to load at least one tab.
 
 ---
 
-## Keybinding System
+## Keybinding System — keybindings.ts
 
-### Architecture
+This module defines the keybinding schema, provides key matching utilities, and handles collision detection.
 
-Keybindings are stored in `browser.storage.local` as a `KeybindingsConfig` object with three scopes:
-
-- **global** — shortcuts that work on any page (Alt+M, Alt+F, etc.)
-- **harpoon** — shortcuts inside the harpoon panel (arrows, d, w, s, l)
-- **search** — shortcuts inside telescope/frecency (arrows, Enter, Tab)
-
-Each binding stores both the current key and the default, enabling per-binding reset:
+### Default bindings
 
 ```typescript
-interface KeyBinding {
-  key: string;      // current: "Alt+M"
-  default: string;  // original: "Alt+M"
+export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
+  navigationMode: "basic",
+  bindings: {
+    global: {
+      openHarpoon: { key: "Alt+M", default: "Alt+M" },
+      // ...13 actions
+    },
+    harpoon: {
+      moveUp: { key: "ArrowUp", default: "ArrowUp" },
+      // ...8 actions
+    },
+    search: {
+      moveUp: { key: "ArrowUp", default: "ArrowUp" },
+      // ...7 actions
+    },
+  },
+};
+```
+
+Every binding stores both `key` (current) and `default` (original). This enables per-binding reset in the options page. When the user clicks "reset" on a single binding, we set `key = default` without affecting other bindings.
+
+Bindings are **scoped**: `global` shortcuts work on any page, `harpoon` shortcuts only work inside the harpoon panel, `search` shortcuts only inside telescope/frecency. This means `"D"` in the harpoon scope (delete entry) doesn't conflict with `"D"` in the search scope (not used) or with `"ArrowDown"` in any scope.
+
+### Forward-compatible merging
+
+```typescript
+function mergeWithDefaults(stored: Partial<KeybindingsConfig>): KeybindingsConfig {
+  const merged = JSON.parse(JSON.stringify(DEFAULT_KEYBINDINGS));
+  merged.navigationMode = stored.navigationMode || "basic";
+  for (const scope of Object.keys(merged.bindings)) {
+    for (const action of Object.keys(merged.bindings[scope])) {
+      const storedBinding = stored.bindings?.[scope]?.[action];
+      if (storedBinding) merged.bindings[scope][action].key = storedBinding.key;
+    }
+  }
+  return merged;
 }
 ```
 
-### Key Matching
+When the extension updates and adds new actions (e.g., `openFrecency`), users who saved keybindings before the update won't have the new action in their stored config. `mergeWithDefaults` starts from the full default config and overlays the user's stored values on top. New actions get their defaults; existing customizations are preserved.
 
-`matchesKey()` converts a KeyboardEvent into its component parts and compares:
+`JSON.parse(JSON.stringify(...))` is a deep clone. Without it, modifications to `merged` would mutate `DEFAULT_KEYBINDINGS`.
+
+### Key matching
 
 ```typescript
-function matchesKey(e: KeyboardEvent, keyString: string): boolean {
+export function matchesKey(e: KeyboardEvent, keyString: string): boolean {
   const parts = keyString.split("+");
   const key = parts[parts.length - 1];
   if (e.ctrlKey !== parts.includes("Ctrl")) return false;
   if (e.altKey !== parts.includes("Alt")) return false;
-  // ... etc
+  // ...
   let eventKey = e.key;
   if (eventKey.length === 1) eventKey = eventKey.toUpperCase();
   return eventKey === key;
 }
 ```
 
-Single-character keys are uppercased (`e.key` returns `"d"` for lowercase d, but we store `"D"`). This makes matching case-insensitive for letter keys while preserving exact matching for special keys like `ArrowDown`.
+Converts `"Alt+M"` to `{ modifiers: ["Alt"], key: "M" }` and compares against a KeyboardEvent. Single-character keys are uppercased for case-insensitive matching — this is why the caps lock key doesn't break vim mode.
 
-### Vim Mode — Additive Aliases
-
-Vim mode doesn't replace basic bindings — it adds aliases on top:
+**`matchesAction()`** wraps `matchesKey()` to check all keys for an action (primary key + vim aliases):
 
 ```typescript
-const VIM_ENHANCED_ALIASES: Record<string, Record<string, string[]>> = {
-  harpoon: {
-    moveUp: ["k"],
-    moveDown: ["j"],
-  },
-  search: {
-    moveUp: ["k"],
-    moveDown: ["j"],
-    scrollPreviewUp: ["Ctrl+U"],
-    scrollPreviewDown: ["Ctrl+D"],
-  },
-};
-```
-
-`getKeysForAction()` returns the primary key plus any vim aliases. `matchesAction()` checks all of them:
-
-```typescript
-function matchesAction(e, config, scope, action): boolean {
+export function matchesAction(e, config, scope, action): boolean {
   const keys = getKeysForAction(config, scope, action);
   return keys.some((k) => matchesKey(e, k));
 }
 ```
 
-This means arrow keys always work, even in vim mode. Users who know vim get j/k as a bonus.
-
-### Collision Detection
-
-When the user tries to bind a key that's already used in the same scope, `checkCollision()` catches it:
+### Vim aliases — additive, not replacement
 
 ```typescript
-function checkCollision(config, scope, action, key): CollisionResult | null {
+const VIM_ENHANCED_ALIASES: Record<string, Record<string, string[]>> = {
+  harpoon: { moveUp: ["K"], moveDown: ["J"] },
+  search: {
+    moveUp: ["K"], moveDown: ["J"],
+    scrollPreviewUp: ["Ctrl+U"], scrollPreviewDown: ["Ctrl+D"],
+  },
+};
+```
+
+When `config.navigationMode === "vim"`, `getKeysForAction()` returns `["ArrowDown", "J"]` for `moveDown`. Arrow keys always work. `j`/`k` are bonuses. Users don't need to learn vim to use the extension.
+
+### Collision detection
+
+```typescript
+export function checkCollision(config, scope, action, key): CollisionResult | null {
   for (const [act, binding] of Object.entries(scopeBindings)) {
-    if (act === action) continue; // skip self
+    if (act === action) continue;
     if (binding.key === key) return { action: act, label };
   }
   return null;
 }
 ```
 
-Collisions are per-scope, not global. `Alt+M` in the global scope doesn't conflict with `M` in the harpoon scope because they're active in different contexts.
-
-### Config Caching
-
-The content script caches the keybinding config to avoid hitting storage on every keypress:
-
-```typescript
-let cachedConfig: KeybindingsConfig | null = null;
-
-async function getConfig(): Promise<KeybindingsConfig> {
-  if (!cachedConfig) {
-    cachedConfig = await browser.runtime.sendMessage({ type: "GET_KEYBINDINGS" });
-  }
-  return cachedConfig;
-}
-
-// Invalidate on storage changes
-browser.storage.onChanged.addListener((changes) => {
-  if (changes.keybindings) cachedConfig = null;
-});
-```
-
-`storage.onChanged` fires in all contexts (background, content scripts, options page) when any context writes to storage. This means if the user changes a keybinding in the options page, all open tabs' content scripts immediately invalidate their cache.
+Per-scope only. `Alt+M` in `global` doesn't collide with `M` in `harpoon` because they're never active simultaneously. The options page calls this before accepting a new key binding.
 
 ---
 
-## Fuzzy Search Engine
+## Panel Host — panel-host.ts
 
-### Algorithm: Character-by-Character Scoring
+Creates the Shadow DOM container for all overlay panels. Every panel (harpoon, telescope, frecency, session restore) uses this.
 
-The fuzzy matcher in `grep.ts` scores each query term against each candidate string character by character. It's O(n) per candidate (single pass, no regex backtracking).
+### Shadow DOM creation
 
+```typescript
+export function createPanelHost(): PanelHost {
+  const existing = document.getElementById("ht-panel-host");
+  if (existing) existing.remove();
+
+  const host = document.createElement("div");
+  host.id = "ht-panel-host";
+  host.tabIndex = -1;
+  host.style.cssText = "position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2147483647;";
+  const shadow = host.attachShadow({ mode: "open" });
+  document.body.appendChild(host);
+  // ...
+}
 ```
-Query: "hdr"
-Candidate: "handleDataRequest"
-         h       d           r
-         ^       ^           ^
-Score = base + start_bonus + consecutive(none) + word_boundary(d after 'e') + distance_penalty
+
+**`existing.remove()`** — Only one panel at a time. Opening harpoon while telescope is open replaces it.
+
+**`host.tabIndex = -1`** — Makes the host focusable programmatically (`host.focus()`) but not via Tab key. This is needed for focus trapping — when focus escapes the panel, we reclaim it.
+
+**`z-index: 2147483647`** — The maximum 32-bit integer. This ensures our overlay appears above everything on the page, including other extensions, modal dialogs, and sticky headers.
+
+**`attachShadow({ mode: "open" })`** — Creates an open Shadow DOM. "Open" means `host.shadowRoot` is accessible from JavaScript. We could use "closed" for stronger encapsulation, but we need `shadowRoot` access for focus management and vim badge updates.
+
+### Focus trapping
+
+```typescript
+host.addEventListener("focusout", (e: FocusEvent) => {
+  const related = e.relatedTarget as Node | null;
+  const staysInPanel =
+    related && (host.contains(related) || host.shadowRoot!.contains(related));
+  if (!staysInPanel) {
+    setTimeout(() => {
+      if (document.getElementById("ht-panel-host")) host.focus();
+    }, 0);
+  }
+});
 ```
 
-Scoring constants:
-- `SCORE_BASE = 1` — per matched character
-- `SCORE_CONSECUTIVE = 8` — bonus when matched chars are adjacent
-- `SCORE_WORD_BOUNDARY = 10` — match after a separator (space, dash, etc.)
-- `SCORE_START = 6` — match at position 0
-- `PENALTY_DISTANCE = -1` — penalty per gap character between matches
+Shadow DOM children are NOT found by `host.contains()`. You must check both `host.contains()` (for the host element itself) and `host.shadowRoot.contains()` (for elements inside the shadow tree).
 
-These values were tuned empirically. The consecutive bonus is high to reward exact substrings. Word boundary bonus helps acronym-style queries (`hdr` matching `handleDataRequest`).
+The `setTimeout(..., 0)` defers the focus reclaim to after the current event completes. Without it, calling `host.focus()` during `focusout` can create a focus loop in some browsers.
 
-### Multi-Word Queries
+The `document.getElementById` check inside the timeout prevents focusing a panel that was closed between the timeout being scheduled and executing.
 
-Each space-separated term is scored independently:
+### Base styles
+
+```typescript
+export function getBaseStyles(): string {
+  return `
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :host { all: initial; font-family: 'SF Mono', ...; }
+    .ht-backdrop { ... backdrop-filter: blur(1px); will-change: backdrop-filter; }
+    .ht-titlebar { ... }
+    // ...
+  `;
+}
+```
+
+**`:host { all: initial; }`** — Resets ALL inherited CSS properties on the shadow host. Without this, the page's `font-size: 32px` or `color: red` would leak into the shadow tree via CSS inheritance.
+
+**`will-change: backdrop-filter`** — Tells the browser to promote this element to its own GPU compositing layer. The `backdrop-filter: blur(1px)` effect is computationally expensive; doing it on the GPU prevents CPU-based compositing jank.
+
+Styles are returned as a string and injected via a `<style>` element inside each panel's Shadow DOM. Each panel appends its own component-specific styles after the base styles.
+
+---
+
+## Helpers — helpers.ts
+
+Three utility functions used across content script modules.
+
+### escapeHtml — XSS prevention
+
+```typescript
+const HTML_ESCAPE: Record<string, string> = {
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+};
+export function escapeHtml(str: string): string {
+  return str.replace(/[&<>"']/g, (c) => HTML_ESCAPE[c]);
+}
+```
+
+Every time user-supplied text (page content, titles, URLs) is inserted via `innerHTML`, it must be escaped. Without this, a page title like `<script>alert('xss')</script>` would execute.
+
+This uses a static lookup table and a single regex pass. The alternative — creating a DOM element with `textContent` and reading `innerHTML` — allocates a DOM node per call. For a function called hundreds of times per search keystroke, the string approach is measurably faster.
+
+### escapeRegex — safe user input in RegExp
+
+```typescript
+export function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+```
+
+When creating a RegExp from user input (for highlight matching), special characters must be escaped. Without this, a search query like `foo.bar(` would throw `SyntaxError: Invalid regular expression`.
+
+### extractDomain — URL to hostname
+
+```typescript
+export function extractDomain(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch (_) {
+    return url.length > 30 ? url.substring(0, 30) + "…" : url;
+  }
+}
+```
+
+The `try/catch` handles malformed URLs (e.g., `about:blank`, data URIs). The fallback truncates long strings with an ellipsis.
+
+---
+
+## Feedback — feedback.ts
+
+A single-function module for center-screen toast notifications.
+
+```typescript
+export function showFeedback(message: string): void {
+  const existing = document.getElementById("ht-feedback-toast");
+  if (existing) existing.remove();
+
+  const toast = document.createElement("div");
+  toast.id = "ht-feedback-toast";
+  toast.textContent = message;
+  Object.assign(toast.style, {
+    position: "fixed", top: "50%", left: "50%",
+    transform: "translate(-50%, -50%)",
+    zIndex: "2147483647",
+    // ...styling
+  });
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    setTimeout(() => toast.remove(), 300);
+  }, 1500);
+}
+```
+
+**Not inside Shadow DOM** — The toast is appended directly to `document.body`, not inside a panel's shadow. This is because it needs to appear even when no panel is open (e.g., "Added to Harpoon [3]" after `Alt+A`).
+
+**`existing.remove()`** — Prevents stacking toasts. Each new message replaces the previous one.
+
+**Two-phase removal**: fade out over 300ms (`opacity: 0` with CSS transition), then remove from DOM. This prevents the abrupt disappearance of instant removal.
+
+---
+
+## Fuzzy Search Engine — grep.ts
+
+The most complex module. 551 lines implementing: DOM text collection, caching with MutationObserver, structural filters, character-by-character fuzzy scoring, and context extraction.
+
+### Fuzzy scoring algorithm
+
+```typescript
+function scoreTerm(term: string, candidate: string): number | null {
+  let score = 0;
+  let termIdx = 0;
+  let prevMatchIdx = -2;
+
+  for (let i = 0; i < candLen && termIdx < termLen; i++) {
+    if (candidate[i] === term[termIdx]) {
+      score += SCORE_BASE;                    // 1 point per match
+      if (i === prevMatchIdx + 1)
+        score += SCORE_CONSECUTIVE;           // 8 points for adjacent
+      if (i === 0) score += SCORE_START;      // 6 points at position 0
+      else if (WORD_SEPARATORS.has(candidate[i-1]))
+        score += SCORE_WORD_BOUNDARY;         // 10 points after separator
+      if (prevMatchIdx >= 0)
+        score += (i - prevMatchIdx - 1) * PENALTY_DISTANCE;  // -1 per gap
+      prevMatchIdx = i;
+      termIdx++;
+    }
+  }
+  if (termIdx < termLen) return null;  // not all chars matched
+  return score;
+}
+```
+
+This is a single-pass O(n) algorithm. For each character in the candidate string, it checks if it matches the next required character from the search term. Key scoring factors:
+
+- **Consecutive bonus (8)** — Rewards exact substrings. "hand" in "handleData" scores higher than "h...a...n...d" scattered across the string.
+- **Word boundary bonus (10)** — Highest bonus. Rewards matching after separators (space, dash, dot, etc.). "hdr" matching at the start of "handle-data-request" gets boundary bonuses on "d" (after "-") and "r" (after "-").
+- **Start bonus (6)** — Match at the beginning of the string is likely more relevant.
+- **Distance penalty (-1 per gap)** — Punishes gaps between matched characters. "hr" with 10 characters between h and r loses 10 points.
+
+These constants were tuned empirically. The consecutive bonus being high (8x base) ensures that exact substring matches dominate over scattered character matches.
+
+### Multi-word queries
 
 ```typescript
 function fuzzyMatch(query: string, candidate: string): number | null {
@@ -344,57 +1195,29 @@ function fuzzyMatch(query: string, candidate: string): number | null {
   let totalScore = 0;
   for (const term of terms) {
     const s = scoreTerm(term, candidate);
-    if (s === null) return null; // ALL terms must match
+    if (s === null) return null;  // ALL terms must match
     totalScore += s;
   }
   return totalScore;
 }
 ```
 
-Every term must match for the candidate to pass. Scores are summed. This means "api endpoint" requires both "api" AND "endpoint" to appear in the candidate.
+AND semantics — every space-separated term must match. "api endpoint" requires both "api" AND "endpoint" in the candidate. Scores are summed.
 
-### Pre-Lowercasing
-
-Candidates are lowercased once at collection time and stored in `TaggedLine.lower`. The query is lowercased once at search time. This avoids calling `.toLowerCase()` on every comparison:
+### Pre-lowercasing
 
 ```typescript
 interface TaggedLine {
-  text: string;   // original text (for display)
-  lower: string;  // pre-lowercased (for matching)
+  text: string;    // original for display
+  lower: string;   // pre-lowercased for matching
+  tag: string;
+  nodeRef?: WeakRef<Node>;
 }
 ```
 
-### Structural Filters
+Lowercasing is done once at collection time. The query is lowercased once at search time. This avoids calling `.toLowerCase()` on every candidate for every keystroke — with 5000 lines and 10 keystrokes, that's 50,000 avoided string allocations.
 
-Filters narrow the candidate pool before fuzzy matching:
-
-- `/code` — `<pre>` blocks (split into lines, tagged `[PRE]`) and standalone `<code>` (tagged `[CODE]`)
-- `/headings` — `<h1>` through `<h6>`
-- `/links` — `<a>` elements
-
-Filters combine as **union**: `/code /links` searches code blocks AND links. The query text then **narrows** within that pool.
-
-Parsing is stateless — `parseInput()` re-parses from scratch on every keystroke:
-
-```typescript
-function parseInput(raw: string): { filters: SearchFilter[]; query: string } {
-  const tokens = raw.trimStart().split(/\s+/);
-  const filters: SearchFilter[] = [];
-  for (let i = 0; i < tokens.length; i++) {
-    if (VALID_FILTERS[tokens[i]]) {
-      filters.push(VALID_FILTERS[tokens[i]]);
-    } else break; // first non-filter token starts the query
-  }
-  const query = tokens.slice(filters.length).join(" ").trim();
-  return { filters, query };
-}
-```
-
-Partial tokens like `/cod` never match because `VALID_FILTERS` is an exact dictionary lookup.
-
-### Line Cache with MutationObserver
-
-The DOM is walked once. Results are cached in a `LineCache` object:
+### Line cache with MutationObserver
 
 ```typescript
 const cache: LineCache = {
@@ -403,138 +1226,216 @@ const cache: LineCache = {
   headings: TaggedLine[] | null,
   links: TaggedLine[] | null,
   observer: MutationObserver | null,
+  invalidateTimer: ReturnType<typeof setTimeout> | null,
 };
 ```
 
-A `MutationObserver` watches for DOM changes and invalidates the cache (debounced 500ms):
+The DOM is walked once per telescope session. Subsequent keystrokes filter the cached array. The MutationObserver watches for DOM changes (dynamic pages, SPAs) and invalidates the cache with a 500ms debounce.
+
+**`initLineCache()`** — Called when telescope opens. Starts the observer.
+**`destroyLineCache()`** — Called when telescope closes. Stops the observer and frees the cache.
+
+### Structural filters — union semantics
 
 ```typescript
-cache.observer = new MutationObserver(() => {
-  if (cache.invalidateTimer) clearTimeout(cache.invalidateTimer);
-  cache.invalidateTimer = setTimeout(invalidateCache, 500);
-});
-cache.observer.observe(document.body, {
-  childList: true, subtree: true, characterData: true,
-});
-```
-
-When the cache is valid, subsequent keystrokes re-filter the cached lines without re-walking the DOM. This is critical for performance — DOM traversal is expensive, but filtering an in-memory array is cheap.
-
-### Deduplication
-
-Results are deduplicated by text content using a `Set<string>`:
-
-```typescript
-const seen = new Set<string>();
-for (const line of allLines) {
-  if (seen.has(line.text)) continue;
-  // ... score and collect
-  seen.add(line.text);
+function collectLines(filters: SearchFilter[]): TaggedLine[] {
+  if (filters.length === 0) return collectAll();
+  if (filters.length === 1) {
+    switch (filters[0]) {
+      case "code": return collectCode();
+      case "headings": return collectHeadings();
+      case "links": return collectLinks();
+    }
+  }
+  // Multiple filters — union
+  const lines: TaggedLine[] = [];
+  for (const filter of filters) {
+    switch (filter) {
+      case "code": lines.push(...collectCode()); break;
+      // ...
+    }
+  }
+  return lines;
 }
 ```
 
-### Early Exit
+`/code /links` returns all code lines AND all link lines (union). The fuzzy query then narrows within that pool. Each sub-collection is independently cached.
 
-Once we collect 3x the max results (600), we stop scanning. The top 200 after sorting are returned. This prevents slowdown on huge pages where thousands of lines might match.
-
----
-
-## Virtual Scrolling
-
-Telescope results can number in the hundreds. Rendering 200+ DOM elements with event listeners would be slow. Virtual scrolling renders only what's visible.
-
-### How It Works
-
-1. A **sentinel div** is sized to the total height of all results (`results.length * ITEM_HEIGHT`). This creates the correct scrollbar.
-2. A **results list div** is absolutely positioned inside the pane. It only contains ~25 DOM elements (viewport height / item height + buffer).
-3. On scroll, we calculate which result indices are visible and re-bind the pool items to new data.
+### Code collection — `<pre>` splitting
 
 ```typescript
-const ITEM_HEIGHT = 28;  // px per row
-const POOL_BUFFER = 5;   // extra items above/below viewport
-
-function renderVisibleItems(): void {
-  const scrollTop = resultsPane.scrollTop;
-  const viewHeight = resultsPane.clientHeight;
-
-  const newStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - POOL_BUFFER);
-  const newEnd = Math.min(results.length,
-    Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER);
-
-  if (newStart === vsStart && newEnd === vsEnd) return; // no change
-
-  resultsList.style.top = `${vsStart * ITEM_HEIGHT}px`;
-
-  for (let i = 0; i < count; i++) {
-    const item = getPoolItem(i);     // reuse from pool
-    bindPoolItem(item, vsStart + i); // update content
-    // attach to DOM if not already there
+function collectCode(): TaggedLine[] {
+  const codeEls = document.querySelectorAll("pre, code");
+  for (const codeEl of codeEls) {
+    if (el.tagName === "CODE" && el.parentElement?.tagName === "PRE") continue; // skip nested
+    if (el.tagName === "PRE") {
+      const splitLines = el.textContent.split("\n");
+      for (const line of splitLines) {
+        lines.push({ text: trimmed, tag: "PRE", ... });
+      }
+    } else {
+      lines.push({ text, tag: "CODE", ... });
+    }
   }
 }
 ```
 
-### Element Pool
+`<pre>` blocks are split into individual lines so each line is a searchable result. `<code>` inside `<pre>` is skipped (the `<pre>` already covers it). Standalone `<code>` is collected as a single result tagged `[CODE]`.
 
-Instead of creating/destroying DOM elements, we maintain a pool:
+### All-text collection — TreeWalker
 
 ```typescript
-let itemPool: HTMLElement[] = [];
+function collectAll(): TaggedLine[] {
+  // First: collect <pre> blocks split by line
+  const preSet = new Set<Node>();
+  for (const pre of document.querySelectorAll("pre")) { ... preSet.add(pre); }
 
-function getPoolItem(poolIdx: number): HTMLElement {
-  if (poolIdx < itemPool.length) return itemPool[poolIdx];
-  const item = document.createElement("div");
-  // ... create structure once
-  itemPool.push(item);
-  return item;
+  // Then: walk all text nodes, skipping those inside <pre>
+  const walker = document.createTreeWalker(
+    document.body, NodeFilter.SHOW_TEXT,
+    { acceptNode(node) {
+        if (!isVisible(el)) return NodeFilter.FILTER_REJECT;
+        // Walk up to check if inside a <pre>
+        let ancestor = el;
+        while (ancestor) {
+          if (preSet.has(ancestor)) return NodeFilter.FILTER_REJECT;
+          ancestor = ancestor.parentElement;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    }
+  );
 }
 ```
 
-`bindPoolItem()` updates the content of an existing pool element for a new result index. The DOM structure (badge span, text span) is created once and reused.
+`TreeWalker` is the most efficient way to iterate text nodes. It's faster than `querySelectorAll("*")` + checking `textContent` because it only visits text nodes (not elements) and allows filtering via `acceptNode`.
 
-### Passive Scroll Listener
+The `preSet` check prevents double-counting: `<pre>` content is already split by line in the first pass.
 
-The scroll listener uses `{ passive: true }` because it doesn't call `preventDefault()`:
+### Tag resolution
 
 ```typescript
-resultsPane.addEventListener("scroll", () => {
-  if (results.length > 0) renderVisibleItems();
-}, { passive: true });
+function resolveTag(el: Element): string {
+  let cur = el;
+  while (cur && cur !== document.body) {
+    const tag = cur.tagName;
+    if (tag === "PRE" || tag === "CODE" || tag === "A" || tag === "H1" || ...) return tag;
+    cur = cur.parentElement;
+  }
+  return el.tagName || "BODY";
+}
 ```
 
-Passive listeners tell the browser it's safe to scroll without waiting for JS to finish. This prevents scroll jank.
+Walks up from a text node's parent to find the most semantically meaningful ancestor. A text node inside `<a><span>Click here</span></a>` resolves to `"A"`, not `"SPAN"`.
+
+### DOM-aware context
+
+```typescript
+function getDomContext(node: Node, matchText: string, tag: string): string[] {
+  if (tag === "PRE" || tag === "CODE") {
+    // Find the <pre> block, split into lines, return surrounding lines
+    const lines = codeBlock.textContent.split("\n");
+    const start = Math.max(0, matchIdx - CONTEXT_LINES);
+    const end = Math.min(lines.length, matchIdx + CONTEXT_LINES + 1);
+    return lines.slice(start, end);
+  }
+  // For prose: walk up to block container, extract text
+  // ...
+}
+```
+
+Context is extracted from the DOM structure, not from the flat line array. For code blocks, this means showing 5 lines above and below the match from the same `<pre>` element. For prose, it finds the nearest block container (paragraph, div, article) and returns its text.
+
+### Early exit
+
+```typescript
+if (scored.length >= MAX_RESULTS * 3) break;
+```
+
+After collecting 600 scored results, stop scanning. The top 200 after sorting are returned. This prevents slowdown on pages with 50,000+ text lines.
 
 ---
 
-## Frecency Algorithm
+## Scroll-to-Text — scroll.ts
 
-Frecency = **Frequency × Recency weight**. Mozilla coined this for Firefox's URL bar.
+Navigates to a search result by scrolling to its DOM position and applying a temporary yellow highlight.
 
-### Time-Decay Buckets
+### Fast path / slow path
 
-Instead of a continuous decay function, we use discrete buckets:
+```typescript
+export function scrollToText(text: string, nodeRef?: WeakRef<Node>): void {
+  const cached = nodeRef?.deref();
+  if (cached && document.body.contains(cached)) {
+    scrollToElement(cached, text);
+    return;
+  }
+  // Slow path: walk all text nodes
+  const walker = document.createTreeWalker(...);
+  // ...
+}
+```
+
+If the `WeakRef` from the grep result is still alive and in the document, use it directly (O(1)). If the node was garbage collected or removed from the DOM, fall back to a full text node walk (O(n)).
+
+### Temporary highlight
+
+```typescript
+function highlightTextNode(node: Node, text: string): void {
+  const range = document.createRange();
+  range.setStart(node, idx);
+  range.setEnd(node, idx + text.length);
+
+  const highlight = document.createElement("mark");
+  range.surroundContents(highlight);
+
+  setTimeout(() => {
+    highlight.style.opacity = "0";
+    setTimeout(() => {
+      const textNode = document.createTextNode(highlight.textContent);
+      highlight.parentNode.replaceChild(textNode, highlight);
+      textNode.parentNode.normalize();
+    }, 500);
+  }, 2000);
+}
+```
+
+Uses the Range API to wrap the exact matched text in a `<mark>` element. After 2 seconds, fades it out (500ms transition), then replaces the `<mark>` with a plain text node. `normalize()` merges adjacent text nodes that the Range split apart — without this, subsequent searches would find fragmented text nodes.
+
+`range.surroundContents()` can throw if the range crosses element boundaries. The `try/catch` silently handles this edge case.
+
+---
+
+## Frecency Algorithm — frecency.ts
+
+Self-contained module managing tab visit tracking with Mozilla-style frecency scoring.
+
+### Time-decay buckets
 
 ```typescript
 function computeFrecencyScore(entry: FrecencyEntry): number {
   const age = Date.now() - entry.lastVisit;
   let recencyWeight: number;
-  if (age < 4 * MINUTE) recencyWeight = 100;
-  else if (age < HOUR) recencyWeight = 70;
-  else if (age < DAY) recencyWeight = 50;
-  else if (age < WEEK) recencyWeight = 30;
-  else recencyWeight = 10;
+  if (age < 4 * MINUTE)   recencyWeight = 100;
+  else if (age < HOUR)    recencyWeight = 70;
+  else if (age < DAY)     recencyWeight = 50;
+  else if (age < WEEK)    recencyWeight = 30;
+  else                    recencyWeight = 10;
   return entry.visitCount * recencyWeight;
 }
 ```
 
-A tab visited 5 times in the last 4 minutes scores `5 * 100 = 500`. The same tab after a day scores `5 * 50 = 250`. A tab visited once a week ago scores `1 * 30 = 30`.
+Discrete buckets instead of continuous decay. Why:
+1. Simpler to reason about ("tabs visited in the last 4 minutes are 10x more important than week-old tabs")
+2. No floating point precision issues
+3. Easy to tune — adjust thresholds without changing formulas
 
-### Max 50 with Lowest-Score Eviction
+A tab visited 5 times in the last 4 minutes: `5 × 100 = 500`. Same tab after a day: `5 × 50 = 250`. Visited once last week: `1 × 30 = 30`.
 
-When the map exceeds 50 entries, the lowest-scored entry is evicted:
+### Lowest-score eviction
 
 ```typescript
 if (frecencyMap.size > MAX_FRECENCY_ENTRIES) {
-  let lowestId: number | null = null;
+  let lowestId = null;
   let lowestScore = Infinity;
   for (const [id, e] of frecencyMap) {
     if (e.frecencyScore < lowestScore) {
@@ -546,64 +1447,353 @@ if (frecencyMap.size > MAX_FRECENCY_ENTRIES) {
 }
 ```
 
-This is O(n) per eviction. With n=50, it's negligible. A heap would be overkill here.
+O(n) scan with n=50. A min-heap would be O(log n) but adds complexity for negligible gain at this scale.
 
-### Why Not LRU?
+Not FIFO (first in, first out) because that would evict frequently visited old tabs. Not LRU (least recently used) because that ignores visit frequency. Frecency balances both.
 
-LRU (Least Recently Used) only considers recency. A tab you visited once 5 minutes ago would rank higher than a tab you visited 20 times yesterday. Frecency balances both signals — frequently visited tabs stay ranked even as they age.
+### Reconciliation with open tabs
+
+```typescript
+export async function getFrecencyList(): Promise<FrecencyEntry[]> {
+  const tabs = await browser.tabs.query({ currentWindow: true });
+  const tabIds = new Set(tabs.map((t) => t.id));
+
+  // Prune closed tabs
+  for (const id of frecencyMap.keys()) {
+    if (!tabIds.has(id)) frecencyMap.delete(id);
+  }
+
+  // Add untracked tabs with score 0
+  const entries = tabs.map((t) => {
+    const existing = frecencyMap.get(t.id);
+    if (existing) return { ...existing, frecencyScore: computeFrecencyScore(existing) };
+    return { tabId: t.id, frecencyScore: 0, ... };
+  });
+
+  entries.sort((a, b) => b.frecencyScore - a.frecencyScore);
+  return entries;
+}
+```
+
+Scores are recomputed on read (not just on write) because the recency weight changes over time. A tab visited 5 minutes ago might have moved from the "4-minute" bucket to the "hour" bucket since last computation.
 
 ---
 
-## Session Management
+## Session Management — sessions.ts
 
-### Save / Load / Delete Flow
+CRUD handlers for harpoon sessions, extracted from background.ts for modularity.
 
-Sessions snapshot the current harpoon list (URLs, titles, scroll positions) into `browser.storage.local`. On load, new tabs are created for each entry.
-
-The save flow has several validation gates:
-1. **Empty list** — can't save an empty harpoon
-2. **Duplicate name** — case-insensitive rejection
-3. **Identical content** — if the same set of URLs is already saved under another name
-4. **Max 3 sessions** — prompts user to pick one to replace
-
-### Session Restore on Startup
-
-`browser.runtime.onStartup` fires when the browser starts:
+### HarpoonState interface
 
 ```typescript
-browser.runtime.onStartup.addListener(async () => {
-  // 1. Check if sessions exist
-  // 2. Clear stale harpoon (all tabIds are new after restart)
-  // 3. Wait for a tab to be ready (content script injection)
-  // 4. Show session restore overlay
-});
+export interface HarpoonState {
+  getList(): HarpoonEntry[];
+  setList(list: HarpoonEntry[]): void;
+  recompactSlots(): void;
+  save(): Promise<void>;
+  ensureLoaded(): Promise<void>;
+}
 ```
 
-After a browser restart, all previous tabIds are invalid. The harpoon list must be cleared. The retry logic (5 attempts, 1s apart) handles the race condition where tabs are still loading and content scripts aren't ready yet.
+This interface decouples session management from the background script's global state. The background creates a `harpoonState` object that implements this interface:
 
-### View Mode State Machine
+```typescript
+const harpoonState: HarpoonState = {
+  getList: () => harpoonList,
+  setList: (list) => { harpoonList = list; },
+  // ...
+};
+```
 
-The harpoon overlay uses a view mode enum to switch between sub-views:
+This is dependency injection without a DI framework. The sessions module doesn't know about `harpoonList` — it only knows the interface. This makes the module testable (you could pass a mock state) and prevents circular dependencies.
+
+### Save validation
+
+```typescript
+export async function sessionSave(state, name): Promise<{ ok: boolean; reason?: string }> {
+  if (state.getList().length === 0) return { ok: false, reason: "Cannot save empty harpoon list" };
+  const nameTaken = sessions.some((s) => s.name.toLowerCase() === name.toLowerCase());
+  if (nameTaken) return { ok: false, reason: `"${name}" already exists` };
+  if (sessions.length >= 3) return { ok: false, reason: "Max 3 sessions — delete one first" };
+  // ...
+}
+```
+
+Multiple validation gates:
+1. Empty list check
+2. Case-insensitive duplicate name check
+3. Max capacity (3 sessions)
+
+Returns `{ ok: false, reason }` instead of throwing. The caller decides how to display the error (toast, inline message, etc.).
+
+### Session load — new tabs
+
+```typescript
+export async function sessionLoad(state, name): Promise<...> {
+  for (const entry of session.entries) {
+    const tab = await browser.tabs.create({ url: entry.url, active: false });
+    newList.push({ tabId: tab.id!, url: entry.url, ... });
+  }
+  state.setList(newList);
+  // Activate the first tab
+  await browser.tabs.update(newList[0].tabId, { active: true });
+}
+```
+
+Each session entry opens a new tab. `active: false` prevents tab focus from jumping around during creation. After all tabs are created, the first one is activated.
+
+The harpoon list is **replaced** entirely — session load doesn't append to the existing list. This is intentional: a session represents a complete workspace.
+
+---
+
+## Harpoon Overlay — harpoon-overlay.ts
+
+The Tab Manager panel. 526 lines implementing: list rendering, keyboard navigation, swap mode, session sub-views, and number key jumps.
+
+### View mode state machine
 
 ```typescript
 type ViewMode = "harpoon" | "saveSession" | "sessionList" | "replaceSession";
+let viewMode: ViewMode = "harpoon";
 ```
 
-Escape/close from session views goes **back to harpoon view**, not close the panel entirely. This is handled by `setViewMode("harpoon")` followed by `render()`.
+The harpoon panel has four sub-views, all rendered inside the same panel container. `render()` dispatches to the right renderer:
+
+```typescript
+function render(): void {
+  switch (viewMode) {
+    case "harpoon": renderHarpoon(); break;
+    case "saveSession": renderSaveSession(sessionCtx); break;
+    case "sessionList": renderSessionList(sessionCtx); break;
+    case "replaceSession": renderReplaceSession(sessionCtx); break;
+  }
+}
+```
+
+Escape from session views goes back to harpoon view (`setViewMode("harpoon")`), not close the panel. This is explicit in the keyboard handlers.
+
+### Session context — cross-module communication
+
+```typescript
+const sessionCtx: SessionContext = {
+  shadow, container, config,
+  get sessions() { return sessions; },
+  get sessionIndex() { return sessionIndex; },
+  setSessionIndex(i) { sessionIndex = i; },
+  setSessions(s) { sessions = s; },
+  setViewMode(mode) { viewMode = mode; },
+  render, close,
+};
+```
+
+The `SessionContext` object provides session-views.ts with controlled access to the harpoon overlay's state. Getters and setters maintain encapsulation — the session module can read/write state but doesn't directly hold the variables.
+
+### Swap mode
+
+```typescript
+let swapMode = false;
+let swapSourceIndex: number | null = null;
+
+function performSwapPick(idx: number): void {
+  if (swapSourceIndex === null) {
+    swapSourceIndex = idx;     // first pick: set source
+    render();
+  } else if (swapSourceIndex === idx) {
+    swapSourceIndex = null;    // same item: deselect
+    render();
+  } else {
+    // Different item: perform swap
+    const temp = list[srcIdx];
+    list[srcIdx] = list[idx];
+    list[idx] = temp;
+    swapSourceIndex = null;    // Clear source, stay in swap mode
+    // Save reorder to background
+    browser.runtime.sendMessage({ type: "HARPOON_REORDER", list });
+  }
+}
+```
+
+Swap mode stays active after completing a swap. The user can keep swapping until pressing `w` again or Escape. `swapSourceIndex = null` resets the "pick" without exiting swap mode.
+
+The visual indicator: source item gets `.swap-source` class (blue background + yellow border). This is distinct from `.active` (blue border only).
+
+### Number key instant jump
+
+```typescript
+if (!e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
+  const num = parseInt(e.key);
+  if (num >= 1 && num <= MAX_HARPOON_SLOTS) {
+    const item = list.find((it) => it.slot === num);
+    if (item) jumpToSlot(item);
+    return;
+  }
+}
+```
+
+Number keys 1-6 instantly jump to the corresponding slot — no selection, no confirmation. The modifier check (`!e.ctrlKey && ...`) ensures `Alt+1` (which is a global shortcut) doesn't trigger this.
+
+### Class swap for navigation
+
+```typescript
+function setActiveIndex(newIndex: number): void {
+  const prev = harpoonList.querySelector(".ht-harpoon-item.active");
+  if (prev) prev.classList.remove("active");
+  activeIndex = newIndex;
+  const next = harpoonList.querySelector(`.ht-harpoon-item[data-index="${activeIndex}"]`);
+  if (next) {
+    next.classList.add("active");
+    next.scrollIntoView({ block: "nearest" });
+  }
+}
+```
+
+Arrow key navigation doesn't rebuild the DOM. It swaps CSS classes on existing elements. For a list of 6 items, this is negligible — but it's the right pattern to use everywhere.
+
+When swap mode is active, arrow navigation does trigger `render()` because the swap indicators need updating (which items are highlighted as source/target).
 
 ---
 
-## Performance Patterns
+## Telescope Overlay — search-overlay.ts
 
-### rAF-Throttled Updates
+The most complex UI component. 858 lines implementing: fuzzy search input, structural filter pills, virtual scrolling results, preview pane with code/prose rendering, and highlight matching.
 
-Both telescope's preview pane and frecency's list use `requestAnimationFrame` to batch DOM updates:
+### Page size safety guard
 
 ```typescript
-let previewRafId: number | null = null;
+const elementCount = document.body.querySelectorAll("*").length;
+const textLength = document.body.textContent?.length ?? 0;
+if (elementCount > MAX_DOM_ELEMENTS || textLength > MAX_TEXT_BYTES) {
+  showFeedback("Page too large to search");
+  return;
+}
+```
 
+200,000+ DOM elements or 10MB+ text content would make grep unresponsive. The guard checks before building the UI, avoiding a hung panel.
+
+### Filter parsing
+
+```typescript
+function parseInput(raw: string): { filters: SearchFilter[]; query: string } {
+  const tokens = raw.trimStart().split(/\s+/);
+  const filters: SearchFilter[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (VALID_FILTERS[tokens[i]]) {
+      filters.push(VALID_FILTERS[tokens[i]]);
+    } else break;  // first non-filter token starts the query
+  }
+  const query = tokens.slice(queryStart).join(" ").trim();
+  return { filters, query };
+}
+```
+
+Stateless — re-parses from scratch on every keystroke. Filters must be at the start of input. `/code api` is valid (filter + query). `api /code` is just a query "api /code". This is simpler than tracking filter state separately.
+
+The `break` on non-filter token is important: `/code /links api endpoint` parses as two filters and query "api endpoint". Partial filters like `/cod` don't match because `VALID_FILTERS` is an exact dictionary.
+
+### Backspace removes filter pills
+
+```typescript
+if (e.key === "Backspace" && input.value === "" && activeFilters.length > 0) {
+  activeFilters.pop();
+  input.value = activeFilters.map((f) => `/${f}`).join(" ") + " ";
+  // Re-trigger search
+}
+```
+
+When input is empty and the user presses Backspace, the last filter pill is removed. The input is rebuilt from remaining filters. This is a "tag-input" UX pattern common in email clients and search UIs.
+
+### Virtual scrolling
+
+The results pane can contain 200 results. Rendering 200 DOM elements with event listeners is slow. Virtual scrolling renders only the ~25 visible items.
+
+```
+┌─ Results Pane (overflow: auto) ──────────┐
+│  ┌─ Sentinel (height: results × 28px) ──┐│  ← Creates scrollbar
+│  │                                       ││
+│  └───────────────────────────────────────┘│
+│  ┌─ Results List (position: absolute) ───┐│  ← Contains ~25 items
+│  │  Item 12                              ││
+│  │  Item 13 (active)                     ││
+│  │  Item 14                              ││
+│  │  ...                                  ││
+│  └───────────────────────────────────────┘│
+└──────────────────────────────────────────┘
+```
+
+**Sentinel** — An empty div sized to the total scrollable height (`results.length * ITEM_HEIGHT`). This gives the scrollbar the correct size. It has no content.
+
+**Results List** — Positioned absolutely at `top: vsStart * ITEM_HEIGHT`. Contains only the items visible in the viewport plus a buffer of 5 items above and below.
+
+```typescript
+function renderVisibleItems(): void {
+  const scrollTop = resultsPane.scrollTop;
+  const viewHeight = resultsPane.clientHeight;
+  const newStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - POOL_BUFFER);
+  const newEnd = Math.min(results.length, Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER);
+  if (newStart === vsStart && newEnd === vsEnd) return;
+  // Re-bind pool items to new result indices
+}
+```
+
+The scroll listener triggers `renderVisibleItems()`, which calculates the visible range and re-binds pool items to new data. The early return (`if unchanged`) prevents unnecessary DOM work.
+
+### Element pool
+
+```typescript
+function getPoolItem(poolIdx: number): HTMLElement {
+  if (poolIdx < itemPool.length) return itemPool[poolIdx];
+  const item = document.createElement("div");
+  item.className = "ht-result-item";
+  const badge = document.createElement("span"); // tag badge
+  const span = document.createElement("span");  // text
+  item.appendChild(badge);
+  item.appendChild(span);
+  itemPool.push(item);
+  return item;
+}
+```
+
+DOM elements are created once and reused. `bindPoolItem()` updates the content of an existing element for a new result index. The DOM structure (badge + text span) is created once; only `textContent`, `innerHTML`, `style`, and class are updated on rebind.
+
+### Event delegation
+
+```typescript
+resultsList.addEventListener("click", (e) => {
+  const item = (e.target as HTMLElement).closest(".ht-result-item");
+  if (!item || !item.dataset.index) return;
+  setActiveIndex(Number(item.dataset.index));
+});
+```
+
+One click listener on the container handles clicks on any result item. `closest()` walks up from the click target to find the nearest `.ht-result-item`. This works regardless of how many items exist, whether they're recycled, or whether the user clicked on the badge or the text inside the item.
+
+### Preview rendering
+
+```typescript
+function updatePreview(): void {
+  const r = results[activeIndex];
+  const contextLines = r.domContext || r.context || [r.text];
+  const isCode = tag === "PRE" || tag === "CODE";
+
+  if (isCode) {
+    html += '<div class="ht-preview-code-ctx">';
+    for (const line of contextLines) {
+      const isMatch = trimmed === r.text;
+      html += `<span class="${cls}">${lineContent}</span>`;
+    }
+  } else {
+    // Prose rendering
+  }
+}
+```
+
+Preview uses DOM-aware context (from `getDomContext()`) when available, with flat context as fallback. Code blocks get monospace font and line numbers. Prose gets clean text blocks. The matched line is highlighted with a blue left border.
+
+### rAF-throttled preview updates
+
+```typescript
 function schedulePreviewUpdate(): void {
-  if (previewRafId !== null) return; // already scheduled
+  if (previewRafId !== null) return;
   previewRafId = requestAnimationFrame(() => {
     previewRafId = null;
     updatePreview();
@@ -611,11 +1801,65 @@ function schedulePreviewUpdate(): void {
 }
 ```
 
-If the user rapidly arrows through results, this coalesces multiple preview updates into one paint. Without this, every arrow keypress would trigger an immediate DOM write + layout + paint.
+Rapid arrow key navigation schedules multiple preview updates. `requestAnimationFrame` coalesces them into one per paint frame. The `if (previewRafId !== null) return` guard prevents scheduling multiple rAFs — only one is pending at a time.
 
-### Synchronous First Render
+### j/k in search input
 
-Frecency uses rAF for subsequent renders but renders the first frame synchronously:
+```typescript
+if (matchesAction(e, config, "search", "moveDown")) {
+  const lk = e.key.toLowerCase();
+  if ((lk === "j" || lk === "k") && inputFocused) return;
+  // navigate
+}
+```
+
+When the search input is focused, `j` and `k` type into the input (for searching). When the results list is focused, they navigate. This prevents vim keys from hijacking text input.
+
+---
+
+## Frecency Overlay — frecency-overlay.ts
+
+A simpler panel listing all open tabs sorted by frecency score. 403 lines with type-to-filter, DocumentFragment rendering, and class-swap navigation.
+
+### Static shell + dynamic list
+
+The panel structure (titlebar, input, list container, footer) is built once from DOM elements:
+
+```typescript
+const titlebar = document.createElement("div");
+const input = document.createElement("input");
+const listEl = document.createElement("div");
+const footer = document.createElement("div");
+panel.appendChild(titlebar);
+panel.appendChild(inputWrap);
+panel.appendChild(listEl);
+panel.appendChild(footer);
+```
+
+Only `listEl` is updated on filter changes. The input element is never destroyed, so typing is never interrupted. This pattern was born from the [frecency input destruction bug](#the-frecency-input-destruction-bug).
+
+### DocumentFragment rendering
+
+```typescript
+function buildListFragment(): DocumentFragment {
+  const frag = document.createDocumentFragment();
+  for (const entry of filtered) {
+    const item = document.createElement("div");
+    // ... build item
+    frag.appendChild(item);
+  }
+  return frag;
+}
+
+function commitList(frag: DocumentFragment): void {
+  listEl.textContent = "";
+  listEl.appendChild(frag);
+}
+```
+
+`DocumentFragment` is not rendered. Items are built off-DOM, then moved to the live DOM in a single `appendChild()`. This avoids the "flash of empty" that `innerHTML = ""` followed by `innerHTML = html` causes.
+
+### Synchronous first render + rAF subsequent
 
 ```typescript
 let firstRender = true;
@@ -633,34 +1877,9 @@ function renderList(): void {
 }
 ```
 
-Without this, the panel opens empty for one frame (rAF fires on the next paint), then content appears — a visible flash. Synchronous first render eliminates this.
+Without synchronous first render, the panel opens empty for one frame, then content appears. Users see a flash. First render is synchronous to eliminate this. Subsequent renders are deferred to rAF to coalesce rapid updates.
 
-### DocumentFragment
-
-Instead of `innerHTML = htmlString` (which destroys and recreates all children), we build a `DocumentFragment` and append it in one operation:
-
-```typescript
-function buildListFragment(): DocumentFragment {
-  const frag = document.createDocumentFragment();
-  for (const entry of filtered) {
-    const item = document.createElement("div");
-    // ... build item
-    frag.appendChild(item);
-  }
-  return frag;
-}
-
-function commitList(frag: DocumentFragment): void {
-  listEl.textContent = ""; // clear
-  listEl.appendChild(frag); // single DOM operation
-}
-```
-
-`DocumentFragment` is not rendered — it's a lightweight container. When appended to the DOM, its children are moved (not copied) in a single operation. This avoids the "flash of empty" that innerHTML causes (clear → parse → insert).
-
-### Class Swap for Active Highlight
-
-Arrow key navigation doesn't rebuild the DOM. It just swaps CSS classes:
+### Class swap navigation
 
 ```typescript
 function updateActiveHighlight(newIndex: number): void {
@@ -675,49 +1894,80 @@ function updateActiveHighlight(newIndex: number): void {
 }
 ```
 
-This is O(1) DOM work vs. O(n) for a full rebuild. The difference is noticeable when rapidly holding arrow keys.
+Arrow keys only swap classes. The DOM is not rebuilt. This eliminates the [frecency flicker bug](#the-frecency-flicker-bug).
 
-### Direct DOM References
+---
 
-Instead of `querySelector(".active")` on every operation, we keep a direct reference:
+## Session Views — session-views.ts
+
+594 lines implementing four views: save session, session list, replace session picker, and standalone session restore (browser startup).
+
+### SessionContext pattern
+
+The harpoon overlay passes a `SessionContext` object that gives session views controlled access to its internal state. This avoids circular imports and keeps the session module independent.
+
+The context uses getters for read access and setter functions for write access:
 
 ```typescript
-let activeItemEl: HTMLElement | null = null;
+get sessions() { return sessions; },
+get sessionIndex() { return sessionIndex; },
+setSessionIndex(i) { sessionIndex = i; },
+setViewMode(mode) { viewMode = mode; },
+render() { ... },
 ```
 
-This avoids a DOM tree search on every arrow key press. Updated when the active item changes.
-
-### Boolean Panel State
-
-Instead of checking `document.getElementById("ht-panel-host")` on every keypress:
+### Save validation
 
 ```typescript
-let panelOpen = true;
-
-function keyHandler(e: KeyboardEvent): void {
-  if (!panelOpen) { ... }
+async function validateSessionSave(name: string): Promise<string | null> {
+  const [harpoonList, sessions] = await Promise.all([...]);
+  // Check identical content
+  const currentUrls = harpoonList.map((e) => e.url).join("\n");
+  for (const s of sessions) {
+    if (currentUrls === s.entries.map((e) => e.url).join("\n"))
+      return `Identical to "${s.name}"`;
+  }
+  // Check duplicate name
+  if (s.name.toLowerCase() === name.toLowerCase())
+    return `"${s.name}" already exists`;
+  return null;
 }
 ```
 
-`getElementById` walks the DOM. A boolean check is a single memory read.
+Two checks beyond what `sessionSave()` in sessions.ts does:
+1. Content identity — saving the exact same URL set under a different name is likely a mistake
+2. Name collision — case-insensitive
 
-### `will-change` for GPU Compositing
+These run before the save attempt, so the user sees the error in the save input (red border + error text), not as a toast after the fact.
 
-```css
-.ht-backdrop {
-  backdrop-filter: blur(1px);
-  will-change: backdrop-filter;
+### Replace flow
+
+When saving at max capacity (3 sessions):
+1. `sessionSave()` returns `{ ok: false, reason: "Max 3 sessions" }`
+2. The handler switches to `replaceSession` view
+3. User picks a session to replace
+4. The old session is deleted, new one saved with the pending name
+
+### Standalone restore overlay
+
+```typescript
+export async function openSessionRestoreOverlay(): Promise<void> {
+  const sessions = await browser.runtime.sendMessage({ type: "SESSION_LIST" });
+  const config = await loadKeybindings();
+  const { host, shadow } = createPanelHost();
+  // Build a simpler panel: just a session list with Enter to restore
 }
 ```
 
-`will-change` hints to the browser to promote this element to its own compositing layer. The blur effect is then handled by the GPU instead of the CPU. We keep the blur at 1px (down from 2px) to reduce GPU workload.
+This is a standalone panel (not inside the harpoon overlay) shown on browser startup. It imports `loadKeybindings` directly (not through the content script's cache) because it has its own lifecycle.
 
-### String-Based escapeHtml
+---
 
-The original used DOM allocation:
+## Popup — popup.ts
+
+The toolbar button popup. 94 lines. Shows the harpoon list with add/remove/jump actions.
 
 ```typescript
-// Slow — creates a DOM element per call
 function escapeHtml(str: string): string {
   const div = document.createElement("div");
   div.textContent = str;
@@ -725,38 +1975,198 @@ function escapeHtml(str: string): string {
 }
 ```
 
-Replaced with a static lookup table:
+Uses the DOM-based `escapeHtml` (not the string-based version from helpers.ts). This is fine for the popup because:
+1. The popup renders once (no rapid keystroke re-rendering)
+2. The list is small (max 6 items)
+3. The popup has its own HTML page with its own DOM, so element creation is cheap
+
+### Why a separate escapeHtml?
+
+The popup is built from a different esbuild entry point. It could import from `../lib/helpers.ts` (and esbuild would bundle it), but the popup is so simple that a local definition avoids the import. This is a pragmatic choice, not a best practice — in a larger project, you'd always import from the shared module.
+
+---
+
+## Options Page — options.ts
+
+The keybinding editor. 207 lines. Renders a table of all bindings grouped by scope, with change/reset buttons and real-time keyboard capture.
+
+### Recording mode
 
 ```typescript
-const HTML_ESCAPE: Record<string, string> = {
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-};
-function escapeHtml(str: string): string {
-  return str.replace(/[&<>"']/g, (c) => HTML_ESCAPE[c]);
+interface RecordingState {
+  scope: BindingScope;
+  action: string;
+  row: HTMLElement;
+}
+
+let recordingState: RecordingState | null = null;
+```
+
+When the user clicks "change" on a binding:
+1. Enter recording mode — the button text changes to "cancel", the key display shows "Press a key..."
+2. A global `keydown` listener (capture phase) waits for the next keypress
+3. The keypress is converted to a string (`keyEventToString(e)`)
+4. Collision detection runs (`checkCollision()`)
+5. If no collision, the binding is saved
+6. Recording mode exits, UI re-renders
+
+### Status bar
+
+```typescript
+function showStatus(message: string, type: "success" | "error"): void {
+  statusBar.textContent = message;
+  statusBar.className = `status-bar visible ${type}`;
+  statusTimeout = setTimeout(() => statusBar.classList.remove("visible"), 3500);
 }
 ```
 
-The DOM approach allocates a `<div>`, sets text, reads innerHTML (which triggers serialization). The string approach does a single regex pass. For a function called hundreds of times per search, this matters.
+Temporary status messages at the bottom of the settings panel. "success" shows in green, "error" in red. Auto-hides after 3.5 seconds.
 
-Note: `popup.ts` still uses the DOM approach — it's fine there because the popup renders a small list once, not hundreds of items per keystroke.
+### Full reset
+
+```typescript
+resetAllBtn.addEventListener("click", async () => {
+  config = JSON.parse(JSON.stringify(DEFAULT_KEYBINDINGS));
+  await saveKeybindings(config);
+  // Update radio buttons
+  // Update status
+  renderBindings();
+});
+```
+
+Deep-clones the defaults, saves to storage, re-renders everything. The `storage.onChanged` listener in all content scripts will invalidate their caches automatically.
+
+---
+
+## CSS Architecture
+
+### Shadow DOM scoping
+
+Each panel's styles live inside the Shadow DOM. They cannot leak to the page, and page styles cannot affect them. This means:
+- We use simple class names (`.ht-backdrop`, `.ht-titlebar`) without BEM or CSS modules
+- No need for CSS specificity wars with the host page
+- `:host` targets the shadow host element itself
+
+### macOS Terminal.app aesthetic
+
+All panels follow a consistent design language:
+- **Titlebar**: `#3a3a3c` background, red traffic light dot (close button), centered title text, vim badge
+- **Body**: `#1e1e1e` background
+- **Footer**: `#252525` background with hint text
+- **Accent color**: `#0a84ff` (macOS system blue)
+- **Font stack**: `'SF Mono', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace`
+
+### Responsive sizing
+
+```css
+/* Telescope */
+.ht-telescope-container {
+  width: 80vw; max-width: 960px;
+  height: 70vh; max-height: 640px; min-height: 280px;
+}
+
+/* Harpoon */
+.ht-harpoon-container { width: 380px; max-width: 90vw; }
+.ht-harpoon-list { max-height: min(340px, 50vh); }
+
+/* Frecency */
+.ht-frecency-container { width: 480px; max-width: 90vw; max-height: 520px; }
+```
+
+Each panel uses fixed width with viewport-relative maximum. `max-width: 90vw` prevents overflow on narrow screens. Telescope is the largest (80vw × 70vh for the two-pane layout). Harpoon is the smallest (380px, it's just a list).
+
+### Custom scrollbar
+
+```css
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+```
+
+Thin, semi-transparent scrollbars matching the dark theme. `-webkit-scrollbar` is Chrome/Safari-specific but works in all Chromium browsers. Firefox uses its own scrollbar styling (which we don't override — Firefox's thin scrollbar looks acceptable by default).
+
+---
+
+## Cross-Browser Compatibility
+
+### webextension-polyfill
+
+Chrome uses `chrome.*` APIs with callbacks. Firefox uses `browser.*` APIs with Promises.
+
+```typescript
+import browser from "webextension-polyfill";
+const tabs = await browser.tabs.query({active: true}); // Works everywhere
+```
+
+The polyfill detects the runtime environment and wraps Chrome's callbacks to return Promises. It's bundled by esbuild into each output file, adding ~20KB per file (before minification).
+
+### Chrome's 4-command limit
+
+Chrome MV3 allows only 4 entries in `manifest.commands`. Our MV3 manifest registers 3: `open-harpoon`, `harpoon-add`, `open-telescope-current`. Everything else (slot jumps 1-6, cycling, frecency, vim toggle) is handled by the content script's `keydown` listener.
+
+On Firefox (all 8+ commands registered), `browser.commands.onCommand` intercepts the key event before it reaches the page's DOM. The content script's `keydown` handler never sees these keys. No double-firing.
+
+### CSS caret differences
+
+```css
+.ht-telescope-input {
+  caret-color: #ffffff;   /* works everywhere */
+  caret-shape: block;     /* Firefox-only */
+}
+```
+
+`caret-shape: block` is a Firefox CSS property that renders a block cursor instead of a line cursor. Chrome silently ignores it. This is progressive enhancement — use the feature where available, degrade gracefully elsewhere.
+
+---
+
+## Performance Patterns
+
+### Summary of optimizations
+
+| Pattern | Where Used | Benefit |
+|---------|-----------|---------|
+| rAF throttle | Preview updates, frecency render | Coalesces rapid updates to one per frame |
+| Synchronous first render | Frecency | Eliminates initial empty flash |
+| DocumentFragment | Frecency list | Single DOM operation instead of incremental |
+| Class swap (not rebuild) | Active highlight in all panels | O(1) vs O(n) DOM work |
+| Direct DOM reference | `activeItemEl` in telescope/frecency | Avoids querySelector on every keypress |
+| Boolean panel state | `panelOpen` in telescope | Avoids getElementById on every keypress |
+| Virtual scrolling | Telescope results | Renders ~25 items instead of 200+ |
+| Element pool | Telescope result items | Reuses DOM elements instead of creating/destroying |
+| Passive scroll listener | Telescope | Browser can scroll without waiting for JS |
+| Pre-lowercasing | Line cache | Avoids per-search string allocation |
+| Line cache + MutationObserver | Grep | DOM walked once, re-filtered from cache |
+| Early exit (3x max results) | Grep scoring | Stops scanning after enough candidates |
+| Debounced storage saves | Tab onUpdated | Coalesces rapid SPA URL changes |
+| Debounced cache invalidation | MutationObserver | 500ms debounce on DOM mutations |
+| `will-change` for GPU | Backdrop blur | Hardware-accelerated compositing |
+| String-based escapeHtml | helpers.ts | Avoids DOM allocation per call |
+| WeakRef for DOM nodes | TaggedLine.nodeRef | Allows GC of detached nodes |
 
 ---
 
 ## State Management
 
-### In-Memory + Storage
+### In-Memory + Storage pattern
 
-State follows a consistent pattern: load from `browser.storage.local` into an in-memory variable, mutate in memory, then persist back:
+All persistent state follows this flow:
 
 ```
-storage.local.get → in-memory variable → mutate → storage.local.set
+browser.storage.local.get() → in-memory variable → mutate → browser.storage.local.set()
 ```
 
-This is the simplest approach for extension state. No Redux, no state machines, no pub/sub. The state is small (6 harpoon entries, 50 frecency entries, 3 sessions) and mutations are infrequent.
+No Redux, no state machines, no pub/sub. The state is small (6 harpoon entries, 50 frecency entries, 3 sessions, 1 config object) and mutations are infrequent (user actions, not continuous streams).
 
-### Cache Invalidation via storage.onChanged
+### Storage keys
 
-When any context writes to storage, `browser.storage.onChanged` fires in ALL contexts:
+| Key | Type | Module |
+|-----|------|--------|
+| `"harpoonList"` | `HarpoonEntry[]` | background.ts |
+| `"harpoonSessions"` | `HarpoonSession[]` (max 3) | sessions.ts |
+| `"frecencyData"` | `FrecencyEntry[]` (max 50) | frecency.ts |
+| `"keybindings"` | `KeybindingsConfig` | keybindings.ts |
+
+### Cross-context sync via storage.onChanged
 
 ```typescript
 browser.storage.onChanged.addListener((changes) => {
@@ -764,11 +2174,9 @@ browser.storage.onChanged.addListener((changes) => {
 });
 ```
 
-This is how the options page's keybinding changes propagate to all open tabs' content scripts without explicit messaging. The storage layer acts as a shared bus.
+`storage.onChanged` fires in ALL extension contexts (background, every content script, popup, options) when ANY context writes to storage. This is a free cross-context event bus. When the options page saves keybindings, all tabs' content scripts invalidate their caches.
 
-### WeakRef for DOM Node References
-
-Grep results store `WeakRef<Node>` instead of direct references:
+### WeakRef for DOM references
 
 ```typescript
 interface TaggedLine {
@@ -776,25 +2184,25 @@ interface TaggedLine {
 }
 ```
 
-`WeakRef` allows the garbage collector to reclaim the DOM node if it's removed from the page. A strong reference would keep detached DOM nodes alive in memory. When navigating to a result, we call `.deref()` — if the node was GC'd, we fall back to a full DOM walk.
+Grep results store weak references to source DOM nodes. If the page removes a node (e.g., SPA navigation), the `WeakRef` allows the garbage collector to reclaim it. Without `WeakRef`, the grep cache would keep detached DOM nodes alive, leaking memory.
+
+On scroll-to-text, `.deref()` checks if the node still exists. If it was GC'd, the slow path (full DOM walk) is used.
 
 ---
 
 ## Event Handling Patterns
 
-### Capture-Phase Keydown
-
-Panel keyboard handlers use capture phase (`true` as third argument):
+### Capture-phase keyboard handlers
 
 ```typescript
 document.addEventListener("keydown", keyHandler, true);
 ```
 
-Capture phase fires before the page's own listeners (bubble phase). This ensures our panel intercepts keys before the page can handle them. We then call `e.stopPropagation()` to prevent the event from reaching the page.
+The `true` (third argument) means capture phase — fires before the page's own handlers (which use bubble phase). This ensures the panel intercepts keys before the page. `e.stopPropagation()` then prevents the event from reaching the page.
 
-### Event Delegation
+Without capture phase, the page's handlers (e.g., Gmail's keyboard shortcuts) would fire before ours, potentially consuming the event.
 
-Instead of attaching click listeners to each result item, we attach one listener to the container:
+### Event delegation with closest()
 
 ```typescript
 resultsList.addEventListener("click", (e) => {
@@ -804,17 +2212,17 @@ resultsList.addEventListener("click", (e) => {
 });
 ```
 
-`closest()` walks up from the click target to find the nearest `.ht-result-item` ancestor. This works regardless of how many items exist or whether they're recycled (virtual scrolling). One listener vs. 200.
+One listener on the container instead of one per item. Works with virtual scrolling (items are recycled) and doesn't need re-binding after DOM updates.
 
-### mousedown preventDefault on Backdrop
+### mousedown preventDefault on backdrop
 
 ```typescript
 backdrop.addEventListener("mousedown", (e) => e.preventDefault());
 ```
 
-Without this, clicking the backdrop would shift focus to the underlying page. `preventDefault()` on `mousedown` prevents the focus change while still allowing the `click` event (which closes the panel) to fire.
+Prevents the mousedown from shifting focus to elements behind the overlay. The `click` event (which fires after mousedown + mouseup) still works for closing the panel.
 
-### wheel preventDefault on Preview
+### wheel preventDefault on preview
 
 ```typescript
 previewPane.addEventListener("wheel", (e) => {
@@ -823,141 +2231,61 @@ previewPane.addEventListener("wheel", (e) => {
 });
 ```
 
-Without `preventDefault()`, the wheel event would bubble up and scroll the page behind the overlay. We manually scroll the preview content instead.
-
-### Content Script Cleanup
-
-Firefox aggressively caches content scripts. When the extension reloads during development, the old content script stays in memory alongside the new one. Both respond to messages, causing double handling.
-
-Solution: a cleanup function stored on `window`:
-
-```typescript
-if (window.__harpoonTelescopeCleanup) {
-  window.__harpoonTelescopeCleanup();
-}
-
-// ... set up listeners ...
-
-window.__harpoonTelescopeCleanup = () => {
-  document.removeEventListener("keydown", globalKeyHandler);
-  document.removeEventListener("visibilitychange", visibilityHandler);
-  browser.runtime.onMessage.removeListener(messageHandler);
-  // ... remove injected elements ...
-};
-```
-
-When the new injection runs, it calls the previous injection's cleanup function first. The old boolean guard approach (`if (window.__harpoonTelescopeInjected) return`) was wrong — it prevented NEW code from loading after an extension reload.
-
-### Visibility Change Auto-Close
-
-```typescript
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") {
-    const host = document.getElementById("ht-panel-host");
-    if (host) host.remove();
-  }
-});
-```
-
-When the user switches tabs or minimizes the window, the overlay closes. This prevents stale overlays from persisting.
+Without this, scrolling the preview pane would also scroll the page behind the overlay (event bubbles up). Manual scroll control on `previewContent` instead.
 
 ---
 
 ## DOM Rendering Strategies
 
-### Full innerHTML Rebuild (Harpoon)
+The project uses four rendering strategies, each chosen for its context:
 
-The harpoon panel uses `container.innerHTML = html` for full renders. This is fine because:
-- The list is small (max 6 items)
-- Renders are infrequent (only on user action, not typing)
-- The panel is simple (no input element to preserve)
-
-### Static Shell + Dynamic List (Frecency)
-
-Frecency initially used full innerHTML rebuild, which destroyed the search input mid-event and broke typing. The fix: build the shell once, only update the list contents:
+### 1. innerHTML rebuild (Harpoon)
 
 ```typescript
-// Built once in openFrecencyOverlay():
-const input = document.createElement("input");
-inputWrap.appendChild(input);
-const listEl = document.createElement("div");
-panel.appendChild(listEl);
-
-// On filter change:
-function renderList(): void {
-  listEl.textContent = "";
-  listEl.appendChild(buildListFragment());
-}
+container.innerHTML = html;
 ```
 
-The input element survives across renders because it's outside `listEl`.
+Destroys and recreates all children. Fine because:
+- Max 6 items
+- No input elements to preserve
+- Renders only on explicit user action
 
-### Virtual Scroll + Pool (Telescope)
+### 2. Static shell + dynamic list (Frecency)
 
-Telescope uses the most sophisticated approach: a fixed pool of ~25 DOM elements that are re-bound to different data as the user scrolls. See [Virtual Scrolling](#virtual-scrolling) above.
-
-### The Rendering Spectrum
-
-```
-Simple                                              Complex
-innerHTML ←——→ DocumentFragment ←——→ Class swap ←——→ Virtual scroll
-(Harpoon)      (Frecency list)     (Active highlight)  (Telescope)
+```typescript
+const input = document.createElement("input"); // built once
+const listEl = document.createElement("div");   // contents rebuilt
 ```
 
-Choose the simplest approach that meets performance requirements. Don't over-engineer.
+Input survives across renders. List is rebuilt via DocumentFragment. Used because frecency has a search input that must persist across re-renders.
 
----
+### 3. Class swap (Active highlight)
 
-## Build System
-
-### esbuild
-
-We use esbuild (not webpack, not rollup) because:
-1. It's fast (Go-based, 10-100x faster than alternatives)
-2. It bundles TypeScript directly (no intermediate tsc step)
-3. Simple API — the build script is 85 lines
-
-```javascript
-const shared = {
-  bundle: true,     // resolve imports into single files
-  format: "iife",   // wrap in immediately-invoked function (browser compat)
-  target: "es2022", // use modern JS features
-  minify: false,    // readable output during development
-};
+```typescript
+oldItem.classList.remove("active");
+newItem.classList.add("active");
 ```
 
-### IIFE Format
+Zero DOM creation/destruction. Used for arrow key navigation in all panels.
 
-Browser extension scripts run in the global scope. `format: "iife"` wraps the output in `(() => { ... })()`, preventing variable leakage into the global namespace.
+### 4. Virtual scrolling + pool (Telescope)
 
-### TypeScript Without tsc
-
-esbuild strips types but doesn't check them. We run `tsc --noEmit` separately for type checking:
-
-```json
-{
-  "scripts": {
-    "typecheck": "tsc --noEmit",
-    "build": "node build.mjs"
-  }
-}
+```typescript
+const poolItem = getPoolItem(i); // reuse or create
+bindPoolItem(poolItem, resultIdx); // update content
 ```
 
-`tsconfig.json` has `"noEmit": true` — tsc is purely a type checker, never an emitter. esbuild handles all code generation.
+Fixed pool of ~25 elements, re-bound to different data on scroll. Most complex but necessary for 200+ results.
 
-### Static Asset Copying
+### The spectrum
 
-The build script copies non-TS files (HTML, CSS, icons, manifest) to `dist/` using Node's `cpSync`:
-
-```javascript
-const staticFiles = [
-  [`src/${manifestFile}`, "manifest.json"],
-  ["src/popup/popup.html", "popup/popup.html"],
-  // ...
-];
+```
+Simple ←————————→ Complex
+innerHTML → Fragment → Class swap → Virtual scroll
+(Harpoon)   (Frecency) (Highlight)  (Telescope)
 ```
 
-The manifest file is selected by `--target` flag (firefox → MV2, chrome → MV3).
+Always choose the simplest approach that meets performance needs.
 
 ---
 
@@ -967,39 +2295,39 @@ The manifest file is selected by `--target` flag (firefox → MV2, chrome → MV
 
 **Symptom**: Typing in the frecency filter broke after the first character.
 
-**Root cause**: `render()` did `container.innerHTML = html`, which rebuilt the entire panel including the input element. After the first keystroke triggered `render()`, the input element was destroyed and replaced. The cursor disappeared, the second keystroke had no target.
+**Root cause**: `render()` used `container.innerHTML = html`, which rebuilt the entire panel including the input element. After the first keystroke triggered `render()`, the input was destroyed and replaced. The cursor disappeared.
 
-**Fix**: Build the input element once outside the render cycle. Only update `listEl.textContent`.
+**Fix**: Build the input once outside the render cycle. Only update `listEl.textContent`.
 
-**Lesson**: Never rebuild a parent element that contains a focused input. Separate the static shell from the dynamic content.
+**Lesson**: Never rebuild a parent element that contains a focused input. Separate static shell from dynamic content.
 
 ### The Frecency Flicker Bug
 
-**Symptom**: Arrow key navigation in frecency caused visible flicker.
+**Symptom**: Arrow key navigation caused visible flicker.
 
-**Root cause**: `renderList()` was called on every arrow key, which cleared and rebuilt all DOM items. Even with DocumentFragment, the clear-then-append cycle caused a single frame with no items visible.
+**Root cause**: `renderList()` was called on every arrow key, clearing and rebuilding all items. Even with DocumentFragment, the clear-then-append cycle caused one frame with no visible items.
 
-**Fix**: Separate `updateActiveHighlight()` (class swap only) from `renderList()` (full rebuild). Arrow keys only call `updateActiveHighlight()`.
+**Fix**: Separate `updateActiveHighlight()` (class swap) from `renderList()` (full rebuild). Arrow keys only call `updateActiveHighlight()`.
 
-**Lesson**: Distinguish between "data changed" (needs rebuild) and "selection changed" (needs class swap).
+**Lesson**: Distinguish "data changed" (rebuild) from "selection changed" (class swap).
 
 ### The CSS Transition Shadow Glitch
 
-**Symptom**: Frecency items had a ghosting/shadow effect during rapid arrow navigation.
+**Symptom**: Frecency items had ghosting during rapid arrow navigation.
 
-**Root cause**: `transition: background 0.1s` on items meant the background color animated between active (blue) and inactive (transparent). During rapid class swaps, multiple items were mid-transition simultaneously, creating visual artifacts.
+**Root cause**: `transition: background 0.1s` meant background color animated between active (blue) and inactive (transparent). During rapid class swaps, multiple items were mid-transition, creating visual artifacts.
 
 **Fix**: Remove the transition. Class swaps should be instant.
 
-**Lesson**: CSS transitions on rapidly-toggled classes cause artifacts. Only use transitions on user-hover or deliberate animations.
+**Lesson**: CSS transitions on rapidly-toggled classes cause artifacts. Only use transitions on hover or deliberate animations.
 
 ### The Content Script Injection Guard Bug
 
-**Symptom**: After extension reload during development, the new content script didn't inject.
+**Symptom**: After extension reload, the new content script didn't inject.
 
-**Root cause**: Old guard pattern `if (window.__harpoonTelescopeInjected) return;` prevented any subsequent injection, even of new code.
+**Root cause**: `if (window.__harpoonTelescopeInjected) return;` prevented new code from loading.
 
-**Fix**: Use a cleanup function approach. New injection cleans up the old one, then installs itself.
+**Fix**: Cleanup function approach — new injection calls old cleanup first.
 
 **Lesson**: Guard patterns should allow replacement, not just prevent duplication.
 
@@ -1007,57 +2335,84 @@ The manifest file is selected by `--target` flag (firefox → MV2, chrome → MV
 
 **Symptom**: Code changes didn't take effect after extension reload.
 
-**Root cause**: Firefox caches content scripts aggressively. Even after reloading the extension, the old content script may persist in memory.
+**Root cause**: Firefox caches content scripts in memory even after extension reload.
 
-**Fix**: Full extension removal + re-install, or the cleanup function approach above.
+**Fix**: Full extension removal + re-install, or the cleanup function approach.
 
-**Lesson**: During Firefox extension development, sometimes you need to fully remove and re-add the extension, not just reload.
+**Lesson**: During Firefox development, sometimes you need full remove + re-add, not just reload.
 
 ---
 
 ## Patterns Worth Reusing
 
-### 1. Message Router Pattern
-A single `switch` on `m.type` that routes to handler functions. Simple, debuggable, extensible.
+### 1. Message Router
+
+A single `switch` on `m.type` routing to handler functions. Simple, debuggable, extensible. Works for any IPC or event-driven architecture.
 
 ### 2. Lazy-Load Guard
-`ensureLoaded()` with a boolean flag. Safe to call multiple times. Essential for service workers that can terminate.
+
+`ensureLoaded()` with a boolean flag. Safe to call multiple times. Essential for service workers or any context that can restart.
 
 ### 3. Cache + Observer Invalidation
-Cache expensive computations. Use MutationObserver (or event listeners) to invalidate. Debounce invalidation to avoid churn.
+
+Cache expensive operations. Use MutationObserver (or events) to invalidate. Debounce invalidation.
 
 ### 4. Configurable Keybindings with Per-Scope Collision Detection
-Store bindings as data, not code. Match at runtime. Detect conflicts within the active scope.
+
+Store bindings as data. Match at runtime. Detect conflicts within the active scope.
 
 ### 5. Additive Mode Aliases
-Don't replace — add. Basic keys always work. Advanced mode layers on extra bindings.
+
+Don't replace bindings — add alternatives. Basic keys always work. Advanced mode layers extras on top.
 
 ### 6. Shadow DOM for Page-Injected UI
-Prevents style leakage in both directions. Essential for any browser extension that injects UI.
+
+Prevents style leakage both ways. Required for any extension injecting UI into arbitrary pages.
 
 ### 7. DocumentFragment Batching
-Build a fragment off-DOM, append in one operation. Eliminates flash-of-empty.
 
-### 8. Direct DOM Reference Instead of querySelector
-Keep a variable pointing to the active element. Update it on change. Avoid repeated tree searches.
+Build off-DOM, append in one operation. Eliminates flash-of-empty.
 
-### 9. rAF Throttle with Synchronous First Render
-Defer subsequent renders to animation frames. Render the first frame synchronously to avoid initial flash.
+### 8. Direct DOM Reference
+
+Keep a variable pointing to the active element. Update on change. Avoids repeated querySelector.
+
+### 9. rAF Throttle + Synchronous First Render
+
+Defer subsequent renders to animation frames. Render first frame synchronously.
 
 ### 10. Event Delegation with closest()
-One listener on a container, use `closest()` to find the relevant item. Works with dynamic/pooled elements.
+
+One listener on a container. `closest()` finds the target. Works with dynamic/pooled elements.
 
 ### 11. WeakRef for Optional DOM References
-Store references that don't prevent garbage collection. Check with `.deref()` and fall back gracefully.
+
+Don't prevent garbage collection of nodes you don't own. Check with `.deref()`.
 
 ### 12. Cleanup Function on Window
-For content scripts: store a cleanup function, call it before re-initializing. Handles extension reloads.
 
-### 13. storage.onChanged as a Cross-Context Bus
-Writing to `browser.storage.local` automatically notifies all contexts. No explicit messaging needed for config changes.
+For content scripts: store cleanup, call before re-init. Handles extension reloads.
+
+### 13. storage.onChanged as Cross-Context Bus
+
+Writing to `browser.storage.local` notifies all contexts automatically.
 
 ### 14. Progressive CSS Enhancement
-Use features like `caret-shape: block` that only work in some browsers. The fallback is acceptable (standard caret). Don't polyfill — just accept graceful degradation.
+
+Use browser-specific features (`caret-shape: block`). Accept graceful degradation.
 
 ### 15. Virtual Scrolling with Element Pool
-Fixed-height items, a sentinel for scrollbar height, a pool of reusable DOM elements. Only render what's visible. Passive scroll listener.
+
+Fixed-height items, sentinel for scrollbar, pool of reusable elements. Passive scroll listener.
+
+### 16. Forward-Compatible Config Merging
+
+Start from defaults, overlay stored values. New features get defaults; user customizations survive.
+
+### 17. Dependency Injection via Interface
+
+Pass state accessor objects (like `HarpoonState`) instead of importing globals. Enables testing and prevents circular deps.
+
+### 18. Debounced Storage Writes
+
+Coalesce rapid mutations (SPA URL changes, typing) into single storage writes.

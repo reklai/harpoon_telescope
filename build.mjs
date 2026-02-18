@@ -45,6 +45,7 @@ const staticFiles = [
   ["src/options/options.css", "options/options.css"],
   ["src/icons/icon-48.png", "icons/icon-48.png"],
   ["src/icons/icon-96.png", "icons/icon-96.png"],
+  ["src/icons/icon-128.png", "icons/icon-128.png"],
 ];
 
 function copyStatic() {

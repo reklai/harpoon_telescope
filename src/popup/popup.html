@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="harpoon-popup">
+    <div class="titlebar">
+      <div class="traffic-lights">
+        <span class="dot dot-close"></span>
+        <span class="dot dot-minimize"></span>
+        <span class="dot dot-maximize"></span>
+      </div>
+      <span class="titlebar-text">Harpoon</span>
+    </div>
+    <div class="header-actions">
+      <button class="add-btn" id="addBtn" title="Add current tab (Alt+A)">+ Add</button>
+    </div>
+    <div class="list" id="harpoonList"></div>
+    <div class="shortcuts">
+      <div class="shortcut-row">
+        <span class="key">Alt+0</span><span>Harpoon overlay</span>
+      </div>
+      <div class="shortcut-row">
+        <span class="key">Alt+F</span><span>Search current page</span>
+      </div>
+      <div class="shortcut-row">
+        <span class="key">Alt+A</span><span>Add to harpoon</span>
+      </div>
+      <div class="shortcut-row">
+        <span class="key">Alt+1-6</span><span>Jump to slot</span>
+      </div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

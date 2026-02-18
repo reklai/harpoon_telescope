@@ -1,0 +1,198 @@
+/* ============================================================
+   Harpoon Telescope — Popup Styles
+   Browser action popup (toolbar icon click).
+   macOS Terminal.app aesthetic.
+   ============================================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 340px;
+  font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  background: #1e1e1e;
+  color: #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Title bar with traffic lights */
+.titlebar {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  background: #3a3a3c;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  user-select: none;
+}
+
+.traffic-lights {
+  display: flex;
+  gap: 7px;
+  margin-right: 14px;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+}
+
+.dot-close { background: #ff5f57; }
+.dot-minimize { background: #febc2e; }
+.dot-maximize { background: #28c840; }
+
+.titlebar-text {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  color: #a0a0a0;
+  font-weight: 500;
+  margin-right: 50px; /* compensate for traffic lights */
+}
+
+/* Add button */
+.header-actions {
+  padding: 8px 14px;
+  display: flex;
+  justify-content: flex-end;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.add-btn {
+  background: rgba(10,132,255,0.15);
+  color: #0a84ff;
+  border: 1px solid rgba(10,132,255,0.3);
+  padding: 4px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.add-btn:hover {
+  background: rgba(10,132,255,0.25);
+  border-color: #0a84ff;
+}
+
+.add-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* List */
+.list {
+  min-height: 60px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.harpoon-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 14px;
+  gap: 10px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s;
+}
+
+.harpoon-item:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.slot-badge {
+  background: rgba(255,255,255,0.08);
+  color: #e0e0e0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.item-info {
+  flex: 1;
+  overflow: hidden;
+}
+
+.item-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+.item-url {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  color: #808080;
+  margin-top: 2px;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: #808080;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: inherit;
+  transition: color 0.2s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.delete-btn:hover {
+  color: #ff5f57;
+}
+
+.empty-state {
+  padding: 24px;
+  text-align: center;
+  color: #808080;
+  line-height: 1.6;
+  font-size: 12px;
+}
+
+/* Shortcuts footer */
+.shortcuts {
+  padding: 8px 14px 10px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  background: #252525;
+}
+
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  color: #808080;
+  font-size: 10px;
+}
+
+.key {
+  background: rgba(255,255,255,0.08);
+  color: #0a84ff;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+/* Scrollbar */
+.list::-webkit-scrollbar { width: 6px; }
+.list::-webkit-scrollbar-track { background: transparent; }
+.list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+.list::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }

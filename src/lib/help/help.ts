@@ -45,8 +45,8 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
       title: "Inside Any Panel",
       items: [
         { label: "Navigate up / down", key: `${k(s.moveUp)} / ${k(s.moveDown)}` },
-        { label: "Open / jump to selection", key: k(s.accept) },
         { label: "Switch input and results", key: k(s.switchPane) },
+        { label: "Open / jump to selection", key: k(s.accept) },
         { label: "Close panel", key: k(s.close) },
         { label: "Click item to select or open", key: "mouse" },
         { label: "Scroll wheel to navigate", key: "mouse" },
@@ -58,9 +58,9 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
         { label: "Add current tab to Tab Manager", key: k(g.addTab) },
         { label: "Jump to slot 1 — 4", key: `${k(g.jumpSlot1)} — ${k(g.jumpSlot4)}` },
         { label: "Cycle prev / next slot", key: `${k(g.cyclePrev)} / ${k(g.cycleNext)}` },
-        { label: "Remove entry", key: k(h.remove).toLowerCase() },
-        { label: "Undo remove", key: "u" },
         { label: "Swap mode", key: k(h.swap).toLowerCase() },
+        { label: "Del entry", key: k(h.remove).toLowerCase() },
+        { label: "Undo remove", key: "u" },
         { label: "Save session", key: k(h.saveSession).toLowerCase() },
         { label: "Load session", key: k(h.loadSession).toLowerCase() },
         { label: "Rename session (in session list)", key: "r" },
@@ -71,16 +71,30 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
       title: "Bookmarks Panel",
       items: [
         { label: "Add bookmark", key: k(g.addBookmark) },
-        { label: "Remove bookmark", key: "d" },
+        { label: "Focus tree", key: "t" },
+        { label: "Clear search", key: "c" },
+        { label: "Del bookmark", key: "d" },
         { label: "Move to folder", key: "m" },
-        { label: "Toggle tree view", key: "t" },
       ],
     },
     {
       title: "History Panel",
       items: [
-        { label: "Remove entry", key: "d" },
-        { label: "Toggle tree view", key: "t" },
+        { label: "Focus tree", key: "t" },
+        { label: "Clear search", key: "c" },
+        { label: "Del entry", key: "d" },
+      ],
+    },
+    {
+      title: "Search Current Page",
+      items: [
+        { label: "Clear search", key: "c" },
+      ],
+    },
+    {
+      title: "Search Open Tabs",
+      items: [
+        { label: "Clear search", key: "c" },
       ],
     },
     {
@@ -92,7 +106,7 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
         { label: "Links (<a> elements)", key: "/links" },
         { label: "Combine filters (union)", key: "/code /links" },
         { label: "Bookmark: folder path", key: "/folder" },
-        { label: "Bookmark: URL", key: "/file" },
+        { label: "History: last hour", key: "/hour" },
         { label: "History: today", key: "/today" },
         { label: "History: last 7 days", key: "/week" },
         { label: "History: last 30 days", key: "/month" },

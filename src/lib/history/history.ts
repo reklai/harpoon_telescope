@@ -3,7 +3,7 @@
 //   Left pane (40%): history results list with virtual scrolling
 //   Right pane (60%): detail view for selected entry
 //
-// Alt+Y to open, type to filter, /today /week /month time filters,
+// Alt+Y to open, type to filter, /hour /today /week /month time filters,
 // d to delete, Enter to open, Tab to switch panes.
 
 import browser from "webextension-polyfill";
@@ -14,13 +14,14 @@ import { showFeedback } from "../shared/feedback";
 import historyStyles from "./history.css";
 
 // Virtual scrolling constants
-const ITEM_HEIGHT = 52;    // px per history row (two lines: title + url)
+const ITEM_HEIGHT = 44;    // px per history row (two lines: title + url)
 const POOL_BUFFER = 5;     // extra items above/below viewport
 const MAX_HISTORY = 200;   // max entries fetched from browser.history
 
 // Valid slash-command filters for history
-type HistoryFilter = "today" | "week" | "month";
+type HistoryFilter = "hour" | "today" | "week" | "month";
 const VALID_FILTERS: Record<string, HistoryFilter> = {
+  "/hour": "hour",
   "/today": "today",
   "/week": "week",
   "/month": "month",
@@ -28,6 +29,7 @@ const VALID_FILTERS: Record<string, HistoryFilter> = {
 
 // Time ranges for each filter (in ms)
 const FILTER_RANGES: Record<HistoryFilter, number> = {
+  hour: 60 * 60 * 1000,                  // 1 hour
   today: 24 * 60 * 60 * 1000,            // 24 hours
   week: 7 * 24 * 60 * 60 * 1000,         // 7 days
   month: 30 * 24 * 60 * 60 * 1000,       // 30 days
@@ -87,6 +89,7 @@ export async function openHistoryOverlay(
             <span class="ht-hist-title-label">History</span>
             <span class="ht-hist-title-sep">|</span>
             <span class="ht-hist-title-filters">Filters:
+              <span class="ht-hist-title-filter" data-filter="hour">/hour</span>
               <span class="ht-hist-title-filter" data-filter="today">/today</span>
               <span class="ht-hist-title-filter" data-filter="week">/week</span>
               <span class="ht-hist-title-filter" data-filter="month">/month</span>
@@ -113,13 +116,16 @@ export async function openHistoryOverlay(
             </div>
           </div>
           <div class="ht-footer">
-             <div class="ht-footer-row">
+            <div class="ht-footer-row">
               <span>j/k (vim) ${upKey}/${downKey} nav</span>
               <span>${switchKey} list</span>
-              <span>T tree (toggle)</span>
-              <span>D remove</span>
               <span>${acceptKey} open</span>
               <span>${closeKey} close</span>
+            </div>
+            <div class="ht-footer-row">
+              <span>T focus tree</span>
+              <span>C clear</span>
+              <span>D del</span>
             </div>
           </div>
         </div>
@@ -134,6 +140,7 @@ export async function openHistoryOverlay(
     const resultsPane = shadow.querySelector(".ht-hist-results-pane") as HTMLElement;
     const detailHeader = shadow.querySelector(".ht-hist-detail-header-text") as HTMLElement;
     const detailHeaderClose = shadow.querySelector(".ht-hist-detail-header-close") as HTMLElement;
+    const detailPane = shadow.querySelector(".ht-hist-detail-pane") as HTMLElement;
     const detailPlaceholder = shadow.querySelector(".ht-hist-detail-placeholder") as HTMLElement;
     const detailContent = shadow.querySelector(".ht-hist-detail-content") as HTMLElement;
     const closeBtn = shadow.querySelector(".ht-dot-close") as HTMLElement;
@@ -168,8 +175,8 @@ export async function openHistoryOverlay(
     // rAF throttle for detail updates
     let detailRafId: number | null = null;
 
-    // Confirm delete state
-    let detailMode: "detail" | "confirmDelete" | "tree" = "detail";
+    // Detail pane mode: tree (passive, always visible), treeNav (focused with cursor), confirmDelete
+    let detailMode: "tree" | "treeNav" | "confirmDelete" = "tree";
     let pendingDeleteEntry: HistoryEntry | null = null;
 
     // Tree navigation state
@@ -414,70 +421,29 @@ export async function openHistoryOverlay(
 
     function updateDetail(): void {
       if (detailMode === "confirmDelete") return;
-      if (detailMode === "tree") { renderTreeView(); return; }
-
-      if (filtered.length === 0 || !filtered[activeIndex]) {
-        detailHeader.textContent = "Details";
-        showDetailPlaceholder(true);
-        return;
-      }
-
-      const entry = filtered[activeIndex];
-      detailHeader.textContent = "Details";
-      showDetailPlaceholder(false);
-
-      let html = "";
-
-      // Title
-      html += `<div class="ht-hist-detail-field">
-        <div class="ht-hist-detail-label">Title</div>
-        <div class="ht-hist-detail-value">${escapeHtml(entry.title || "Untitled")}</div>
-      </div>`;
-
-      // URL
-      html += `<div class="ht-hist-detail-field">
-        <div class="ht-hist-detail-label">URL</div>
-        <div class="ht-hist-detail-value"><a href="${escapeHtml(entry.url)}" target="_blank">${escapeHtml(entry.url)}</a></div>
-      </div>`;
-
-      // Last visited
-      if (entry.lastVisitTime) {
-        const date = new Date(entry.lastVisitTime);
-        const dateStr = date.toLocaleDateString(undefined, {
-          year: "numeric", month: "short", day: "numeric",
-        });
-        const timeStr = date.toLocaleTimeString(undefined, {
-          hour: "2-digit", minute: "2-digit",
-        });
-        html += `<div class="ht-hist-detail-field">
-          <div class="ht-hist-detail-label">Last Visited</div>
-          <div class="ht-hist-detail-value">${escapeHtml(dateStr)} at ${escapeHtml(timeStr)} (${escapeHtml(relativeTime(entry.lastVisitTime))})</div>
-        </div>`;
-      }
-
-      // Stats
-      html += `<div class="ht-hist-detail-stats">
-        <div class="ht-hist-stat">
-          <span class="ht-hist-stat-value">${entry.visitCount || 0}</span>
-          <span class="ht-hist-stat-label">Visits</span>
-        </div>
-        <div class="ht-hist-stat">
-          <span class="ht-hist-stat-value">${escapeHtml(extractDomain(entry.url))}</span>
-          <span class="ht-hist-stat-label">Domain</span>
-        </div>
-      </div>`;
-
-      detailContent.innerHTML = html;
+      // Guard treeNav sub-states (pending confirms)
+      if (detailMode === "treeNav" && (pendingTreeOpenEntry || pendingTreeDeleteEntry)) return;
+      renderTreeView();
     }
 
     // --- Filtering ---
+    // 4-tier match scoring: exact (0) > starts-with (1) > substring (2) > fuzzy (3)
+    function scoreMatch(text: string, query: string, fuzzyRe: RegExp): number {
+      const lower = text.toLowerCase();
+      const q = query.toLowerCase();
+      if (lower === q) return 0;           // exact match
+      if (lower.startsWith(q)) return 1;   // starts-with
+      if (lower.includes(q)) return 2;     // substring
+      if (fuzzyRe.test(text)) return 3;    // fuzzy only
+      return -1;                           // no match
+    }
+
     function applyFilter(): void {
       let results = [...allEntries];
 
       // Apply time-based filters first
       if (activeFilters.length > 0) {
         const now = Date.now();
-        // Use the widest time range among active filters (most permissive)
         let maxRange = 0;
         for (const f of activeFilters) {
           maxRange = Math.max(maxRange, FILTER_RANGES[f]);
@@ -486,18 +452,42 @@ export async function openHistoryOverlay(
         results = results.filter((e) => e.lastVisitTime >= cutoff);
       }
 
-      // Apply text query
+      // Apply text query with ranked scoring
       if (currentQuery.trim()) {
         const re = buildFuzzyPattern(currentQuery);
+        const substringRe = new RegExp(escapeRegex(currentQuery), "i");
         if (re) {
           results = results.filter(
-            (e) => re.test(e.title) || re.test(e.url),
+            (e) => substringRe.test(e.title) || substringRe.test(e.url)
+              || re.test(e.title) || re.test(e.url),
           );
+          // Rank by: title score > title length (shorter = tighter) > url score
+          const q = currentQuery;
+          results.sort((a, b) => {
+            const aTitle = scoreMatch(a.title, q, re);
+            const bTitle = scoreMatch(b.title, q, re);
+            const aTitleHit = aTitle >= 0;
+            const bTitleHit = bTitle >= 0;
+            // Title matches always beat non-title matches
+            if (aTitleHit !== bTitleHit) return aTitleHit ? -1 : 1;
+            if (aTitleHit && bTitleHit) {
+              if (aTitle !== bTitle) return aTitle - bTitle;
+              return a.title.length - b.title.length;
+            }
+            // Neither hit title — compare url
+            const aUrl = scoreMatch(a.url, q, re);
+            const bUrl = scoreMatch(b.url, q, re);
+            const aUrlHit = aUrl >= 0;
+            const bUrlHit = bUrl >= 0;
+            if (aUrlHit !== bUrlHit) return aUrlHit ? -1 : 1;
+            if (aUrlHit && bUrlHit) return aUrl - bUrl;
+            return 0;
+          });
         }
       }
 
       filtered = results;
-      activeIndex = Math.min(activeIndex, Math.max(filtered.length - 1, 0));
+      activeIndex = 0;
     }
 
     // --- Actions ---
@@ -582,7 +572,9 @@ export async function openHistoryOverlay(
       detailHeader.textContent = "Time Tree";
       showDetailPlaceholder(false);
 
+      const isFiltering = currentQuery.trim() !== "" || activeFilters.length > 0;
       const buckets = buildTimeBuckets(filtered);
+      const showCursor = detailMode === "treeNav";
 
       // Build visible items list and HTML
       treeVisibleItems = [];
@@ -593,9 +585,10 @@ export async function openHistoryOverlay(
 
         // Bucket header — highlight if active entry is in this bucket
         const bucketHasActive = entry && b.entries.some((e) => e.url === entry.url && e.lastVisitTime === entry.lastVisitTime);
-        const collapsed = treeCollapsed.has(b.label);
+        // When filtering, auto-expand all buckets; otherwise use user collapsed state
+        const collapsed = isFiltering ? false : treeCollapsed.has(b.label);
         const arrow = collapsed ? '\u25B6' : '\u25BC';
-        const isCursor = idx === treeCursorIndex;
+        const isCursor = showCursor && idx === treeCursorIndex;
 
         treeVisibleItems.push({ type: "bucket", id: b.label });
         html += `<div class="ht-hist-tree-node${bucketHasActive ? ' active' : ''}${isCursor ? ' tree-cursor' : ''}" data-tree-idx="${idx}">`;
@@ -609,7 +602,7 @@ export async function openHistoryOverlay(
             const isActive = entry && child.url === entry.url && child.lastVisitTime === entry.lastVisitTime;
             const domain = extractDomain(child.url);
             const title = child.title || "Untitled";
-            const isCur = idx === treeCursorIndex;
+            const isCur = showCursor && idx === treeCursorIndex;
 
             treeVisibleItems.push({ type: "entry", id: `${child.lastVisitTime}:${child.url}` });
             html += `<div class="ht-hist-tree-entry${isActive ? ' active' : ''}${isCur ? ' tree-cursor' : ''}" data-tree-idx="${idx}">`;
@@ -627,10 +620,12 @@ export async function openHistoryOverlay(
         treeCursorIndex = Math.max(0, treeVisibleItems.length - 1);
       }
 
-      // Auto-scroll cursor into view
-      const cursorEl = detailContent.querySelector('.tree-cursor') as HTMLElement;
-      if (cursorEl) {
-        cursorEl.scrollIntoView({ block: 'nearest' });
+      // Auto-scroll cursor into view (only in treeNav)
+      if (showCursor) {
+        const cursorEl = detailContent.querySelector('.tree-cursor') as HTMLElement;
+        if (cursorEl) {
+          cursorEl.scrollIntoView({ block: 'nearest' });
+        }
       }
     }
 
@@ -712,14 +707,18 @@ export async function openHistoryOverlay(
 
     // --- Dynamic footer ---
     function updateFooter(): void {
-      detailHeaderClose.style.display = detailMode === "detail" ? "none" : "block";
+      // Show x button in detail header when in a sub-mode
+      detailHeaderClose.style.display = detailMode === "tree" ? "none" : "block";
+      // Highlight tree pane when focused, dim results pane (treeNav mode)
+      detailPane.classList.toggle("focused", detailMode === "treeNav");
+      resultsPane.classList.toggle("dimmed", detailMode === "treeNav");
 
       if (detailMode === "confirmDelete") {
         footerEl.innerHTML = `<div class="ht-footer-row">
           <span>Y / ${acceptKey} confirm</span>
           <span>N / ${closeKey} cancel</span>
         </div>`;
-      } else if (detailMode === "tree") {
+      } else if (detailMode === "treeNav") {
         if (pendingTreeOpenEntry || pendingTreeDeleteEntry) {
           footerEl.innerHTML = `<div class="ht-footer-row">
             <span>Y / ${acceptKey} confirm</span>
@@ -737,10 +736,13 @@ export async function openHistoryOverlay(
         footerEl.innerHTML = `<div class="ht-footer-row">
           <span>j/k (vim) ${upKey}/${downKey} nav</span>
           <span>${switchKey} list</span>
-          <span>T tree (toggle)</span>
-          <span>D remove</span>
           <span>${acceptKey} open</span>
           <span>${closeKey} close</span>
+        </div>
+        <div class="ht-footer-row">
+          <span>T focus tree</span>
+          <span>C clear</span>
+          <span>D del</span>
         </div>`;
       }
     }
@@ -758,7 +760,7 @@ export async function openHistoryOverlay(
           e.preventDefault();
           e.stopPropagation();
           pendingDeleteEntry = null;
-          detailMode = "detail";
+          detailMode = "tree";
           removeSelectedHistory();
           updateFooter();
           return;
@@ -767,7 +769,7 @@ export async function openHistoryOverlay(
           e.preventDefault();
           e.stopPropagation();
           pendingDeleteEntry = null;
-          detailMode = "detail";
+          detailMode = "tree";
           scheduleDetailUpdate();
           updateFooter();
           return;
@@ -776,8 +778,8 @@ export async function openHistoryOverlay(
         return;
       }
 
-      // --- Tree mode: intercept keys for tree view ---
-      if (detailMode === "tree") {
+      // --- TreeNav mode: intercept keys for tree navigation ---
+      if (detailMode === "treeNav") {
         // Tree open confirmation sub-state
         if (pendingTreeOpenEntry) {
           if (e.key === "y" || e.key === "Enter") {
@@ -824,7 +826,7 @@ export async function openHistoryOverlay(
         if (e.key === "Escape" || e.key.toLowerCase() === "t") {
           e.preventDefault();
           e.stopPropagation();
-          detailMode = "detail";
+          detailMode = "tree";
           scheduleDetailUpdate();
           updateFooter();
           return;
@@ -835,7 +837,6 @@ export async function openHistoryOverlay(
           e.stopPropagation();
           const item = treeVisibleItems[treeCursorIndex];
           if (!item || item.type !== "entry") return;
-          // Parse id back to find the entry: id is "lastVisitTime:url"
           const sepIdx = item.id.indexOf(":");
           const ts = Number(item.id.substring(0, sepIdx));
           const url = item.id.substring(sepIdx + 1);
@@ -855,7 +856,6 @@ export async function openHistoryOverlay(
           if (item.type === "bucket") {
             toggleTreeCollapse();
           } else {
-            // Parse id back to find the entry: id is "lastVisitTime:url"
             const sepIdx = item.id.indexOf(":");
             const ts = Number(item.id.substring(0, sepIdx));
             const url = item.id.substring(sepIdx + 1);
@@ -951,13 +951,12 @@ export async function openHistoryOverlay(
         return;
       }
 
-      // Toggle tree view: t/T (case-insensitive, only when list is focused)
+      // Toggle tree nav: t/T (case-insensitive, only when list is focused)
       if (e.key.toLowerCase() === "t" && !e.ctrlKey && !e.altKey && !e.metaKey && !inputFocused) {
         e.preventDefault();
         e.stopPropagation();
         if (filtered.length === 0) return;
-        detailMode = "tree";
-        treeCollapsed.clear();
+        detailMode = "treeNav";
         treeCursorIndex = 0;
         renderTreeView();
         // Set initial cursor to the active entry's position in the tree
@@ -972,6 +971,21 @@ export async function openHistoryOverlay(
           }
         }
         updateFooter();
+        return;
+      }
+
+      // Clear search: c/C (case-insensitive, only when list is focused)
+      if (e.key.toLowerCase() === "c" && !e.ctrlKey && !e.altKey && !e.metaKey && !inputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        input.value = "";
+        activeFilters = [];
+        currentQuery = "";
+        updateTitle();
+        updateFilterPills();
+        applyFilter();
+        renderResults();
+        scheduleDetailUpdate();
         return;
       }
 
@@ -1006,10 +1020,10 @@ export async function openHistoryOverlay(
     backdrop.addEventListener("click", close);
     backdrop.addEventListener("mousedown", (e) => e.preventDefault());
 
-    // Detail header x button — exits confirm mode
+    // Detail header x button — exits sub-modes back to passive tree
     detailHeaderClose.addEventListener("click", () => {
-      if (detailMode !== "detail") {
-        detailMode = "detail";
+      if (detailMode !== "tree") {
+        detailMode = "tree";
         pendingDeleteEntry = null;
         pendingTreeOpenEntry = null;
         pendingTreeDeleteEntry = null;
@@ -1049,24 +1063,23 @@ export async function openHistoryOverlay(
       }
     });
 
-    // Tree click handler — clicking bucket headers toggles collapse,
-    // clicking any node moves cursor to it
+    // Tree click handler — bucket collapse in both modes, cursor only in treeNav
     detailContent.addEventListener("click", (e) => {
-      if (detailMode !== "tree") return;
+      if (detailMode !== "tree" && detailMode !== "treeNav") return;
       const target = (e.target as HTMLElement).closest("[data-tree-idx]") as HTMLElement | null;
       if (!target) return;
       const idx = Number(target.dataset.treeIdx);
       if (isNaN(idx) || idx < 0 || idx >= treeVisibleItems.length) return;
 
-      // Move cursor to clicked node
-      const oldIdx = treeCursorIndex;
-      treeCursorIndex = idx;
       const item = treeVisibleItems[idx];
       if (item.type === "bucket") {
-        // Toggle collapse for bucket nodes (full re-render)
+        // Folder collapse works in both modes
+        if (detailMode === "treeNav") treeCursorIndex = idx;
         toggleTreeCollapse();
-      } else {
-        // Swap cursor CSS classes without re-render so dblclick can fire
+      } else if (detailMode === "treeNav") {
+        // Entry click only moves cursor in treeNav
+        const oldIdx = treeCursorIndex;
+        treeCursorIndex = idx;
         const tree = detailContent.querySelector('.ht-hist-tree') as HTMLElement;
         if (tree) {
           const oldEl = tree.querySelector(`[data-tree-idx="${oldIdx}"]`) as HTMLElement;
@@ -1080,9 +1093,9 @@ export async function openHistoryOverlay(
       }
     });
 
-    // Double-click on tree entry — open with confirmation
+    // Double-click on tree entry — open with confirmation (treeNav only)
     detailContent.addEventListener("dblclick", (e) => {
-      if (detailMode !== "tree") return;
+      if (detailMode !== "treeNav") return;
       const target = (e.target as HTMLElement).closest("[data-tree-idx]") as HTMLElement | null;
       if (!target) return;
       const idx = Number(target.dataset.treeIdx);
@@ -1091,7 +1104,6 @@ export async function openHistoryOverlay(
       const item = treeVisibleItems[idx];
       if (item.type !== "entry") return;
       treeCursorIndex = idx;
-      // Parse id back to find the entry: id is "lastVisitTime:url"
       const sepIdx = item.id.indexOf(":");
       const ts = Number(item.id.substring(0, sepIdx));
       const url = item.id.substring(sepIdx + 1);
@@ -1103,9 +1115,9 @@ export async function openHistoryOverlay(
       }
     });
 
-    // Scroll wheel on detail pane in tree mode — moves cursor
+    // Scroll wheel on detail pane — moves cursor (treeNav only)
     detailContent.addEventListener("wheel", (e) => {
-      if (detailMode !== "tree") return;
+      if (detailMode !== "treeNav") return;
       e.preventDefault();
       e.stopPropagation();
       moveTreeCursor(e.deltaY > 0 ? 1 : -1);

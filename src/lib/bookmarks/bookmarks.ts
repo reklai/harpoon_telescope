@@ -3,7 +3,7 @@
 //   Left pane (40%): bookmark results list with virtual scrolling
 //   Right pane (60%): detail view or folder picker when adding
 //
-// Alt+B to open, type to filter, /folder and /file toggle filters,
+// Alt+B to open, type to filter, /folder toggle filter,
 // a to add (with folder picker), d to remove, Enter to open, Tab to
 // switch panes.
 
@@ -19,10 +19,9 @@ const ITEM_HEIGHT = 44;    // px per bookmark row (two lines: title + url)
 const POOL_BUFFER = 5;     // extra items above/below viewport
 
 // Valid slash-command filters for bookmarks
-type BookmarkFilter = "folder" | "file";
+type BookmarkFilter = "folder";
 const VALID_FILTERS: Record<string, BookmarkFilter> = {
   "/folder": "folder",
-  "/file": "file",
 };
 
 /** Build a fuzzy regex from a query string (each char matches with gaps) */
@@ -89,7 +88,6 @@ export async function openBookmarkOverlay(
             <span class="ht-bm-title-sep">|</span>
             <span class="ht-bm-title-filters">Filters:
               <span class="ht-bm-title-filter" data-filter="folder">/folder</span>
-              <span class="ht-bm-title-filter" data-filter="file">/file</span>
             </span>
             <span class="ht-bm-title-count"></span>
           </span>
@@ -120,9 +118,10 @@ export async function openBookmarkOverlay(
               <span>${closeKey} close</span>
             </div>
             <div class="ht-footer-row">
-              <span>T tree (toggle)</span>
+              <span>T focus tree</span>
+              <span>C clear</span>
+              <span>D del</span>
               <span>M move</span>
-              <span>D remove</span>
             </div>
           </div>
         </div>
@@ -441,8 +440,6 @@ export async function openBookmarkOverlay(
     // --- Filtering ---
     // With no filters active: fuzzy-match query against title + url + parentTitle
     // With /folder active: fuzzy-match query against parentTitle only
-    // With /file active: fuzzy-match query against url only
-    // With both active: fuzzy-match query against parentTitle OR url (union)
     // Score a match: lower = better. Combines match type with tightness.
     // Returns -1 for no match.
     function scoreMatch(text: string, query: string, fuzzyRe: RegExp): number {
@@ -493,20 +490,16 @@ export async function openBookmarkOverlay(
               return 0;
             });
           } else {
-            // Filter-scoped matching
+            // Filter-scoped matching: /folder — match against parentTitle only
             results = results.filter((e) => {
-              if (activeFilters.includes("folder") && e.folderPath && (substringRe.test(e.folderPath) || re.test(e.folderPath))) return true;
-              if (activeFilters.includes("file") && (substringRe.test(e.url) || re.test(e.url))) return true;
+              if (e.folderPath && (substringRe.test(e.folderPath) || re.test(e.folderPath))) return true;
               return false;
             });
           }
         }
       } else if (activeFilters.length > 0) {
-        // Filters active but no query — show all bookmarks that have the relevant field
-        if (activeFilters.length === 1 && activeFilters[0] === "folder") {
-          results = results.filter((e) => !!e.folderPath);
-        }
-        // /file alone with no query shows everything (all bookmarks have a URL)
+        // /folder active but no query — show all bookmarks that have a folder path
+        results = results.filter((e) => !!e.folderPath);
       }
 
       filtered = results;
@@ -959,7 +952,7 @@ export async function openBookmarkOverlay(
         <div class="ht-footer-row">
           <span>T focus tree</span>
           <span>C clear</span>
-          <span>D remove</span>
+          <span>D del</span>
           <span>M move</span>
         </div>`;
       }

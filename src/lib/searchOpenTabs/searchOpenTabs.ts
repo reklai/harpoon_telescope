@@ -68,6 +68,7 @@ export async function openSearchOpenTabs(
     footer.innerHTML = `<div class="ht-footer-row">
       <span>j/k (vim) ${upKey}/${downKey} nav</span>
       <span>${switchKey} list</span>
+      <span>C clear</span>
       <span>${acceptKey} jump</span>
       <span>${closeKey} close</span>
     </div>`;
@@ -197,20 +198,64 @@ export async function openSearchOpenTabs(
       if (filtered[idx]) jumpToTab(filtered[idx]);
     }
 
+    // --- Filtering ---
+    // 4-tier match scoring: exact (0) > starts-with (1) > substring (2) > fuzzy (3)
+    // Returns -1 for no match.
+    function scoreMatch(text: string, q: string, fuzzyRe: RegExp): number {
+      const lower = text.toLowerCase();
+      const ql = q.toLowerCase();
+      if (lower === ql) return 0;           // exact match
+      if (lower.startsWith(ql)) return 1;   // starts-with
+      if (lower.includes(ql)) return 2;     // substring
+      if (fuzzyRe.test(text)) return 3;     // fuzzy only
+      return -1;                            // no match
+    }
+
     function applyFilter(): void {
       if (!query.trim()) {
         filtered = [...allEntries];
-      } else {
-        const re = buildFuzzyPattern(query);
-        if (re) {
-          filtered = allEntries.filter(
-            (e) => re.test(e.title) || re.test(e.url),
-          );
-        } else {
-          filtered = [...allEntries];
-        }
+        activeIndex = 0;
+        return;
       }
-      activeIndex = Math.min(activeIndex, Math.max(filtered.length - 1, 0));
+
+      const re = buildFuzzyPattern(query);
+      const substringRe = new RegExp(escapeRegex(query), "i");
+
+      if (!re) {
+        filtered = [...allEntries];
+        activeIndex = 0;
+        return;
+      }
+
+      // Two-pass: substring first, fuzzy as fallback
+      filtered = allEntries.filter(
+        (e) => substringRe.test(e.title) || substringRe.test(e.url)
+          || re.test(e.title) || re.test(e.url),
+      );
+
+      // Rank by: title score > title length (shorter = tighter) > url score
+      const q = query;
+      filtered.sort((a, b) => {
+        const aTitle = scoreMatch(a.title, q, re);
+        const bTitle = scoreMatch(b.title, q, re);
+        const aTitleHit = aTitle >= 0;
+        const bTitleHit = bTitle >= 0;
+        if (aTitleHit !== bTitleHit) return aTitleHit ? -1 : 1;
+        if (aTitleHit && bTitleHit) {
+          if (aTitle !== bTitle) return aTitle - bTitle;
+          return a.title.length - b.title.length;
+        }
+        // Neither hit title — compare url
+        const aUrl = scoreMatch(a.url, q, re);
+        const bUrl = scoreMatch(b.url, q, re);
+        const aUrlHit = aUrl >= 0;
+        const bUrlHit = bUrl >= 0;
+        if (aUrlHit !== bUrlHit) return aUrlHit ? -1 : 1;
+        if (aUrlHit && bUrlHit) return aUrl - bUrl;
+        return 0;
+      });
+
+      activeIndex = 0;
     }
 
     async function jumpToTab(entry: FrecencyEntry): Promise<void> {
@@ -232,13 +277,6 @@ export async function openSearchOpenTabs(
         e.preventDefault();
         e.stopPropagation();
         close();
-        return;
-      }
-
-      if (matchesAction(e, config, "search", "accept")) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (filtered[activeIndex]) jumpToTab(filtered[activeIndex]);
         return;
       }
 
@@ -264,6 +302,25 @@ export async function openSearchOpenTabs(
       }
 
       const inputFocused = host.shadowRoot?.activeElement === input;
+
+      // Clear search: c/C (case-insensitive, only when list is focused)
+      if (e.key.toLowerCase() === "c" && !e.ctrlKey && !e.altKey && !e.metaKey
+          && !inputFocused) {
+        e.preventDefault();
+        e.stopPropagation();
+        input.value = "";
+        query = "";
+        applyFilter();
+        renderList();
+        return;
+      }
+
+      if (matchesAction(e, config, "search", "accept")) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (filtered[activeIndex]) jumpToTab(filtered[activeIndex]);
+        return;
+      }
 
       if (matchesAction(e, config, "search", "moveDown")) {
         const lk = e.key.toLowerCase();

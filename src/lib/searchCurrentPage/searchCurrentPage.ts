@@ -13,7 +13,7 @@
 import { matchesAction, keyToDisplay } from "../shared/keybindings";
 import { createPanelHost, removePanelHost, registerPanelCleanup, getBaseStyles, vimBadgeHtml } from "../shared/panelHost";
 import { escapeHtml, escapeRegex } from "../shared/helpers";
-import { grepPage, initLineCache, destroyLineCache } from "./grep";
+import { grepPage, enrichResult, initLineCache, destroyLineCache } from "./grep";
 import { scrollToText } from "../shared/scroll";
 import { showFeedback } from "../shared/feedback";
 import searchCurrentPageStyles from "./searchCurrentPage.css";
@@ -89,6 +89,7 @@ export async function openSearchCurrentPage(
             <span class="ht-title-filters">Filters:
               <span class="ht-title-filter" data-filter="code">/code</span>
               <span class="ht-title-filter" data-filter="headings">/headings</span>
+              <span class="ht-title-filter" data-filter="images">/img</span>
               <span class="ht-title-filter" data-filter="links">/links</span>
             </span>
             <span class="ht-title-count"></span>
@@ -130,6 +131,7 @@ export async function openSearchCurrentPage(
       <div class="ht-footer-row">
         <span>j/k (vim) ${upKey}/${downKey} nav</span>
         <span>${switchKey} list</span>
+        <span>C clear</span>
         <span>${acceptKey} jump</span>
         <span>${closeKey} close</span>
       </div>
@@ -448,6 +450,7 @@ export async function openSearchCurrentPage(
       }
 
       const r = results[activeIndex];
+      enrichResult(r); // lazy: compute domContext/ancestorHeading/href on demand
       const tag = r.tag || "";
       previewHeader.textContent = `Preview \u2014 L${r.lineNumber}`;
       showPreviewPlaceholder(false);
@@ -619,6 +622,25 @@ export async function openSearchCurrentPage(
           input.focus();
           setFocusedPane("input");
         }
+        return;
+      }
+
+      // Clear search: c/C (case-insensitive, only when results pane is focused)
+      if (e.key.toLowerCase() === "c" && !e.ctrlKey && !e.altKey && !e.metaKey
+          && focusedPane === "results") {
+        e.preventDefault();
+        e.stopPropagation();
+        input.value = "";
+        activeFilters = [];
+        currentQuery = "";
+        results = [];
+        activeIndex = 0;
+        updateTitle();
+        updateFilterPills();
+        renderResults();
+        schedulePreviewUpdate();
+        input.focus();
+        setFocusedPane("input");
         return;
       }
 

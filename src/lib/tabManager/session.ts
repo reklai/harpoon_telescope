@@ -126,9 +126,9 @@ export function renderSessionList(ctx: SessionContext): void {
   html += `</div><div class="ht-footer">
     <div class="ht-footer-row">
       <span>j/k (vim) ${moveUpKey}/${moveDownKey} nav</span>
-      <span>${removeKey} del</span>
       <span>R rename</span>
       <span>O overwrite</span>
+      <span>${removeKey} del</span>
     </div>
     <div class="ht-footer-row">
       <span>Enter load</span>

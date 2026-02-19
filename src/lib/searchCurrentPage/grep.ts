@@ -463,14 +463,23 @@ function collectLines(filters: SearchFilter[]): TaggedLine[] {
     }
   }
 
-  // Multiple filters — union (collected arrays are cached individually)
+  // Multiple filters — union with dedup (an element like <code> inside <a>
+  // could appear in both collectCode and collectLinks)
+  const seen = new Set<TaggedLine>();
   const lines: TaggedLine[] = [];
   for (const filter of filters) {
+    let source: TaggedLine[];
     switch (filter) {
-      case "code":     lines.push(...collectCode());     break;
-      case "headings": lines.push(...collectHeadings());  break;
-      case "links":    lines.push(...collectLinks());     break;
-      case "images":   lines.push(...collectImages());    break;
+      case "code":     source = collectCode();     break;
+      case "headings": source = collectHeadings();  break;
+      case "links":    source = collectLinks();     break;
+      case "images":   source = collectImages();    break;
+    }
+    for (const line of source) {
+      if (!seen.has(line)) {
+        seen.add(line);
+        lines.push(line);
+      }
     }
   }
   return lines;
@@ -513,16 +522,13 @@ export function grepPage(query: string, filters: SearchFilter[] = []): GrepResul
 
   // Score all lines and collect matches
   const scored: { idx: number; score: number; line: TaggedLine }[] = [];
-  const seen = new Set<string>();
 
   for (let i = 0; i < allLines.length; i++) {
     const line = allLines[i];
-    if (seen.has(line.text)) continue;
 
     const score = fuzzyMatch(lowerQuery, line.lower);
     if (score === null) continue;
 
-    seen.add(line.text);
     scored.push({ idx: i, score, line });
 
     // Early exit: stop collecting after we have enough to fill results
@@ -540,22 +546,10 @@ export function grepPage(query: string, filters: SearchFilter[] = []): GrepResul
   for (let i = 0; i < limit; i++) {
     const { idx, score, line } = scored[i];
 
-    // Flat context (fallback)
+    // Flat context (fallback) — cheap, just array slicing
     const start = Math.max(0, idx - CONTEXT_LINES);
     const end = Math.min(allLines.length, idx + CONTEXT_LINES + 1);
     const context = allLines.slice(start, end).map((l) => l.text);
-
-    // DOM-aware context — pull from same parent element when nodeRef is available
-    const node = line.nodeRef?.deref();
-    let domContext: string[] | undefined;
-    let ancestorHeading: string | undefined;
-    let href: string | undefined = line.href;
-
-    if (node) {
-      domContext = getDomContext(node, line.text, line.tag);
-      ancestorHeading = findAncestorHeading(node);
-      if (!href && line.tag === "A") href = findHref(node);
-    }
 
     results.push({
       lineNumber: idx + 1,
@@ -564,11 +558,21 @@ export function grepPage(query: string, filters: SearchFilter[] = []): GrepResul
       score,
       context,
       nodeRef: line.nodeRef,
-      domContext,
-      ancestorHeading,
-      href,
+      href: line.href,
+      // domContext and ancestorHeading are computed lazily via enrichResult()
     });
   }
 
   return results;
+}
+
+/** Lazily compute DOM-aware context for a single result (called on preview).
+ *  Mutates the result in place to cache the computed fields. */
+export function enrichResult(r: GrepResult): void {
+  if (r.domContext) return; // already enriched
+  const node = r.nodeRef?.deref();
+  if (!node) return;
+  r.domContext = getDomContext(node, r.text, r.tag || "");
+  r.ancestorHeading = findAncestorHeading(node);
+  if (!r.href && r.tag === "A") r.href = findHref(node);
 }

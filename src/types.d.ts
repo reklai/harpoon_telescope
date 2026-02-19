@@ -1,7 +1,13 @@
 // Shared project type declarations
 
-// Harpoon entry stored in extension state
-interface HarpoonEntry {
+// Allow importing .css files as text (esbuild text loader)
+declare module "*.css" {
+  const content: string;
+  export default content;
+}
+
+// Tab Manager entry stored in extension state
+interface TabManagerEntry {
   tabId: number;
   url: string;
   title: string;
@@ -21,13 +27,13 @@ interface KeybindingsConfig {
   navigationMode: "basic" | "vim";
   bindings: {
     global: Record<string, KeyBinding>;
-    harpoon: Record<string, KeyBinding>;
+    tabManager: Record<string, KeyBinding>;
     search: Record<string, KeyBinding>;
   };
 }
 
-// Structural search filters for telescope grep
-type SearchFilter = "code" | "headings" | "links";
+// Structural search filters for page grep
+type SearchFilter = "code" | "headings" | "links" | "images";
 
 // Grep result from content script
 interface GrepResult {
@@ -87,17 +93,17 @@ interface BookmarkUsage {
   lastVisit: number;  // timestamp
 }
 
-// Saved harpoon session (detach/attach)
-interface HarpoonSessionEntry {
+// Saved tab manager session (detach/attach)
+interface TabManagerSessionEntry {
   url: string;
   title: string;
   scrollX: number;
   scrollY: number;
 }
 
-interface HarpoonSession {
+interface TabManagerSession {
   name: string;
-  entries: HarpoonSessionEntry[];
+  entries: TabManagerSessionEntry[];
   savedAt: number;  // timestamp
 }
 

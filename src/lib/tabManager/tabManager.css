@@ -1,0 +1,101 @@
+/* Tab Manager overlay — panel layout, slot items, swap mode, session inputs */
+
+.ht-tab-manager-container {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 380px; max-width: 90vw; background: #1e1e1e; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px; overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  display: flex; flex-direction: column;
+}
+.ht-tab-manager-list { max-height: min(340px, 50vh); overflow-y: auto; }
+.ht-tab-manager-item {
+  display: flex; align-items: center; padding: 8px 14px; gap: 10px;
+  cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.1s, opacity 0.15s;
+  user-select: none; position: relative;
+}
+.ht-tab-manager-item:hover { background: rgba(255,255,255,0.06); }
+.ht-tab-manager-item.active { background: rgba(255,255,255,0.08); border-left: 2px solid #0a84ff; }
+.ht-tab-manager-item.closed { opacity: 0.5; }
+.ht-tab-manager-item.closed .ht-tab-manager-slot { background: rgba(255,255,255,0.04); }
+.ht-tab-manager-item.swap-source {
+  background: rgba(10,132,255,0.15);
+  border-left: 2px solid #febc2e;
+}
+.ht-tab-manager-slot {
+  background: rgba(255,255,255,0.08); color: #e0e0e0; width: 22px; height: 22px;
+  border: none; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 12px; flex-shrink: 0;
+  pointer-events: none;
+}
+.ht-tab-manager-item.active .ht-tab-manager-slot {
+  background: #0a84ff; color: #fff;
+}
+.ht-tab-manager-info { flex: 1; overflow: hidden; pointer-events: none; }
+.ht-tab-manager-item-title {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 12px; color: #e0e0e0;
+}
+.ht-tab-manager-item-url {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 10px; color: #808080; margin-top: 2px;
+}
+.ht-tab-manager-delete {
+  color: #808080; cursor: pointer; font-size: 14px; transition: color 0.2s;
+  background: none; border: none; font-family: inherit; padding: 4px;
+  line-height: 1;
+}
+.ht-tab-manager-delete:hover { color: #ff5f57; }
+.ht-tab-manager-empty {
+  padding: 32px 24px; text-align: center; color: #808080;
+  line-height: 1.6; font-size: 12px;
+}
+.ht-tab-manager-empty-slot {
+  display: flex; align-items: center; padding: 8px 14px; gap: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04); color: #555;
+}
+.ht-tab-manager-empty-slot .ht-tab-manager-slot {
+  background: rgba(255,255,255,0.04); color: #555;
+}
+.ht-footer-hint-active { color: #0a84ff; }
+
+/* Session sub-views (save, list, replace) — rendered inside Tab Manager */
+.ht-session-input-wrap {
+  display: flex; align-items: center; padding: 8px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06); background: #252525;
+}
+.ht-session-prompt { color: #0a84ff; margin-right: 8px; font-weight: 600; font-size: 13px; }
+.ht-session-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: #e0e0e0; font-family: inherit; font-size: 13px; caret-color: #0a84ff;
+}
+.ht-session-input::placeholder { color: #666; }
+.ht-session-item {
+  display: flex; align-items: center; padding: 8px 14px; gap: 10px;
+  cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.1s; user-select: none;
+}
+.ht-session-item:hover { background: rgba(255,255,255,0.06); }
+.ht-session-item.active { background: rgba(255,255,255,0.08); border-left: 2px solid #0a84ff; }
+.ht-session-name {
+  flex: 1; font-size: 12px; color: #e0e0e0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ht-session-meta {
+  font-size: 10px; color: #808080; flex-shrink: 0;
+}
+.ht-session-delete {
+  color: #808080; cursor: pointer; font-size: 14px; transition: color 0.2s;
+  background: none; border: none; font-family: inherit; padding: 4px;
+  line-height: 1; flex-shrink: 0;
+}
+.ht-session-delete:hover { color: #ff5f57; }
+.ht-session-empty {
+  padding: 24px; text-align: center; color: #808080; font-size: 12px;
+}
+.ht-session-rename-input {
+  flex: 1; background: transparent; border: none; border-bottom: 1px solid #0a84ff;
+  outline: none; color: #e0e0e0; font-family: inherit; font-size: 12px;
+  caret-color: #0a84ff; padding: 0 2px;
+}

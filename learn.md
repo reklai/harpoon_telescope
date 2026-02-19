@@ -27,27 +27,33 @@ This is not a JavaScript tutorial. It assumes working knowledge of JS/TS, the DO
 17. [Session Management — sessions.ts](#session-management--sessionsts)
 18. [Harpoon Overlay — harpoon-overlay.ts](#harpoon-overlay--harpoon-overlayts)
 19. [Telescope Overlay — search-overlay.ts](#telescope-overlay--search-overlayts)
-20. [Frecency Overlay — frecency-overlay.ts](#frecency-overlay--frecency-overlayts)
-21. [Session Views — session-views.ts](#session-views--session-viewsts)
-22. [Popup — popup.ts](#popup--popupts)
-23. [Options Page — options.ts](#options-page--optionsts)
-24. [CSS Architecture](#css-architecture)
-25. [Cross-Browser Compatibility](#cross-browser-compatibility)
-26. [Performance Patterns](#performance-patterns)
-27. [State Management](#state-management)
-28. [Event Handling Patterns](#event-handling-patterns)
-29. [DOM Rendering Strategies](#dom-rendering-strategies)
-30. [Debugging Lessons](#debugging-lessons)
-31. [Patterns Worth Reusing](#patterns-worth-reusing)
+20. [Bookmark Overlay — bookmark-overlay.ts](#bookmark-overlay--bookmark-overlayts)
+21. [History Overlay — history-overlay.ts](#history-overlay--history-overlayts)
+22. [Frecency Overlay — frecency-overlay.ts](#frecency-overlay--frecency-overlayts)
+23. [Help Overlay — help-overlay.ts](#help-overlay--help-overlayts)
+24. [Session Views — session-views.ts](#session-views--session-viewsts)
+25. [Popup — popup.ts](#popup--popupts)
+26. [Options Page — options.ts](#options-page--optionsts)
+27. [CSS Architecture](#css-architecture)
+28. [Cross-Browser Compatibility](#cross-browser-compatibility)
+29. [Performance Patterns](#performance-patterns)
+30. [State Management](#state-management)
+31. [Event Handling Patterns](#event-handling-patterns)
+32. [DOM Rendering Strategies](#dom-rendering-strategies)
+33. [Tree Navigation Pattern](#tree-navigation-pattern)
+34. [Debugging Lessons](#debugging-lessons)
+35. [Patterns Worth Reusing](#patterns-worth-reusing)
 
 ---
 
 ## Project Overview
 
-This extension brings two Neovim plugins to the browser:
+This extension brings two Neovim plugins to the browser, plus three browser-data overlays:
 
-- **Harpoon** (ThePrimeagen) — pin a small set of files/buffers and instantly jump between them. Here: pin up to 6 tabs with scroll memory.
+- **Harpoon** (ThePrimeagen) — pin a small set of files/buffers and instantly jump between them. Here: pin up to 4 tabs with scroll memory.
 - **Telescope** (nvim-telescope) — fuzzy find anything. Here: fuzzy search the current page's visible text with structural filters and a preview pane.
+- **Bookmarks** — browse, fuzzy-filter, add/remove/move browser bookmarks with a two-pane layout, folder tree view, and folder picker.
+- **History** — browse and fuzzy-filter browser history with time bucket classification, tree view, and in-place deletion.
 - **Frecency** — a Mozilla-coined algorithm for ranking items by a combination of frequency and recency, used here for a tab switcher.
 
 The extension runs on Firefox (Manifest V2), Chrome (Manifest V3), and Zen (Firefox fork, inherits MV2 support). Every overlay is a Shadow DOM panel injected into the active page. All keybindings are user-configurable with per-scope collision detection. Navigation modes: basic (arrows) and vim (adds j/k on top of basic).
@@ -63,29 +69,32 @@ harpoon_telescope/
 ├── README.md                    # user-facing documentation
 ├── .gitignore                   # git exclusions
 ├── src/
-│   ├── background.ts            # central hub: state, commands, message routing (514 lines)
-│   ├── content-script.ts        # per-page entry: key handler, message router (197 lines)
-│   ├── types.d.ts               # shared TypeScript interfaces (85 lines)
-│   ├── manifest_v2.json         # Firefox/Zen manifest (78 lines)
-│   ├── manifest_v3.json         # Chrome manifest (55 lines)
+│   ├── background.ts            # central hub: state, commands, message routing (749 lines)
+│   ├── content-script.ts        # per-page entry: key handler, message router (208 lines)
+│   ├── types.d.ts               # shared TypeScript interfaces (110 lines)
+│   ├── manifest_v2.json         # Firefox/Zen manifest
+│   ├── manifest_v3.json         # Chrome manifest
 │   ├── icons/
 │   │   ├── tab-search.png       # source icon (512x512)
 │   │   ├── icon-48.png          # resized for manifest
 │   │   ├── icon-96.png          # resized for manifest
 │   │   └── icon-128.png         # resized for Chrome Web Store
 │   ├── lib/
-│   │   ├── keybindings.ts       # config, defaults, matching, collision detection (269 lines)
-│   │   ├── panel-host.ts        # Shadow DOM host creation, base styles (132 lines)
-│   │   ├── harpoon-overlay.ts   # Tab Manager panel (526 lines)
-│   │   ├── search-overlay.ts    # Telescope search panel (858 lines)
-│   │   ├── frecency-overlay.ts  # Frequency Tabs panel (403 lines)
-│   │   ├── session-views.ts     # Session save/load/replace/restore views (594 lines)
-│   │   ├── grep.ts              # Fuzzy search engine with line cache (551 lines)
-│   │   ├── scroll.ts            # Scroll-to-text with temporary highlight (111 lines)
-│   │   ├── frecency.ts          # Frecency scoring algorithm (124 lines)
-│   │   ├── sessions.ts          # Session CRUD handlers (101 lines)
-│   │   ├── helpers.ts           # escapeHtml, escapeRegex, extractDomain (24 lines)
-│   │   └── feedback.ts          # Toast notification system (35 lines)
+│   │   ├── keybindings.ts       # config, defaults, matching, collision detection (266 lines)
+│   │   ├── panel-host.ts        # Shadow DOM host creation, base styles (131 lines)
+│   │   ├── harpoon-overlay.ts   # Tab Manager panel (525 lines)
+│   │   ├── search-overlay.ts    # Telescope search panel (850 lines)
+│   │   ├── bookmark-overlay.ts  # Bookmark browser (filter, tree, move, add/remove) (1954 lines)
+│   │   ├── history-overlay.ts   # History browser (filter, time buckets, tree) (1317 lines)
+│   │   ├── frecency-overlay.ts  # Frecency tab list (filter, Tab cycling, rAF) (423 lines)
+│   │   ├── help-overlay.ts      # Help menu (fuzzy search, section filters, collapsible) (708 lines)
+│   │   ├── session-views.ts     # Session save/load/replace/restore views (593 lines)
+│   │   ├── grep.ts              # Fuzzy search engine with line cache (574 lines)
+│   │   ├── scroll.ts            # Scroll-to-text with temporary highlight (110 lines)
+│   │   ├── frecency.ts          # Frecency scoring algorithm (123 lines)
+│   │   ├── sessions.ts          # Session CRUD handlers (100 lines)
+│   │   ├── helpers.ts           # escapeHtml, escapeRegex, extractDomain (23 lines)
+│   │   └── feedback.ts          # Toast notification system (34 lines)
 │   ├── popup/
 │   │   ├── popup.ts             # Popup script (94 lines)
 │   │   ├── popup.html           # Popup markup
@@ -97,7 +106,7 @@ harpoon_telescope/
 └── dist/                        # build output (gitignored)
 ```
 
-Total: ~3,500 lines of TypeScript across 15 source files, plus HTML/CSS for popup and options.
+Total: ~8,000 lines of TypeScript across 17 source files, plus HTML/CSS for popup and options.
 
 ---
 
@@ -492,7 +501,7 @@ Each command has `"suggested_key"` — the default shortcut. Users can rebind th
 - **`"host_permissions"`** — MV3 splits URL-based permissions out of `"permissions"` into `"host_permissions"`. Same effect, different key.
 - **`"service_worker"`** — MV3 replaces the background page with a service worker. Service workers can be terminated at any time by the browser. This is why `ensureHarpoonLoaded()` exists — every function must be able to reload state from scratch.
 - **`"action"`** — MV3 renames `browser_action` to `action`. Same fields.
-- **Commands limit** — Chrome MV3 allows only 4 commands total. We register the most critical: `open-harpoon`, `harpoon-add`, `open-telescope-current`. Everything else (slot jumps 1-6, cycling, frecency, vim toggle) is handled by the content script's `keydown` listener.
+- **Commands limit** — Chrome MV3 allows only 4 commands total. We register the most critical: `open-harpoon`, `harpoon-add`, `open-telescope-current`. Everything else (slot jumps 1-4, cycling, frecency, bookmarks, history, vim toggle) is handled by the content script's `keydown` listener.
 
 ---
 
@@ -524,7 +533,7 @@ For shared interfaces used across 10+ files, ambient declarations reduce boilerp
 
 **`KeybindingsConfig`** — The full keybinding state. `navigationMode` is `"basic"` or `"vim"`. `bindings` is nested by scope (`global`, `harpoon`, `search`), then by action name, then contains `key` (current) and `default` (original). Storing both enables per-binding reset.
 
-**`SearchFilter`** — A string literal union type: `"code" | "headings" | "links"`. Using a union type instead of a plain string means TypeScript catches typos at compile time — `"cod"` would be a type error.
+**`SearchFilter`** — A string literal union type: `"code" | "headings" | "links" | "images"`. Using a union type instead of a plain string means TypeScript catches typos at compile time — `"cod"` would be a type error.
 
 **`GrepResult`** — A single search result. Notable fields:
 - `nodeRef?: WeakRef<Node>` — A weak reference to the DOM node. See [State Management](#state-management) for why `WeakRef` matters here.
@@ -901,8 +910,8 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
   navigationMode: "basic",
   bindings: {
     global: {
-      openHarpoon: { key: "Alt+M", default: "Alt+M" },
-      // ...13 actions
+      openHarpoon: { key: "Alt+T", default: "Alt+T" },
+      // ...14 actions
     },
     harpoon: {
       moveUp: { key: "ArrowUp", default: "ArrowUp" },
@@ -955,7 +964,7 @@ export function matchesKey(e: KeyboardEvent, keyString: string): boolean {
 }
 ```
 
-Converts `"Alt+M"` to `{ modifiers: ["Alt"], key: "M" }` and compares against a KeyboardEvent. Single-character keys are uppercased for case-insensitive matching — this is why the caps lock key doesn't break vim mode.
+Converts `"Alt+T"` to `{ modifiers: ["Alt"], key: "T" }` and compares against a KeyboardEvent. Single-character keys are uppercased for case-insensitive matching — this is why the caps lock key doesn't break vim mode.
 
 **`matchesAction()`** wraps `matchesKey()` to check all keys for an action (primary key + vim aliases):
 
@@ -991,7 +1000,7 @@ export function checkCollision(config, scope, action, key): CollisionResult | nu
 }
 ```
 
-Per-scope only. `Alt+M` in `global` doesn't collide with `M` in `harpoon` because they're never active simultaneously. The options page calls this before accepting a new key binding.
+Per-scope only. `Alt+T` in `global` doesn't collide with `T` in `harpoon` because they're never active simultaneously. The options page calls this before accepting a new key binding.
 
 ---
 
@@ -1148,7 +1157,7 @@ export function showFeedback(message: string): void {
 
 ## Fuzzy Search Engine — grep.ts
 
-The most complex module. 551 lines implementing: DOM text collection, caching with MutationObserver, structural filters, character-by-character fuzzy scoring, and context extraction.
+The most complex module. 574 lines implementing: DOM text collection, caching with MutationObserver, structural filters, character-by-character fuzzy scoring, and context extraction.
 
 ### Fuzzy scoring algorithm
 
@@ -1244,6 +1253,7 @@ function collectLines(filters: SearchFilter[]): TaggedLine[] {
       case "code": return collectCode();
       case "headings": return collectHeadings();
       case "links": return collectLinks();
+      case "images": return collectImages();
     }
   }
   // Multiple filters — union
@@ -1251,6 +1261,7 @@ function collectLines(filters: SearchFilter[]): TaggedLine[] {
   for (const filter of filters) {
     switch (filter) {
       case "code": lines.push(...collectCode()); break;
+      case "images": lines.push(...collectImages()); break;
       // ...
     }
   }
@@ -1258,7 +1269,7 @@ function collectLines(filters: SearchFilter[]): TaggedLine[] {
 }
 ```
 
-`/code /links` returns all code lines AND all link lines (union). The fuzzy query then narrows within that pool. Each sub-collection is independently cached.
+`/code /links` returns all code lines AND all link lines (union). The fuzzy query then narrows within that pool. Each sub-collection is independently cached. `/img` collects `<img>` elements using their `alt` text, `title`, or filename from `src` as the searchable text.
 
 ### Code collection — `<pre>` splitting
 
@@ -1513,7 +1524,7 @@ export async function sessionSave(state, name): Promise<{ ok: boolean; reason?: 
   if (state.getList().length === 0) return { ok: false, reason: "Cannot save empty harpoon list" };
   const nameTaken = sessions.some((s) => s.name.toLowerCase() === name.toLowerCase());
   if (nameTaken) return { ok: false, reason: `"${name}" already exists` };
-  if (sessions.length >= 3) return { ok: false, reason: "Max 3 sessions — delete one first" };
+  if (sessions.length >= 4) return { ok: false, reason: "Max 4 sessions — delete one first" };
   // ...
 }
 ```
@@ -1521,7 +1532,7 @@ export async function sessionSave(state, name): Promise<{ ok: boolean; reason?: 
 Multiple validation gates:
 1. Empty list check
 2. Case-insensitive duplicate name check
-3. Max capacity (3 sessions)
+3. Max capacity (4 sessions)
 
 Returns `{ ok: false, reason }` instead of throwing. The caller decides how to display the error (toast, inline message, etc.).
 
@@ -1547,7 +1558,7 @@ The harpoon list is **replaced** entirely — session load doesn't append to the
 
 ## Harpoon Overlay — harpoon-overlay.ts
 
-The Tab Manager panel. 526 lines implementing: list rendering, keyboard navigation, swap mode, session sub-views, and number key jumps.
+The Tab Manager panel. 525 lines implementing: list rendering, keyboard navigation, swap mode, session sub-views, and number key jumps.
 
 ### View mode state machine
 
@@ -1629,7 +1640,7 @@ if (!e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
 }
 ```
 
-Number keys 1-6 instantly jump to the corresponding slot — no selection, no confirmation. The modifier check (`!e.ctrlKey && ...`) ensures `Alt+1` (which is a global shortcut) doesn't trigger this.
+Number keys 1-4 instantly jump to the corresponding slot — no selection, no confirmation. The modifier check (`!e.ctrlKey && ...`) ensures `Alt+1` (which is a global shortcut) doesn't trigger this.
 
 ### Class swap for navigation
 
@@ -1646,7 +1657,7 @@ function setActiveIndex(newIndex: number): void {
 }
 ```
 
-Arrow key navigation doesn't rebuild the DOM. It swaps CSS classes on existing elements. For a list of 6 items, this is negligible — but it's the right pattern to use everywhere.
+Arrow key navigation doesn't rebuild the DOM. It swaps CSS classes on existing elements. For a list of 4 items, this is negligible — but it's the right pattern to use everywhere.
 
 When swap mode is active, arrow navigation does trigger `render()` because the swap indicators need updating (which items are highlighted as source/target).
 
@@ -1654,7 +1665,7 @@ When swap mode is active, arrow navigation does trigger `render()` because the s
 
 ## Telescope Overlay — search-overlay.ts
 
-The most complex UI component. 858 lines implementing: fuzzy search input, structural filter pills, virtual scrolling results, preview pane with code/prose rendering, and highlight matching.
+The most complex UI component. 850 lines implementing: fuzzy search input, structural filter pills, virtual scrolling results, preview pane with code/prose rendering, and highlight matching.
 
 ### Page size safety guard
 
@@ -1816,6 +1827,261 @@ When the search input is focused, `j` and `k` type into the input (for searching
 
 ---
 
+## Bookmark Overlay — bookmark-overlay.ts
+
+The largest overlay. 1954 lines implementing: two-pane bookmark browser with virtual scrolling, fuzzy filter with slash commands, detail/move/tree/delete modes, folder picker, add-bookmark wizard, and tree view with open confirmation.
+
+This file exports two independent overlays:
+1. `openBookmarkOverlay(config)` — the main browse/filter/manage overlay
+2. `openAddBookmarkOverlay(config)` — a standalone "Add Bookmark" wizard
+
+Both are self-contained closures: own shadow DOM panel, own keyboard handler, own state.
+
+### Two-pane layout with virtual scrolling
+
+Same architecture as the telescope overlay:
+- **Left pane (40%)**: bookmark results list with virtual scrolling (`ITEM_HEIGHT = 52`, `POOL_BUFFER = 5`, sentinel + element pool)
+- **Right pane (60%)**: context-dependent detail view controlled by `detailMode`
+
+Virtual scrolling uses the same pattern as telescope: a sentinel div sized to `filtered.length * ITEM_HEIGHT` creates the scrollbar, an absolutely-positioned results list contains only the visible items plus buffer, and an element pool (`getPoolItem()` / `bindPoolItem()`) reuses DOM elements. A passive scroll listener triggers `renderVisibleItems()`, which short-circuits if the visible range hasn't changed.
+
+### Slash filters
+
+Two bookmark-specific filters parsed from leading input tokens:
+
+| Token | Filter | Effect |
+|-------|--------|--------|
+| `/folder` | `"folder"` | Matches query against folder path only |
+| `/file` | `"file"` | Matches query against URL only |
+
+Both filters together: union (matches folder path OR URL). No filters: matches against title, URL, or folder path. Backspace on empty input removes the last filter pill.
+
+### Detail mode state machine
+
+```typescript
+let detailMode: "detail" | "move" | "tree" | "confirmDelete" | "confirmMove" = "detail";
+```
+
+| Mode | Right pane shows | Entered via | Exited via |
+|------|-----------------|-------------|------------|
+| `"detail"` | Bookmark fields (title, URL, path, date, stats) | Default / return from any mode | N/A (home state) |
+| `"move"` | Folder picker list | `m` key (results pane focused) | `Escape`, `m` again, or selecting a folder |
+| `"tree"` | Full bookmark tree with collapsible folders | `t` key (results pane focused) | `Escape`, `t` again |
+| `"confirmDelete"` | Delete confirmation dialog | `d` key (results pane focused) | `y`/`Enter` (deletes) or `n`/`Escape` (cancels) |
+| `"confirmMove"` | Move confirmation with from/to paths | `Enter` in move mode | `y`/`Enter` (moves) or `n`/`Escape` (cancels) |
+
+Every mode transition calls `updateFooter()` to swap footer hints. The keyboard handler checks `detailMode` first, creating isolated key contexts for each mode.
+
+### Move mode — folder picker
+
+When `m` is pressed:
+1. `moveFolders` is populated from `flatFolderList` (excluding the invisible root at depth 0)
+2. `moveTargetIndex` tracks the highlighted folder
+3. j/k or arrows navigate the folder list
+4. `Enter` sets `pendingMoveEntry` and `pendingMoveParentId`, transitions to `"confirmMove"`
+5. On confirm, sends `BOOKMARK_MOVE` to background, re-fetches the full bookmark list to refresh folder paths
+
+The move confirmation dialog reconstructs the full destination path by walking ancestors backward through `moveFolders` using depth comparison, displaying source path → destination path with an arrow.
+
+### Tree view
+
+The tree shows the full bookmark folder hierarchy with entries nested inside their parent folders.
+
+**Core data structures:**
+
+| Variable | Type | Purpose |
+|----------|------|---------|
+| `folderTree` | `BookmarkFolder[]` | Raw folder tree from background (`BOOKMARK_FOLDERS` message) |
+| `flatFolderList` | `{ id, title, depth }[]` | Depth-first flattened folder tree, created by `flattenFolders()` at startup |
+| `byParent` | `Map<string, BookmarkEntry[]>` | Built fresh each render — groups `allEntries` by `parentId` |
+| `treeVisibleItems` | `{ type: "folder" \| "entry"; id: string }[]` | Flat list of currently visible nodes, rebuilt each render |
+| `treeCollapsed` | `Set<string>` | Collapsed folder IDs. Toggling resets on exit/re-enter |
+| `treeCursorIndex` | `number` | Index into `treeVisibleItems` for cursor position |
+
+**`renderTreeView()` implementation:**
+1. Builds `byParent` map from `allEntries`
+2. Iterates `flatFolderList`, skipping depth-0 root
+3. For each folder: emits a `.ht-bm-tree-node` div with collapse arrow (`▶`/`▼`), folder icon, title, child count. Indentation: `(depth - 1) * 14` px
+4. If folder is expanded: emits each child bookmark as `.ht-bm-tree-entry` with file icon, title, domain (`extractDomain()`). Entry indentation: folder indent + 14px
+5. Simultaneously builds `treeVisibleItems` array
+6. Clamps `treeCursorIndex`, scrolls cursor into view
+
+**Cursor movement (`moveTreeCursor()`)**: CSS class swap only — removes `tree-cursor` from old element, adds to new. No re-render. Uses `data-tree-idx` attributes for efficient element lookup.
+
+**Collapse toggling (`toggleTreeCollapse()`)**: Full re-render via `renderTreeView()` since the visible items list changes.
+
+### Open confirmation sub-state
+
+`pendingTreeOpenEntry: BookmarkEntry | null` is a **sub-state within** `detailMode === "tree"`. When non-null, the tree keyboard handler routes to a confirmation dialog instead of normal tree navigation.
+
+- **Entry**: `Enter` on an entry node, or double-click on an entry
+- **Rendering**: Shows bookmark title in quotes, optional folder path underneath, and `y / Enter confirm | n / Esc cancel` hint
+- **Resolution**: `y`/`Enter` opens the bookmark; `n`/`Escape` clears and returns to tree navigation
+
+### Click vs dblclick — DOM preservation
+
+The critical pattern: single-click handlers that coexist with dblclick must NOT rebuild DOM (via `innerHTML` or full re-render), or the dblclick event loses its target between the two clicks.
+
+**Left pane results:**
+- Single click: calls `setActiveIndex()` — CSS class swap, no DOM rebuild
+- Dblclick: immediately opens the bookmark
+
+**Tree view entries:**
+- Single click on folder: toggles collapse (full re-render — safe because folders have no dblclick action)
+- Single click on entry: CSS-only cursor swap (no re-render, preserves DOM for dblclick)
+- Dblclick on entry: sets `pendingTreeOpenEntry`, shows open confirmation
+
+### Add Bookmark overlay — three-step wizard
+
+Exported as `openAddBookmarkOverlay()`. Completely separate panel with its own lifecycle.
+
+```typescript
+type Step = "chooseType" | "chooseDest" | "nameInput";
+```
+
+| Step | UI | Enter action | Escape action |
+|------|----|-------------|---------------|
+| `chooseType` | Two items: "File" (save page) / "Folder" (create folder) | Sets `chosenType`, moves to `chooseDest` | Closes overlay |
+| `chooseDest` | Folder picker with "Root (no folder)" at top | For file: sends `BOOKMARK_ADD`, closes. For folder: moves to `nameInput` | Back to `chooseType` |
+| `nameInput` | Name input field for new folder | Validates, sends `BOOKMARK_CREATE_FOLDER`, closes | Back to `chooseDest` |
+
+The `chooseType` and `chooseDest` steps share navigation logic (j/k or arrows, same `totalItems` counting). Only `nameInput` has its own keyboard block (passes keys through to the input element).
+
+### `shortPath()` — compact folder display
+
+```typescript
+function shortPath(folderPath: string): string {
+  const segments = folderPath.split(" › ");
+  return segments.length > 2
+    ? segments.slice(-2).join(" › ")
+    : folderPath;
+}
+```
+
+Truncates folder paths to the last 2 segments for the results list. Full path is shown in the detail view.
+
+### Footer conventions
+
+| Mode | Footer |
+|------|--------|
+| `"detail"` | `j/k nav` \| `Tab list` \| `Enter open` \| `Esc close` / `t tree (toggle)` \| `m move` \| `d remove` |
+| `"move"` | `j/k nav` \| `Enter confirm` \| `Esc / m back` |
+| `"tree"` (no pending) | `j/k nav` \| `Enter fold/open` \| `Esc / t back` |
+| `"tree"` (pending open) | `y / Enter confirm` \| `n / Esc cancel` |
+| `"confirmDelete"` | `y / Enter confirm` \| `n / Esc cancel` |
+| `"confirmMove"` | `y / Enter confirm` \| `n / Esc cancel` |
+
+---
+
+## History Overlay — history-overlay.ts
+
+1317 lines implementing: two-pane history browser with virtual scrolling, fuzzy filter with time-based slash commands, detail/delete/tree modes, time bucket tree view, and in-place history deletion.
+
+### Two-pane layout with virtual scrolling
+
+Same architecture as the bookmark overlay:
+- **Left pane (40%)**: history results list with virtual scrolling (`ITEM_HEIGHT = 52`, `POOL_BUFFER = 5`, `MAX_HISTORY = 200`)
+- **Right pane (60%)**: context-dependent detail view
+
+History entries are fetched from the background via `HISTORY_LIST` message (which calls `browser.history.search()` with `maxResults: 200`). Entries are sorted by `lastVisitTime` descending.
+
+### Slash filters — time ranges
+
+Three time-based filters:
+
+| Token | Filter | Range |
+|-------|--------|-------|
+| `/today` | `"today"` | Last 24 hours |
+| `/week` | `"week"` | Last 7 days |
+| `/month` | `"month"` | Last 30 days |
+
+Multiple filters stack with the widest range (most permissive union). These are orthogonal to the tree view's time buckets — filters affect the left pane's `filtered` list; time buckets organize the tree view.
+
+### Detail mode state machine
+
+```typescript
+let detailMode: "detail" | "confirmDelete" | "tree" = "detail";
+```
+
+Simpler than bookmarks — no move mode. The keyboard handler checks `detailMode` first.
+
+| Mode | Right pane shows | Entered via | Exited via |
+|------|-----------------|-------------|------------|
+| `"detail"` | History detail fields (title, URL, visit time, visit count) | Default / return from any mode | N/A (home state) |
+| `"confirmDelete"` | Delete confirmation dialog | `d` key (results pane focused) | `y`/`Enter` (deletes) or `n`/`Escape` |
+| `"tree"` | Time bucket tree with entries nested inside | `t` key (results pane focused) | `Escape`, `t` again |
+
+### Time bucket classification
+
+`buildTimeBuckets()` classifies entries into six fixed time buckets:
+
+| Bucket | Age range |
+|--------|-----------|
+| Today | `< 1 day` |
+| Yesterday | `1-2 days` |
+| This Week | `2-7 days` |
+| Last Week | `7-14 days` |
+| This Month | `14-30 days` |
+| Older | `>= 30 days` |
+
+Each bucket has a label, an icon, and an array of entries. Empty buckets are skipped during tree rendering.
+
+### Tree view — time buckets as folders
+
+The tree shows time buckets as top-level collapsible nodes with history entries nested inside.
+
+**`renderTreeView()` implementation:**
+1. Calls `buildTimeBuckets(filtered)` — operates on already-filtered entries
+2. For each non-empty bucket: emits a bucket header node with collapse arrow, icon, label, and count
+3. If bucket is expanded: emits each child entry with document icon, title, and domain
+4. Simultaneously builds `treeVisibleItems` array
+
+**`treeVisibleItems`**: Flat array of `{ type: "bucket" | "entry"; id: string }`. Bucket IDs are label strings (e.g., `"Today"`). Entry IDs use the composite format (see below).
+
+### Entry IDs — `${lastVisitTime}:${url}`
+
+History entries need unique identification in the tree. The composite string format `"${lastVisitTime}:${url}"` is used because history can contain duplicate URLs with different visit times.
+
+Parsing uses `indexOf(":")` to find the first colon — safe because URLs always contain colons (`https://...`), so the timestamp is everything before the first colon, and the URL is everything after:
+
+```typescript
+const sepIdx = item.id.indexOf(":");
+const ts = Number(item.id.substring(0, sepIdx));
+const url = item.id.substring(sepIdx + 1);
+```
+
+### History API
+
+- **Fetch**: `browser.runtime.sendMessage({ type: "HISTORY_LIST", maxResults: 200 })` — routed to background which calls `browser.history.search({ text: "", maxResults: 200, startTime: 0 })`
+- **Delete**: `browser.history.deleteUrl({ url })` — called directly. After deletion, the entry is removed from the local `allEntries` array and filters are re-applied
+
+### Open confirmation sub-state
+
+Same pattern as bookmarks: `pendingTreeOpenEntry: HistoryEntry | null` is a sub-state within tree mode. Shows the entry title and domain with `y / Enter confirm | n / Esc cancel`. Priority check at the top of the tree keyboard handler.
+
+### `relativeTime()` — human-readable timestamps
+
+```typescript
+function relativeTime(ts: number): string
+```
+
+Converts timestamps to compact relative strings: `"just now"`, `"5m ago"`, `"3h ago"`, `"2d ago"`, `"1w ago"`, `"3mo ago"`, `"1y ago"`. Used in both the results list (as a blue time tag) and the detail pane's "Last Visited" field.
+
+### Opening behavior
+
+`openHistoryEntry()` first checks if the URL is already open in the current window (`browser.tabs.query`). If found, switches to that tab. Otherwise creates a new tab.
+
+### Footer conventions
+
+| Mode | Footer |
+|------|--------|
+| `"detail"` | `j/k nav` \| `Tab list` \| `t tree (toggle)` \| `d remove` \| `Enter open` \| `Esc close` |
+| `"confirmDelete"` | `y / Enter confirm` \| `n / Esc cancel` |
+| `"tree"` (no pending) | `j/k nav` \| `Enter fold/open` \| `Esc / t back` |
+| `"tree"` (pending open) | `y / Enter confirm` \| `n / Esc cancel` |
+
+---
+
 ## Frecency Overlay — frecency-overlay.ts
 
 A simpler panel listing all open tabs sorted by frecency score. 403 lines with type-to-filter, DocumentFragment rendering, and class-swap navigation.
@@ -1897,6 +2163,118 @@ Arrow keys only swap classes. The DOM is not rebuilt. This eliminates the [frece
 
 ---
 
+## Help Overlay — help-overlay.ts
+
+708 lines implementing an interactive quick-reference overlay with fuzzy search, slash section-filters with pills, collapsible sections, and cursor navigation. Shows all keybindings organized into user-facing sections with live config reflection. Opened with `Alt+M`.
+
+### Manual section building
+
+Earlier iterations auto-generated sections from `ACTION_LABELS` and `SCOPE_LABELS` (exported from `keybindings.ts`), but this was replaced with manual `buildSections()` for full control over section order, naming, and content:
+
+```typescript
+function buildSections(config: KeybindingsConfig): HelpSection[] {
+  const g = config.bindings.global;
+  return [
+    { title: "Open Panels", items: [
+      { label: "Search Current Page", key: k(g.searchInPage) },
+      { label: "Tab Manager", key: k(g.openHarpoon) },
+      // ...
+    ]},
+    { title: "Vim Mode (optional)", items: [...] },
+    // ... 7 sections total
+  ];
+}
+```
+
+Sections still reflect live keybindings — `keyToDisplay()` converts the user's current config into display strings. The manual approach just controls which items appear where and what they're called (e.g. "Tab Manager" instead of "Harpoon", "Search Current Page" instead of "searchInPage").
+
+### FlatEntry model for unified navigation
+
+The overlay flattens all sections into a single `FlatEntry[]` array, where each entry is either a `"header"` (section title) or an `"item"` (keybinding row):
+
+```typescript
+interface FlatEntry {
+  type: "header" | "item";
+  sectionIndex: number;
+  itemIndex?: number;
+  label: string;
+  key?: string;
+  searchText: string;  // lowercase for matching
+}
+```
+
+This is the same pattern as `treeVisibleItems` in the bookmark/history overlays — flatten a hierarchical structure into a single array so cursor navigation is just index arithmetic. `activeIndex` is an index into this flat array, and `data-flat-index` attributes on DOM elements enable O(1) element lookup.
+
+### Fuzzy search with highlight
+
+Typing in the search input filters across all sections. `buildFuzzyPattern()` creates a regex that matches characters in order with gaps (same approach as frecency-overlay.ts). Sections with zero matching items are hidden entirely; the header is still shown if any child matches.
+
+`highlightMatch()` wraps matching characters in `<mark>` tags for visual feedback. This uses term-level matching (not character-level) — each whitespace-separated search term is highlighted independently.
+
+### Collapsible sections
+
+Each section can be folded/unfolded. State is tracked in a `Set<number>` of collapsed section indices. When collapsed:
+- The chevron rotates 90° (`transform: rotate(-90deg)` via CSS transition)
+- Child items get `display: none` via the `.collapsed` class
+- `buildFlat()` skips emitting child `FlatEntry` items for collapsed sections
+
+Enter on a header toggles the fold. This triggers a full `render()` because the flat array changes shape. Cursor movement within an expanded section is CSS-only (class swap, no re-render).
+
+### Tab switching between input and results
+
+Tab cycles focus between the search input and the results body. When the body is focused, the `"focused"` class is added to `.ht-help-body`, which changes the active highlight from blue tint to white tint — a visual cue for which pane has focus. j/k navigation (vim mode) is blocked while the input is focused, allowing normal typing.
+
+### Active highlight — CSS swap without re-render
+
+`updateActiveHighlight()` swaps the `.active` class between two elements using `data-flat-index` lookup:
+
+```typescript
+function updateActiveHighlight(newIndex: number): void {
+  const oldEl = body.querySelector(`[data-flat-index="${activeIndex}"]`);
+  if (oldEl) oldEl.classList.remove("active");
+  activeIndex = newIndex;
+  const newEl = body.querySelector(`[data-flat-index="${activeIndex}"]`);
+  if (newEl) { newEl.classList.add("active"); newEl.scrollIntoView({ block: "nearest" }); }
+}
+```
+
+This follows the same O(1) pattern used by all other overlays. Full `render()` only happens on search input changes or section fold/unfold — not on every cursor move.
+
+### Slash section-filters with pills
+
+Like the search overlay's `/code`, `/headings` filters and the bookmark overlay's `/folder`, `/file`, the help overlay supports slash filters that scope results to specific sections:
+
+```typescript
+const SECTION_FILTERS: Record<string, string> = {
+  "/panels": "Open Panels",
+  "/vim": "Vim Mode (optional)",
+  "/common": "Inside Any Panel",
+  "/tabs": "Tab Manager Panel",
+  "/bookmarks": "Bookmarks Panel",
+  "/history": "History Panel",
+  "/filters": "Search Filters — type in search input",
+};
+```
+
+`parseInput()` follows the same pattern as the search overlay — slash tokens at the start of the input are extracted as filters, the remainder becomes the fuzzy query. Typing `/tabs swap` shows only the Tab Manager Panel section, filtered to items matching "swap".
+
+Filter pills appear below the input (same CSS as search overlay pills). Clicking × on a pill removes that token from the input and re-triggers the input handler via `dispatchEvent(new Event("input"))`.
+
+Multiple filters combine as a union: `/tabs /bookmarks` shows both sections.
+
+### Two-row footer with mouse hints
+
+The help overlay is the only panel with explicit mouse interaction hints in the footer, since it serves as the reference for all panels:
+
+```
+Row 1: j/k (vim) ↑/↓ nav | click select | wheel scroll
+Row 2: Tab list | enter fold | Esc close
+```
+
+Row 1 covers all navigation methods (keyboard + mouse). Row 2 covers actions. This follows the convention order: nav → secondary → action → close.
+
+---
+
 ## Session Views — session-views.ts
 
 594 lines implementing four views: save session, session list, replace session picker, and standalone session restore (browser startup).
@@ -1941,8 +2319,8 @@ These run before the save attempt, so the user sees the error in the save input 
 
 ### Replace flow
 
-When saving at max capacity (3 sessions):
-1. `sessionSave()` returns `{ ok: false, reason: "Max 3 sessions" }`
+When saving at max capacity (4 sessions):
+1. `sessionSave()` returns `{ ok: false, reason: "Max 4 sessions" }`
 2. The handler switches to `replaceSession` view
 3. User picks a session to replace
 4. The old session is deleted, new one saved with the pending name
@@ -1976,7 +2354,7 @@ function escapeHtml(str: string): string {
 
 Uses the DOM-based `escapeHtml` (not the string-based version from helpers.ts). This is fine for the popup because:
 1. The popup renders once (no rapid keystroke re-rendering)
-2. The list is small (max 6 items)
+2. The list is small (max 4 items)
 3. The popup has its own HTML page with its own DOM, so element creation is cheap
 
 ### Why a separate escapeHtml?
@@ -2101,7 +2479,7 @@ The polyfill detects the runtime environment and wraps Chrome's callbacks to ret
 
 ### Chrome's 4-command limit
 
-Chrome MV3 allows only 4 entries in `manifest.commands`. Our MV3 manifest registers 3: `open-harpoon`, `harpoon-add`, `open-telescope-current`. Everything else (slot jumps 1-6, cycling, frecency, vim toggle) is handled by the content script's `keydown` listener.
+Chrome MV3 allows only 4 entries in `manifest.commands`. Our MV3 manifest registers 3: `open-harpoon`, `harpoon-add`, `open-telescope-current`. Everything else (slot jumps 1-4, cycling, frecency, bookmarks, history, vim toggle) is handled by the content script's `keydown` listener.
 
 On Firefox (all 8+ commands registered), `browser.commands.onCommand` intercepts the key event before it reaches the page's DOM. The content script's `keydown` handler never sees these keys. No double-firing.
 
@@ -2141,6 +2519,10 @@ On Firefox (all 8+ commands registered), `browser.commands.onCommand` intercepts
 | `will-change` for GPU | Backdrop blur | Hardware-accelerated compositing |
 | String-based escapeHtml | helpers.ts | Avoids DOM allocation per call |
 | WeakRef for DOM nodes | TaggedLine.nodeRef | Allows GC of detached nodes |
+| Virtual scrolling | Bookmark/history results | Renders ~25 items instead of full bookmark/history list |
+| Element pool | Bookmark/history result items | Reuses DOM elements across scroll and filter updates |
+| Tree cursor CSS swap | Bookmark/history tree views | O(1) cursor movement without tree re-render |
+| rAF detail throttle | Bookmark/history detail pane | Coalesces rapid selection changes to one detail update per frame |
 
 ---
 
@@ -2154,14 +2536,14 @@ All persistent state follows this flow:
 browser.storage.local.get() → in-memory variable → mutate → browser.storage.local.set()
 ```
 
-No Redux, no state machines, no pub/sub. The state is small (6 harpoon entries, 50 frecency entries, 3 sessions, 1 config object) and mutations are infrequent (user actions, not continuous streams).
+No Redux, no state machines, no pub/sub. The state is small (4 harpoon entries, 50 frecency entries, 4 sessions, 1 config object) and mutations are infrequent (user actions, not continuous streams).
 
 ### Storage keys
 
 | Key | Type | Module |
 |-----|------|--------|
 | `"harpoonList"` | `HarpoonEntry[]` | background.ts |
-| `"harpoonSessions"` | `HarpoonSession[]` (max 3) | sessions.ts |
+| `"harpoonSessions"` | `HarpoonSession[]` (max 4) | sessions.ts |
 | `"frecencyData"` | `FrecencyEntry[]` (max 50) | frecency.ts |
 | `"keybindings"` | `KeybindingsConfig` | keybindings.ts |
 
@@ -2245,7 +2627,7 @@ container.innerHTML = html;
 ```
 
 Destroys and recreates all children. Fine because:
-- Max 6 items
+- Max 4 items
 - No input elements to preserve
 - Renders only on explicit user action
 
@@ -2285,6 +2667,126 @@ innerHTML → Fragment → Class swap → Virtual scroll
 ```
 
 Always choose the simplest approach that meets performance needs.
+
+---
+
+## Tree Navigation Pattern
+
+Both the bookmark and history overlays implement a tree view in the detail pane. The pattern is identical in structure, differing only in what serves as the top-level nodes (folders vs time buckets) and the entry data types. This section documents the shared architecture.
+
+### Flat visible items array
+
+The tree is not rendered from a recursive data structure. Instead, it's flattened into a single array:
+
+```typescript
+let treeVisibleItems: { type: "folder" | "entry"; id: string }[] = [];  // bookmarks
+let treeVisibleItems: { type: "bucket" | "entry"; id: string }[] = [];  // history
+```
+
+This array is rebuilt on every `renderTreeView()` call. It represents exactly the rows currently visible in the tree (collapsed children are excluded). Its indices correspond 1:1 to `data-tree-idx` attributes on DOM elements.
+
+**Why flat?** Cursor navigation becomes trivial — increment or decrement an index into a flat array. No need to traverse a tree structure to find the "next visible node."
+
+### Collapsed state
+
+```typescript
+let treeCollapsed = new Set<string>();
+```
+
+A set of IDs (folder IDs for bookmarks, bucket label strings for history). When a node's ID is in this set, its children are not emitted to `treeVisibleItems` during `renderTreeView()`.
+
+**Reset on re-entry:** When toggling tree off and back on (`Escape`/`t` → `t`), `treeCollapsed` is cleared. All nodes start expanded. This is a deliberate UX choice — collapsed state is ephemeral.
+
+### Cursor movement — CSS swap without re-render
+
+```typescript
+function moveTreeCursor(delta: number): void {
+  const newIdx = Math.max(0, Math.min(treeCursorIndex + delta, treeVisibleItems.length - 1));
+  if (newIdx === treeCursorIndex) return;
+  const oldEl = detailContent.querySelector(`[data-tree-idx="${treeCursorIndex}"]`);
+  const newEl = detailContent.querySelector(`[data-tree-idx="${newIdx}"]`);
+  if (oldEl) oldEl.classList.remove("tree-cursor");
+  if (newEl) {
+    newEl.classList.add("tree-cursor");
+    newEl.scrollIntoView({ block: "nearest" });
+  }
+  treeCursorIndex = newIdx;
+}
+```
+
+This is the key performance optimization: j/k navigation only swaps CSS classes on two elements. No `innerHTML`, no `renderTreeView()`, no `treeVisibleItems` rebuild. The DOM stays intact.
+
+### Collapse/expand — full re-render
+
+```typescript
+function toggleTreeCollapse(id: string): void {
+  if (treeCollapsed.has(id)) treeCollapsed.delete(id);
+  else treeCollapsed.add(id);
+  renderTreeView();
+}
+```
+
+Toggling collapse changes the visible items list (children appear/disappear), so a full re-render is required. `renderTreeView()` rebuilds `treeVisibleItems`, regenerates HTML, and re-applies the cursor.
+
+### `renderTreeView()` — building HTML from flat iteration
+
+The render function iterates over the top-level nodes (folders or buckets), and for each:
+
+1. Pushes `{ type: "folder"/"bucket", id }` to `treeVisibleItems`
+2. Emits an HTML div with: collapse arrow (`▶` if collapsed, `▼` if expanded), icon, title, child count
+3. If the node is NOT in `treeCollapsed`:
+   - For each child entry: pushes `{ type: "entry", id }` to `treeVisibleItems`
+   - Emits an HTML div with: icon, title, domain
+
+The `data-tree-idx` attribute on each div matches the index in `treeVisibleItems`, enabling direct element lookup during cursor movement.
+
+### Open confirmation as tree sub-state
+
+Both overlays implement the same pattern:
+
+```typescript
+let pendingTreeOpenEntry: EntryType | null = null;
+```
+
+When the user presses `Enter` on an entry (or double-clicks), `pendingTreeOpenEntry` is set. The keyboard handler checks this **first** in the tree-mode block, creating a priority sub-state:
+
+```typescript
+if (pendingTreeOpenEntry) {
+  if (key === "y" || key === "Enter") { open(pendingTreeOpenEntry); return; }
+  if (key === "n" || key === "Escape") { pendingTreeOpenEntry = null; renderTreeView(); return; }
+  return; // swallow all other keys
+}
+// Normal tree navigation...
+```
+
+The confirmation dialog replaces the detail content with the entry title and a y/n hint. The footer also updates to show confirmation-specific hints.
+
+### Click handler — preserving DOM for dblclick
+
+The tree click handler distinguishes three cases:
+
+1. **Click on folder/bucket**: calls `toggleTreeCollapse()` (full re-render). Safe because folders don't have a dblclick action.
+2. **Click on entry**: CSS-only cursor swap. Crucially, this does NOT call `renderTreeView()`, preserving the DOM elements so a dblclick event can fire on the same target.
+3. **Dblclick on entry**: sets `pendingTreeOpenEntry`, shows open confirmation.
+
+If single-click on an entry triggered a re-render (rebuilding `innerHTML`), the DOM element would be destroyed between the first and second click. The browser would not fire `dblclick` because the original target element no longer exists.
+
+This is a general principle: **any click handler that coexists with dblclick on the same element must avoid DOM replacement.**
+
+### `data-tree-idx` attribute indexing
+
+Every tree node div has `data-tree-idx="${index}"` where `index` matches its position in `treeVisibleItems`. This enables:
+- `moveTreeCursor()` to find elements by index without iterating children
+- Click handlers to look up `treeVisibleItems[idx]` for type checking (`"folder"` vs `"entry"`)
+- Initial cursor placement to find the element matching the currently-selected left-pane item
+
+### Dynamic footer updates
+
+The footer changes for three states within tree mode:
+1. **Normal navigation**: `j/k nav | Enter fold/open | Esc / t back`
+2. **Open confirmation**: `y / Enter confirm | n / Esc cancel`
+
+The footer is rebuilt by `updateFooter()` which checks both `detailMode` and `pendingTreeOpenEntry` to determine the correct hint text.
 
 ---
 
@@ -2415,3 +2917,19 @@ Pass state accessor objects (like `HarpoonState`) instead of importing globals. 
 ### 18. Debounced Storage Writes
 
 Coalesce rapid mutations (SPA URL changes, typing) into single storage writes.
+
+### 19. Tree Navigation with Flat Visible Items
+
+Flatten a hierarchical tree into a `treeVisibleItems` array. Cursor is an index into this array. Collapse/expand rebuilds the array; cursor movement just swaps CSS classes. Applicable to any tree UI (file explorers, nested menus, org charts).
+
+### 20. Open Confirmation Sub-state
+
+Nest a confirmation dialog inside an existing mode by setting a pending entry variable. Check it first in the keyboard handler. Avoids adding a new top-level mode for a transient interaction.
+
+### 21. Dblclick-Safe Click Handlers
+
+When single-click and dblclick coexist on the same element, the single-click handler must not replace DOM (via `innerHTML` or full re-render). Use CSS class manipulation instead. The browser only fires `dblclick` if both clicks hit the same DOM element.
+
+### 22. Multi-Step Wizard State Machine
+
+Chain steps (`chooseType → chooseDest → nameInput`) with `Escape` going back one step. Share navigation logic between steps with identical key handling. Only create step-specific blocks for steps with unique input (like a text field).

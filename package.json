@@ -4,12 +4,12 @@
   "private": true,
   "description": "Harpoon + Telescope inspired Firefox extension",
   "scripts": {
-    "build": "node build.mjs",
-    "build:firefox": "node build.mjs --target firefox",
-    "build:chrome": "node build.mjs --target chrome",
-    "watch": "node build.mjs --watch",
-    "watch:firefox": "node build.mjs --watch --target firefox",
-    "watch:chrome": "node build.mjs --watch --target chrome",
+    "build": "node esBuildConfig/build.mjs",
+    "build:firefox": "node esBuildConfig/build.mjs --target firefox",
+    "build:chrome": "node esBuildConfig/build.mjs --target chrome",
+    "watch": "node esBuildConfig/build.mjs --watch",
+    "watch:firefox": "node esBuildConfig/build.mjs --watch --target firefox",
+    "watch:chrome": "node esBuildConfig/build.mjs --watch --target chrome",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },

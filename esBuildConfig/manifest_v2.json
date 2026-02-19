@@ -1,0 +1,72 @@
+{
+  "manifest_version": 2,
+  "name": "Harpoon Telescope",
+  "version": "2.0.0",
+  "description": "Harpoon + Telescope inspired browser extension — grep tabs, live preview, vim motions, and anchor up to 4 tabs with scroll memory.",
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "storage",
+    "bookmarks",
+    "history",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["browserBackgroundProcess.js"],
+    "persistent": false
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["contentScript.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "open-tab-manager": {
+      "suggested_key": { "default": "Alt+T" },
+      "description": "Open Tab Manager panel"
+    },
+    "tab-manager-add": {
+      "suggested_key": { "default": "Alt+A" },
+      "description": "Add current tab to Tab Manager"
+    },
+    "tab-manager-tab-1": {
+      "suggested_key": { "default": "Alt+1" },
+      "description": "Jump to Tab Manager slot 1"
+    },
+    "tab-manager-tab-2": {
+      "suggested_key": { "default": "Alt+2" },
+      "description": "Jump to Tab Manager slot 2"
+    },
+    "tab-manager-tab-3": {
+      "suggested_key": { "default": "Alt+3" },
+      "description": "Jump to Tab Manager slot 3"
+    },
+    "tab-manager-tab-4": {
+      "suggested_key": { "default": "Alt+4" },
+      "description": "Jump to Tab Manager slot 4"
+    },
+    "open-search-current": {
+      "suggested_key": { "default": "Alt+F" },
+      "description": "Search in current tab"
+    }
+  },
+  "options_ui": {
+    "page": "extensionSettingsPage/extensionSettingsPage.html",
+    "open_in_tab": true
+  },
+  "browser_action": {
+    "default_icon": {
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png"
+    },
+    "default_popup": "toolBarPopUp/toolBarPopUp.html",
+    "default_title": "Harpoon Telescope"
+  },
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  }
+}

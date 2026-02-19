@@ -1,0 +1,27 @@
+.ht-session-restore-container {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 380px; background: #1e1e1e; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px; overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  display: flex; flex-direction: column;
+}
+.ht-session-restore-list { max-height: 260px; overflow-y: auto; }
+.ht-session-restore-item {
+  display: flex; align-items: center; padding: 8px 14px; gap: 10px;
+  cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.1s; user-select: none;
+}
+.ht-session-restore-item:hover { background: rgba(255,255,255,0.06); }
+.ht-session-restore-item.active {
+  background: rgba(10,132,255,0.15); border-left: 2px solid #0a84ff;
+}
+.ht-session-restore-name {
+  flex: 1; font-size: 12px; color: #e0e0e0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ht-session-restore-meta {
+  font-size: 10px; color: #808080; flex-shrink: 0;
+}
+.ht-session-restore-empty {
+  padding: 24px; text-align: center; color: #808080; font-size: 12px;
+}

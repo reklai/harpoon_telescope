@@ -69,6 +69,24 @@ interface FrecencyEntry {
   frecencyScore: number;
 }
 
+// Browser bookmark entry for the bookmarks overlay
+interface BookmarkEntry {
+  id: string;
+  url: string;
+  title: string;
+  dateAdded?: number;      // timestamp when bookmark was created
+  parentId?: string;       // folder ID the bookmark belongs to
+  parentTitle?: string;    // folder name the bookmark belongs to
+  folderPath?: string;     // full path: "Bookmarks Menu › Work › Projects"
+  usageScore?: number;     // computed from bookmark usage tracking
+}
+
+// Bookmark usage tracking data (persisted per URL)
+interface BookmarkUsage {
+  visitCount: number;
+  lastVisit: number;  // timestamp
+}
+
 // Saved harpoon session (detach/attach)
 interface HarpoonSessionEntry {
   url: string;
@@ -81,4 +99,12 @@ interface HarpoonSession {
   name: string;
   entries: HarpoonSessionEntry[];
   savedAt: number;  // timestamp
+}
+
+// Browser history entry for the history overlay
+interface HistoryEntry {
+  url: string;
+  title: string;
+  lastVisitTime: number;
+  visitCount: number;
 }

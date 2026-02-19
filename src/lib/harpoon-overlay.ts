@@ -1,5 +1,5 @@
-// Harpoon overlay panel — curated list of up to 6 tabs with scroll memory.
-// Supports keyboard nav (arrows, vim j/k), number keys 1-6 to jump,
+// Harpoon overlay panel — curated list of up to 4 tabs with scroll memory.
+// Supports keyboard nav (arrows, vim j/k), number keys 1-4 to jump,
 // "w" key to enter swap mode, "d" to delete, "s" to save session, "l" to load session.
 
 import browser from "webextension-polyfill";
@@ -227,7 +227,7 @@ export async function openHarpoonOverlay(
       const closeKey = keyToDisplay(config.bindings.harpoon.close.key);
 
       html += `<div class="ht-footer-row">`;
-      html += `<span>${moveUpKey}/${moveDownKey} j/k move</span>`;
+      html += `<span>j/k (vim) ${moveUpKey}/${moveDownKey} nav</span>`;
       html += `<span>${jumpKey} jump</span>`;
       html += `<span>${removeKey} del</span>`;
       html += `<span class="${swapMode ? "ht-footer-hint-active" : ""}">${swapKey} swap</span>`;
@@ -399,7 +399,7 @@ export async function openHarpoonOverlay(
 
       // -- Harpoon mode key handling --
 
-      // Number keys 1-6: instant jump to slot
+      // Number keys 1-4: instant jump to slot
       if (!e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
         const num = parseInt(e.key);
         if (num >= 1 && num <= MAX_HARPOON_SLOTS) {

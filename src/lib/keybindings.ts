@@ -3,24 +3,25 @@
 
 import browser from "webextension-polyfill";
 
-export const MAX_HARPOON_SLOTS = 6;
+export const MAX_HARPOON_SLOTS = 4;
 
 export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
   navigationMode: "basic",
   bindings: {
     global: {
-      openHarpoon:    { key: "Alt+M",       default: "Alt+M"       },
-      addTab:         { key: "Alt+A",       default: "Alt+A"       },
+      openHarpoon:    { key: "Alt+T",       default: "Alt+T"       },
+      addTab:         { key: "Alt+Shift+T", default: "Alt+Shift+T" },
       jumpSlot1:      { key: "Alt+1",       default: "Alt+1"       },
       jumpSlot2:      { key: "Alt+2",       default: "Alt+2"       },
       jumpSlot3:      { key: "Alt+3",       default: "Alt+3"       },
       jumpSlot4:      { key: "Alt+4",       default: "Alt+4"       },
-      jumpSlot5:      { key: "Alt+5",       default: "Alt+5"       },
-      jumpSlot6:      { key: "Alt+6",       default: "Alt+6"       },
       cyclePrev:      { key: "Alt+-",       default: "Alt+-"       },
       cycleNext:      { key: "Alt+=",       default: "Alt+="       },
       searchInPage:   { key: "Alt+F",       default: "Alt+F"       },
-      openFrecency:   { key: "Alt+Y",       default: "Alt+Y"       },
+      openFrecency:   { key: "Alt+Shift+F", default: "Alt+Shift+F" },
+      openBookmarks:  { key: "Alt+B",       default: "Alt+B"       },
+      addBookmark:    { key: "Alt+Shift+B", default: "Alt+Shift+B" },
+      openHistory:    { key: "Alt+Y",       default: "Alt+Y"       },
       toggleVim:      { key: "Alt+V",       default: "Alt+V"       },
     },
     harpoon: {
@@ -64,12 +65,13 @@ export const ACTION_LABELS: Record<string, Record<string, string>> = {
     jumpSlot2:    "Jump to slot 2",
     jumpSlot3:    "Jump to slot 3",
     jumpSlot4:    "Jump to slot 4",
-    jumpSlot5:    "Jump to slot 5",
-    jumpSlot6:    "Jump to slot 6",
     cyclePrev:    "Cycle to previous slot",
     cycleNext:    "Cycle to next slot",
     searchInPage: "Search in Page",
     openFrecency: "Frecency tab list",
+    openBookmarks: "Bookmarks list",
+    addBookmark:   "Add bookmark",
+    openHistory:   "History search",
     toggleVim:    "Toggle vim motions",
   },
   harpoon: {

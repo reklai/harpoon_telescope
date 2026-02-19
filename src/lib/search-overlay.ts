@@ -116,6 +116,10 @@ export async function openTelescope(
         background: rgba(10,132,255,0.15); color: #fff;
         border-left: 2px solid #0a84ff;
       }
+      .ht-results-pane.focused .ht-result-item.active {
+        background: rgba(255,255,255,0.13);
+        border-left: 2px solid #fff;
+      }
       .ht-result-tag {
         font-size: 9px; padding: 1px 4px; border-radius: 3px;
         font-weight: 600; flex-shrink: 0; letter-spacing: 0.3px;
@@ -270,9 +274,9 @@ export async function openTelescope(
     const closeKey = keyToDisplay(config.bindings.search.close.key);
     footer.innerHTML = `
       <div class="ht-footer-row">
-        <span>${upKey}/${downKey} j/k move</span>
-        <span>${acceptKey} jump</span>
+        <span>j/k (vim) ${upKey}/${downKey} nav</span>
         <span>${switchKey} list</span>
+        <span>${acceptKey} jump</span>
         <span>${closeKey} close</span>
       </div>
     `;
@@ -300,6 +304,11 @@ export async function openTelescope(
     let activeFilters: SearchFilter[] = [];
     let activeItemEl: HTMLElement | null = null; // direct ref, no querySelector
     let focusedPane: "input" | "results" = "input"; // tracks which pane has focus
+
+    function setFocusedPane(pane: "input" | "results"): void {
+      focusedPane = pane;
+      resultsPane.classList.toggle("focused", pane === "results");
+    }
 
     // rAF throttle for preview updates
     let previewRafId: number | null = null;
@@ -668,8 +677,8 @@ export async function openTelescope(
     backdrop.addEventListener("mousedown", (e) => e.preventDefault());
 
     // Sync focusedPane on mouse clicks
-    input.addEventListener("focus", () => { focusedPane = "input"; });
-    resultsList.addEventListener("focus", () => { focusedPane = "results"; }, true);
+    input.addEventListener("focus", () => { setFocusedPane("input"); });
+    resultsList.addEventListener("focus", () => { setFocusedPane("results"); }, true);
 
     // -- Search input --
 
@@ -766,10 +775,10 @@ export async function openTelescope(
             const first = resultsList.querySelector(".ht-result-item") as HTMLElement;
             if (first) first.focus();
           }
-          focusedPane = "results";
+          setFocusedPane("results");
         } else {
           input.focus();
-          focusedPane = "input";
+          setFocusedPane("input");
         }
         return;
       }

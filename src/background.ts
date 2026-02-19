@@ -327,6 +327,153 @@ async function getPageContent(
   }
 }
 
+// -- Bookmarks --
+
+// Bookmark usage tracking — persists visit counts per URL across sessions
+let bookmarkUsageMap: Record<string, BookmarkUsage> = {};
+let bookmarkUsageLoaded = false;
+
+async function ensureBookmarkUsageLoaded(): Promise<void> {
+  if (!bookmarkUsageLoaded) {
+    const data = await browser.storage.local.get("bookmarkUsage");
+    bookmarkUsageMap = (data.bookmarkUsage as Record<string, BookmarkUsage>) || {};
+    bookmarkUsageLoaded = true;
+  }
+}
+
+async function saveBookmarkUsage(): Promise<void> {
+  await browser.storage.local.set({ bookmarkUsage: bookmarkUsageMap });
+}
+
+/** Compute usage score: visitCount weighted by recency (Mozilla-style buckets) */
+function computeBookmarkUsageScore(usage: BookmarkUsage): number {
+  if (!usage) return 0;
+  const ageMs = Date.now() - usage.lastVisit;
+  const ageMin = ageMs / 60000;
+  let weight: number;
+  if (ageMin < 240) weight = 100;         // < 4 hours
+  else if (ageMin < 1440) weight = 70;    // < 1 day
+  else if (ageMin < 10080) weight = 50;   // < 1 week
+  else if (ageMin < 43200) weight = 30;   // < 1 month
+  else weight = 10;
+  return Math.round(usage.visitCount * weight);
+}
+
+async function recordBookmarkVisit(url: string): Promise<void> {
+  await ensureBookmarkUsageLoaded();
+  const existing = bookmarkUsageMap[url];
+  if (existing) {
+    existing.visitCount++;
+    existing.lastVisit = Date.now();
+  } else {
+    bookmarkUsageMap[url] = { visitCount: 1, lastVisit: Date.now() };
+  }
+  await saveBookmarkUsage();
+}
+
+/** Recursively collect all bookmark entries (not folders/separators) */
+async function getBookmarkList(): Promise<BookmarkEntry[]> {
+  await ensureBookmarkUsageLoaded();
+  const tree = await browser.bookmarks.getTree();
+  const results: BookmarkEntry[] = [];
+
+  function walk(
+    nodes: browser.Bookmarks.BookmarkTreeNode[],
+    parentTitle?: string,
+    parentPath?: string,
+    parentId?: string,
+  ): void {
+    for (const node of nodes) {
+      if (node.url) {
+        const usage = bookmarkUsageMap[node.url];
+        results.push({
+          id: node.id,
+          url: node.url,
+          title: node.title || "",
+          dateAdded: node.dateAdded,
+          parentId: parentId,
+          parentTitle: parentTitle,
+          folderPath: parentPath,
+          usageScore: usage ? computeBookmarkUsageScore(usage) : 0,
+        });
+      }
+      if (node.children) {
+        const newTitle = node.title || parentTitle;
+        const newPath = node.title
+          ? (parentPath ? parentPath + " \u203a " + node.title : node.title)
+          : parentPath;
+        walk(node.children, newTitle, newPath, node.id);
+      }
+    }
+  }
+
+  walk(tree);
+  // Sort by usage score first, then by date added for unvisited
+  results.sort((a, b) => {
+    if ((a.usageScore || 0) !== (b.usageScore || 0)) {
+      return (b.usageScore || 0) - (a.usageScore || 0);
+    }
+    return (b.dateAdded || 0) - (a.dateAdded || 0);
+  });
+  return results;
+}
+
+/** Recursively collect bookmark folders for the folder picker UI */
+interface BookmarkFolder {
+  id: string;
+  title: string;
+  depth: number;
+  children: BookmarkFolder[];
+}
+
+async function getBookmarkFolders(): Promise<BookmarkFolder[]> {
+  const tree = await browser.bookmarks.getTree();
+  const folders: BookmarkFolder[] = [];
+
+  function walk(nodes: browser.Bookmarks.BookmarkTreeNode[], depth: number): void {
+    for (const node of nodes) {
+      // A folder has children array and no url
+      if (!node.url && node.children) {
+        const folder: BookmarkFolder = {
+          id: node.id,
+          title: node.title || "(root)",
+          depth,
+          children: [],
+        };
+        // Recurse into sub-folders
+        const subFolders: BookmarkFolder[] = [];
+        for (const child of node.children) {
+          if (!child.url && child.children) {
+            walkInto(child, depth + 1, subFolders);
+          }
+        }
+        folder.children = subFolders;
+        folders.push(folder);
+      }
+    }
+  }
+
+  function walkInto(node: browser.Bookmarks.BookmarkTreeNode, depth: number, target: BookmarkFolder[]): void {
+    const folder: BookmarkFolder = {
+      id: node.id,
+      title: node.title || "(unnamed)",
+      depth,
+      children: [],
+    };
+    if (node.children) {
+      for (const child of node.children) {
+        if (!child.url && child.children) {
+          walkInto(child, depth + 1, folder.children);
+        }
+      }
+    }
+    target.push(folder);
+  }
+
+  walk(tree, 0);
+  return folders;
+}
+
 // -- Command Handlers --
 
 browser.commands.onCommand.addListener(async (command: string) => {
@@ -365,12 +512,6 @@ browser.commands.onCommand.addListener(async (command: string) => {
       break;
     case "harpoon-tab-4":
       await harpoonJump(4);
-      break;
-    case "harpoon-tab-5":
-      await harpoonJump(5);
-      break;
-    case "harpoon-tab-6":
-      await harpoonJump(6);
       break;
   }
 });
@@ -453,6 +594,101 @@ browser.runtime.onMessage.addListener(
         return { ok: true };
       case "FRECENCY_LIST":
         return await getFrecencyList();
+      case "BOOKMARK_LIST":
+        return await getBookmarkList();
+      case "HISTORY_LIST": {
+        const maxResults = (m.maxResults as number) || 500;
+        const text = (m.text as string) || "";
+        const items = await browser.history.search({
+          text,
+          maxResults,
+          startTime: 0,
+        });
+        const entries: HistoryEntry[] = items
+          .filter((item) => item.url)
+          .map((item) => ({
+            url: item.url!,
+            title: item.title || "",
+            lastVisitTime: item.lastVisitTime || 0,
+            visitCount: item.visitCount || 0,
+          }));
+        // Sort by last visit time (most recent first)
+        entries.sort((a, b) => b.lastVisitTime - a.lastVisitTime);
+        return entries;
+      }
+      case "OPEN_BOOKMARK_TAB": {
+        const url = m.url as string;
+        try {
+          // Check if URL is already open in current window — switch to it
+          const tabs = await browser.tabs.query({ currentWindow: true });
+          const existing = tabs.find((t) => t.url === url);
+          if (existing && existing.id) {
+            await browser.tabs.update(existing.id, { active: true });
+          } else {
+            await browser.tabs.create({ url, active: true });
+          }
+          await recordBookmarkVisit(url);
+        } catch (_) {}
+        return { ok: true };
+      }
+      case "BOOKMARK_ADD": {
+        const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+        if (!tab?.url) return { ok: false, reason: "No active tab" };
+        try {
+          const opts: browser.Bookmarks.CreateDetails = {
+            url: tab.url,
+            title: tab.title || tab.url,
+          };
+          // Optional folder placement — if parentId is provided, save into that folder
+          if (m.parentId) {
+            opts.parentId = m.parentId as string;
+          }
+          const created = await browser.bookmarks.create(opts);
+          return { ok: true, id: created.id, title: tab.title };
+        } catch (_) {
+          return { ok: false, reason: "Failed to create bookmark" };
+        }
+      }
+      case "BOOKMARK_REMOVE": {
+        try {
+          await browser.bookmarks.remove(m.id as string);
+          // Clean up usage data for removed bookmark
+          if (m.url) {
+            await ensureBookmarkUsageLoaded();
+            delete bookmarkUsageMap[m.url as string];
+            await saveBookmarkUsage();
+          }
+          return { ok: true };
+        } catch (_) {
+          return { ok: false, reason: "Failed to remove bookmark" };
+        }
+      }
+      case "BOOKMARK_FOLDERS":
+        return await getBookmarkFolders();
+      case "BOOKMARK_CREATE_FOLDER": {
+        try {
+          const opts: browser.Bookmarks.CreateDetails = {
+            title: m.title as string,
+          };
+          if (m.parentId) {
+            opts.parentId = m.parentId as string;
+          }
+          await browser.bookmarks.create(opts);
+          return { ok: true, title: m.title };
+        } catch (_) {
+          return { ok: false, reason: "Failed to create folder" };
+        }
+      }
+      case "BOOKMARK_MOVE": {
+        try {
+          const dest: { parentId?: string; index?: number } = {};
+          if (m.parentId) dest.parentId = m.parentId as string;
+          await browser.bookmarks.move(m.id as string, dest);
+          return { ok: true };
+        } catch (_) {
+          return { ok: false, reason: "Failed to move bookmark" };
+        }
+      }
       case "SESSION_SAVE":
         return await sessionSave(harpoonState, m.name as string);
       case "SESSION_LIST":

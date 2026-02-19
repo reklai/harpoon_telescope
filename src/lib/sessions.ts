@@ -38,8 +38,8 @@ export async function sessionSave(
   if (nameTaken) {
     return { ok: false, reason: `"${name}" already exists` };
   }
-  if (sessions.length >= 3) {
-    return { ok: false, reason: "Max 3 sessions — delete one first" };
+  if (sessions.length >= 4) {
+    return { ok: false, reason: "Max 4 sessions — delete one first" };
   }
   sessions.push(session);
   await browser.storage.local.set({ harpoonSessions: sessions });

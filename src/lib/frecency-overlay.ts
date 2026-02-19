@@ -71,6 +71,9 @@ export async function openFrecencyOverlay(
       .ht-frecency-item.active {
         background: rgba(10,132,255,0.15); border-left: 2px solid #0a84ff;
       }
+      .ht-frecency-list.focused .ht-frecency-item.active {
+        background: rgba(255,255,255,0.13); border-left: 2px solid #fff;
+      }
       .ht-frecency-score {
         font-size: 10px; color: #808080; min-width: 36px; text-align: right;
         flex-shrink: 0;
@@ -109,7 +112,7 @@ export async function openFrecencyOverlay(
       <div class="ht-traffic-lights">
         <button class="ht-dot ht-dot-close" title="Close (Esc)"></button>
       </div>
-      <span class="ht-titlebar-text">Frequency Tabs</span>
+      <span class="ht-titlebar-text">Search Open Tabs</span>
       ${vimBadgeHtml(config)}`;
     panel.appendChild(titlebar);
 
@@ -135,7 +138,7 @@ export async function openFrecencyOverlay(
     const footer = document.createElement("div");
     footer.className = "ht-footer";
     footer.innerHTML = `<div class="ht-footer-row">
-      <span>${upKey}/${downKey} j/k move</span>
+      <span>j/k (vim) ${upKey}/${downKey} nav</span>
       <span>${switchKey} list</span>
       <span>${acceptKey} jump</span>
       <span>${closeKey} close</span>
@@ -219,8 +222,8 @@ export async function openFrecencyOverlay(
     /** Full rebuild of the results list (called when filtered data changes) */
     function renderList(): void {
       titleText.textContent = query
-        ? `Frequency Tabs (${filtered.length})`
-        : "Frequency Tabs";
+        ? `Search Open Tabs (${filtered.length})`
+        : "Search Open Tabs";
 
       if (filtered.length === 0) {
         cancelAnimationFrame(renderRafId);
@@ -339,8 +342,10 @@ export async function openFrecencyOverlay(
             const first = listEl.querySelector(".ht-frecency-item") as HTMLElement;
             if (first) first.focus();
           }
+          listEl.classList.add("focused");
         } else {
           input.focus();
+          listEl.classList.remove("focused");
         }
         return;
       }
@@ -380,6 +385,22 @@ export async function openFrecencyOverlay(
     backdrop.addEventListener("mousedown", (e) => e.preventDefault());
     titlebar.querySelector(".ht-dot-close")!.addEventListener("click", close);
     listEl.addEventListener("click", onListClick);
+
+    // Mouse wheel on results list: navigate items, block page scroll
+    listEl.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (filtered.length === 0) return;
+      if (e.deltaY > 0) {
+        updateActiveHighlight(Math.min(activeIndex + 1, filtered.length - 1));
+      } else {
+        updateActiveHighlight(Math.max(activeIndex - 1, 0));
+      }
+    });
+
+    // Sync focused state on mouse clicks
+    input.addEventListener("focus", () => { listEl.classList.remove("focused"); });
+    listEl.addEventListener("focus", () => { listEl.classList.add("focused"); }, true);
 
     input.addEventListener("input", () => {
       query = input.value;

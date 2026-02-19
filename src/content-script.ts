@@ -11,6 +11,8 @@ import { showFeedback } from "./lib/feedback";
 import { openHarpoonOverlay } from "./lib/harpoon-overlay";
 import { openTelescope } from "./lib/search-overlay";
 import { openFrecencyOverlay } from "./lib/frecency-overlay";
+import { openBookmarkOverlay, openAddBookmarkOverlay } from "./lib/bookmark-overlay";
+import { openHistoryOverlay } from "./lib/history-overlay";
 import { openSessionRestoreOverlay } from "./lib/session-views";
 
 // Extend Window to track injection state
@@ -98,14 +100,6 @@ declare global {
       e.preventDefault();
       e.stopPropagation();
       browser.runtime.sendMessage({ type: "HARPOON_JUMP", slot: 4 });
-    } else if (matchesAction(e, config, "global", "jumpSlot5")) {
-      e.preventDefault();
-      e.stopPropagation();
-      browser.runtime.sendMessage({ type: "HARPOON_JUMP", slot: 5 });
-    } else if (matchesAction(e, config, "global", "jumpSlot6")) {
-      e.preventDefault();
-      e.stopPropagation();
-      browser.runtime.sendMessage({ type: "HARPOON_JUMP", slot: 6 });
     } else if (matchesAction(e, config, "global", "cyclePrev")) {
       e.preventDefault();
       e.stopPropagation();
@@ -122,6 +116,18 @@ declare global {
       e.preventDefault();
       e.stopPropagation();
       openFrecencyOverlay(config);
+    } else if (matchesAction(e, config, "global", "openBookmarks")) {
+      e.preventDefault();
+      e.stopPropagation();
+      openBookmarkOverlay(config);
+    } else if (matchesAction(e, config, "global", "addBookmark")) {
+      e.preventDefault();
+      e.stopPropagation();
+      openAddBookmarkOverlay(config);
+    } else if (matchesAction(e, config, "global", "openHistory")) {
+      e.preventDefault();
+      e.stopPropagation();
+      openHistoryOverlay(config);
     }
   }
 
@@ -151,6 +157,12 @@ declare global {
         return Promise.resolve({ ok: true });
       case "OPEN_FRECENCY":
         getConfig().then((config) => openFrecencyOverlay(config));
+        return Promise.resolve({ ok: true });
+      case "OPEN_BOOKMARKS":
+        getConfig().then((config) => openBookmarkOverlay(config));
+        return Promise.resolve({ ok: true });
+      case "OPEN_HISTORY":
+        getConfig().then((config) => openHistoryOverlay(config));
         return Promise.resolve({ ok: true });
       case "SHOW_SESSION_RESTORE":
         openSessionRestoreOverlay();

@@ -111,7 +111,7 @@ export function renderSessionList(ctx: SessionContext): void {
 
   html += `</div><div class="ht-footer">
     <div class="ht-footer-row">
-      <span>${moveUpKey}/${moveDownKey} j/k move</span>
+      <span>j/k (vim) ${moveUpKey}/${moveDownKey} nav</span>
       <span>Enter load</span>
       <span>${removeKey} del</span>
       <span>Esc back</span>
@@ -182,8 +182,8 @@ export function renderReplaceSession(ctx: SessionContext): void {
 
   html += `</div><div class="ht-footer">
     <div class="ht-footer-row">
-      <span>\u2191/\u2193 move</span>
-      <span>Enter replace</span>
+      <span>\u2191/\u2193 nav</span>
+       <span>Enter replace</span>
       <span>Esc back</span>
     </div>
   </div></div>`;
@@ -511,8 +511,8 @@ export async function openSessionRestoreOverlay(): Promise<void> {
       html += `</div>
         <div class="ht-footer">
           <div class="ht-footer-row">
-      <span>\u2191/\u2193 j/k move</span>
-            <span>Enter restore</span>
+      <span>j/k (vim) \u2191/\u2193 nav</span>
+             <span>Enter restore</span>
             <span>Esc decline</span>
           </div>
         </div>

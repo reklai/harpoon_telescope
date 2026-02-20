@@ -1,6 +1,8 @@
 // Shadow DOM panel host — creates an isolated overlay container with focus
 // trapping so keyboard input stays in the panel (not the address bar).
 
+import browser from "webextension-polyfill";
+
 export interface PanelHost {
   host: HTMLDivElement;
   shadow: ShadowRoot;
@@ -21,6 +23,31 @@ function handlePanelRuntimeFault(label: string, reason: unknown): void {
   if (!document.getElementById("ht-panel-host")) return;
   console.error(`[Harpoon Telescope] ${label}; dismissing panel.`, reason);
   dismissPanel();
+}
+
+const EXTENSION_BASE_URL = browser.runtime.getURL("");
+
+function reasonLooksExtensionScoped(reason: unknown): boolean {
+  if (!reason) return false;
+  if (typeof reason === "string") return reason.includes(EXTENSION_BASE_URL);
+  if (typeof reason === "object") {
+    const maybeError = reason as { stack?: unknown; message?: unknown };
+    if (typeof maybeError.stack === "string" && maybeError.stack.includes(EXTENSION_BASE_URL)) {
+      return true;
+    }
+    if (typeof maybeError.message === "string" && maybeError.message.includes(EXTENSION_BASE_URL)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isPanelRuntimeFaultFromExtension(event: ErrorEvent): boolean {
+  if (typeof event.filename === "string" && event.filename.startsWith(EXTENSION_BASE_URL)) {
+    return true;
+  }
+  if (reasonLooksExtensionScoped(event.error)) return true;
+  return reasonLooksExtensionScoped(event.message);
 }
 
 /** Register a cleanup function for the currently open panel.
@@ -76,9 +103,11 @@ export function createPanelHost(): PanelHost {
   });
 
   const onError = (event: ErrorEvent): void => {
+    if (!isPanelRuntimeFaultFromExtension(event)) return;
     handlePanelRuntimeFault("Panel runtime error", event.error || event.message);
   };
   const onUnhandledRejection = (event: PromiseRejectionEvent): void => {
+    if (!reasonLooksExtensionScoped(event.reason)) return;
     handlePanelRuntimeFault("Panel unhandled rejection", event.reason);
   };
 

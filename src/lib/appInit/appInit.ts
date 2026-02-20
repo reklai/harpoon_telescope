@@ -33,25 +33,36 @@ export function initApp(): void {
   // Cached keybinding config — loaded eagerly on startup so the keydown
   // handler never needs to await. Reloaded on storage changes.
   let cachedConfig: KeybindingsConfig | null = null;
+  let configLoadPromise: Promise<KeybindingsConfig> | null = null;
 
-  browser.runtime.sendMessage({ type: "GET_KEYBINDINGS" })
-    .then((loadedConfig) => { cachedConfig = loadedConfig as KeybindingsConfig; })
-    .catch(() => {});
+  function requestConfigLoad(): Promise<KeybindingsConfig> {
+    if (cachedConfig) return Promise.resolve(cachedConfig);
+    if (configLoadPromise) return configLoadPromise;
+
+    configLoadPromise = browser.runtime.sendMessage({ type: "GET_KEYBINDINGS" })
+      .then((loadedConfig) => {
+        cachedConfig = loadedConfig as KeybindingsConfig;
+        return cachedConfig;
+      })
+      .finally(() => {
+        configLoadPromise = null;
+      });
+
+    return configLoadPromise;
+  }
+
+  requestConfigLoad().catch(() => {});
 
   // Keep config for the message handler (async callers)
   async function getConfig(): Promise<KeybindingsConfig> {
     if (cachedConfig) return cachedConfig;
-    cachedConfig = (await browser.runtime.sendMessage({
-      type: "GET_KEYBINDINGS",
-    })) as KeybindingsConfig;
-    return cachedConfig;
+    return requestConfigLoad();
   }
 
   browser.storage.onChanged.addListener((changes) => {
     if (changes.keybindings) {
-      browser.runtime.sendMessage({ type: "GET_KEYBINDINGS" })
-        .then((loadedConfig) => { cachedConfig = loadedConfig as KeybindingsConfig; })
-        .catch(() => {});
+      cachedConfig = null;
+      requestConfigLoad().catch(() => {});
     }
   });
 
@@ -78,7 +89,11 @@ export function initApp(): void {
   // can't break our keybinds. Fully synchronous — no microtask overhead.
 
   function globalKeyHandler(event: KeyboardEvent): void {
-    if (!cachedConfig) return; // Config not loaded yet
+    if (!cachedConfig) {
+      // Retry in-case initial keybinding fetch failed during tab startup.
+      requestConfigLoad().catch(() => {});
+      return;
+    }
     const config = cachedConfig;
 
     // toggleVim works regardless of whether a panel is open.

@@ -209,10 +209,13 @@ export async function openHistoryOverlay(
       const candidate = entry as Partial<HistoryEntry>;
       const url = typeof candidate.url === "string" ? candidate.url.trim() : "";
       if (!url) return null;
+      const title = typeof candidate.title === "string"
+        ? candidate.title.trim().replace(/\s+/g, " ")
+        : "";
 
       return {
         url,
-        title: typeof candidate.title === "string" ? candidate.title : "",
+        title,
         lastVisitTime:
           typeof candidate.lastVisitTime === "number" && Number.isFinite(candidate.lastVisitTime)
             ? candidate.lastVisitTime
@@ -239,8 +242,49 @@ export async function openHistoryOverlay(
         .filter((entry): entry is HistoryEntry => entry !== null);
     }
 
-    function historyEntryIdentity(entry: Pick<HistoryEntry, "url" | "title">): string {
-      return `${entry.url}\u0000${entry.title}`;
+    function canonicalHistoryUrl(rawUrl: string): string {
+      const url = rawUrl.trim();
+      if (!url) return "";
+      try {
+        const parsed = new URL(url);
+        const protocol = parsed.protocol.toLowerCase();
+        const host = parsed.hostname.toLowerCase();
+        const port = parsed.port ? `:${parsed.port}` : "";
+        let pathname = parsed.pathname || "/";
+        if (pathname !== "/") {
+          pathname = pathname.replace(/\/+$/, "");
+          if (!pathname) pathname = "/";
+        }
+
+        const searchParams = new URLSearchParams(parsed.search);
+        for (const key of Array.from(searchParams.keys())) {
+          if (key.toLowerCase().startsWith("utm_")
+            || key.toLowerCase() === "fbclid"
+            || key.toLowerCase() === "gclid") {
+            searchParams.delete(key);
+          }
+        }
+        const query = searchParams.toString();
+
+        return `${protocol}//${host}${port}${pathname}${query ? `?${query}` : ""}`;
+      } catch {
+        return url.toLowerCase().replace(/\/+$/, "");
+      }
+    }
+
+    function historyEntryIdentity(entry: Pick<HistoryEntry, "url">): string {
+      return canonicalHistoryUrl(entry.url);
+    }
+
+    function historyDisplayUrl(rawUrl: string): string {
+      const canonical = canonicalHistoryUrl(rawUrl);
+      if (!canonical) return rawUrl;
+      try {
+        const parsed = new URL(canonical);
+        return `${parsed.hostname}${parsed.pathname}${parsed.search}`;
+      } catch {
+        return canonical;
+      }
     }
 
     function dedupeHistoryEntries(entries: HistoryEntry[]): HistoryEntry[] {
@@ -248,7 +292,7 @@ export async function openHistoryOverlay(
       const unique: HistoryEntry[] = [];
       for (const entry of entries) {
         const key = historyEntryIdentity(entry);
-        if (seen.has(key)) continue;
+        if (!key || seen.has(key)) continue;
         seen.add(key);
         unique.push(entry);
       }
@@ -378,7 +422,8 @@ export async function openHistoryOverlay(
 
       const urlEl = info.lastElementChild as HTMLElement;
       const timeStr = relativeTime(entry.lastVisitTime);
-      urlEl.innerHTML = `<span class="ht-hist-time-tag">${escapeHtml(timeStr)}</span>${highlightMatch(extractDomain(entry.url))}`;
+      const displayUrl = historyDisplayUrl(entry.url);
+      urlEl.innerHTML = `<span class="ht-hist-time-tag">${escapeHtml(timeStr)}</span>${highlightMatch(displayUrl)}`;
 
       if (resultIdx === activeIndex) {
         item.classList.add("active");

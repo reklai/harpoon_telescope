@@ -1,6 +1,6 @@
 # Privacy Policy — Harpoon Telescope
 
-**Last updated:** February 19, 2026
+**Last updated:** February 20, 2026
 
 ## Summary
 
@@ -10,8 +10,8 @@ Harpoon Telescope does not collect, transmit, or share any user data. Everything
 
 The extension stores the following data locally in your browser using `browser.storage.local`:
 
-- **Harpoon list** — URLs and scroll positions of your pinned tabs (up to 6)
-- **Saved sessions** — named snapshots of your harpoon list (up to 3)
+- **Harpoon list** — URLs and scroll positions of your pinned tabs (up to 4)
+- **Saved sessions** — named snapshots of your harpoon list (up to 4)
 - **Frecency data** — visit frequency and recency scores for open tabs (up to 50 entries)
 - **Keybinding preferences** — your custom keyboard shortcuts and navigation mode setting
 
@@ -35,6 +35,8 @@ None. The extension:
 |------------|----------------|
 | `tabs` | Read tab titles and URLs to display in harpoon and frecency lists, and to switch between tabs |
 | `activeTab` | Access the current page's content for in-page search (Telescope) |
+| `bookmarks` | Read, create, move, and delete bookmarks from the bookmark overlays |
+| `history` | Read and remove history entries from the history overlay |
 | `storage` | Save your harpoon list, sessions, frecency data, and keybinding preferences locally |
 | `<all_urls>` | Inject the content script that provides keyboard shortcuts and search overlays on any page |
 

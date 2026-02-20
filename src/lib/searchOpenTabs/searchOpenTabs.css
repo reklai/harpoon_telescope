@@ -6,6 +6,8 @@
   border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
   display: flex; flex-direction: column; overflow: hidden;
   box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  backface-visibility: hidden;
+  will-change: transform;
 }
 .ht-open-tabs-input-wrap {
   display: flex; align-items: center; padding: 8px 14px;

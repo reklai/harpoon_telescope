@@ -116,8 +116,11 @@ npm run watch:chrome     # chrome
 Other scripts:
 
 ```sh
+npm run lint             # lightweight repository lint checks
+npm run test             # node:test suite (manifest/docs guardrails)
 npm run typecheck        # tsc --noEmit
 npm run verify:compat    # manifest + permission sanity checks
+npm run ci               # lint + test + typecheck + compat + both builds
 npm run clean            # rm -rf dist
 ```
 
@@ -223,9 +226,15 @@ harpoon_telescope/
 
 See `CONTRIBUTING.md` for naming conventions, module boundaries, and PR checklist.
 
-## Theme
+## Engineering Promise
 
-Styled with a **Ghostty-inspired terminal** aesthetic — red traffic light dot, clean dark backgrounds (`#1e1e1e`, `#252525`, `#3a3a3c`), accent color `#0a84ff`, monospace font stack.
+- **Native browser primitives first** — DOM + Shadow DOM overlays, WebExtension APIs, and plain TypeScript (no UI framework runtime).
+- **Fast by default** — rAF-throttled rendering, virtualized result panes, capped datasets, and lazy work on demand.
+- **Minimal UI glitching** — one active panel host, isolated styles, explicit focus reclaim, and compositor-friendly overlay containers.
+- **Cross-platform parity** — shared TypeScript bundles across Firefox/Zen and Chrome with MV2/MV3 compatibility guardrails.
+- **Enforced in CI** — `npm run lint`, `npm run test`, `npm run typecheck`, and `npm run verify:compat`.
+
+Visual theme is customizable and separate from this engineering contract.
 
 ## License
 

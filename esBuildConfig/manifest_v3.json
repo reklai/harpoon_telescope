@@ -29,7 +29,7 @@
       "description": "Open Tab Manager panel"
     },
     "tab-manager-add": {
-      "suggested_key": { "default": "Alt+A" },
+      "suggested_key": { "default": "Alt+Shift+T" },
       "description": "Add current tab to Tab Manager"
     },
     "open-search-current": {

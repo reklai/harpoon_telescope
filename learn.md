@@ -56,7 +56,7 @@ Harpoon Telescope is a keyboard-first browser extension inspired by Neovim plugi
 - Bookmarks + History: two-pane browsers with tree views and confirmations.
 
 Everything runs in plain TypeScript with no UI framework. Overlays are Shadow DOM panels injected into the active page.
-UI direction promise: keep overlays Ghostty-inspired so the visual identity stays intentional while features evolve.
+Engineering promise: stay browser-primitive (DOM/Shadow DOM/WebExtension APIs), keep UI latency low, minimize visual glitching, and preserve Firefox/Chrome parity.
 
 ---
 

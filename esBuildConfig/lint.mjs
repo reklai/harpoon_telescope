@@ -1,0 +1,144 @@
+import { readdirSync, readFileSync, statSync } from "fs";
+import { extname, resolve, relative } from "path";
+
+const ROOT = process.cwd();
+
+const BANNED_UI_PACKAGES = [
+  "react",
+  "react-dom",
+  "preact",
+  "vue",
+  "svelte",
+  "solid-js",
+  "lit",
+  "@angular/core",
+];
+
+const OVERLAY_TS_FILES = [
+  "src/lib/addBookmark/addBookmark.ts",
+  "src/lib/bookmarks/bookmarks.ts",
+  "src/lib/help/help.ts",
+  "src/lib/history/history.ts",
+  "src/lib/searchCurrentPage/searchCurrentPage.ts",
+  "src/lib/searchOpenTabs/searchOpenTabs.ts",
+  "src/lib/tabManager/session.ts",
+  "src/lib/tabManager/tabManager.ts",
+];
+
+const OVERLAY_CSS_FILES = [
+  "src/lib/addBookmark/addBookmark.css",
+  "src/lib/bookmarks/bookmarks.css",
+  "src/lib/help/help.css",
+  "src/lib/history/history.css",
+  "src/lib/searchCurrentPage/searchCurrentPage.css",
+  "src/lib/searchOpenTabs/searchOpenTabs.css",
+  "src/lib/tabManager/session.css",
+  "src/lib/tabManager/tabManager.css",
+];
+
+const errors = [];
+
+function readText(relativePath) {
+  return readFileSync(resolve(ROOT, relativePath), "utf8");
+}
+
+function walkFiles(dir, extensions, out = []) {
+  for (const entry of readdirSync(dir)) {
+    const fullPath = resolve(dir, entry);
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) {
+      walkFiles(fullPath, extensions, out);
+      continue;
+    }
+    if (extensions.has(extname(entry))) out.push(fullPath);
+  }
+  return out;
+}
+
+function isBannedPackage(name) {
+  return BANNED_UI_PACKAGES.some((pkg) => name === pkg || name.startsWith(`${pkg}/`));
+}
+
+function checkPackageDependencies() {
+  const packageJson = JSON.parse(readText("package.json"));
+  for (const section of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
+    const deps = packageJson[section] || {};
+    for (const depName of Object.keys(deps)) {
+      if (isBannedPackage(depName)) {
+        errors.push(`package.json ${section} includes banned UI dependency "${depName}".`);
+      }
+    }
+  }
+}
+
+function checkSourceImports() {
+  const tsFiles = walkFiles(resolve(ROOT, "src"), new Set([".ts"]));
+  const importPattern =
+    /(?:import|export)\s[^"']*?\sfrom\s*["']([^"']+)["']|require\(\s*["']([^"']+)["']\s*\)|import\(\s*["']([^"']+)["']\s*\)/g;
+
+  for (const fullPath of tsFiles) {
+    const relPath = relative(ROOT, fullPath);
+    const source = readFileSync(fullPath, "utf8");
+    let match;
+    while ((match = importPattern.exec(source)) !== null) {
+      const imported = match[1] || match[2] || match[3];
+      if (!imported || imported.startsWith(".") || imported.startsWith("/")) continue;
+      if (isBannedPackage(imported)) {
+        errors.push(`${relPath} imports banned UI module "${imported}".`);
+      }
+    }
+  }
+}
+
+function checkOverlayContracts() {
+  for (const file of OVERLAY_TS_FILES) {
+    const source = readText(file);
+    if (!source.includes("createPanelHost(")) {
+      errors.push(`${file} must create overlays through createPanelHost().`);
+    }
+    if (!source.includes("getBaseStyles()")) {
+      errors.push(`${file} must compose styles from getBaseStyles().`);
+    }
+    if (!source.includes("registerPanelCleanup(")) {
+      errors.push(`${file} must register panel cleanup to avoid listener leaks.`);
+    }
+  }
+}
+
+function checkUiGlitchBaseline() {
+  for (const file of OVERLAY_CSS_FILES) {
+    const css = readText(file);
+    if (!css.includes("backface-visibility: hidden")) {
+      errors.push(`${file} must set backface-visibility: hidden on its panel container.`);
+    }
+    if (!css.includes("will-change: transform")) {
+      errors.push(`${file} must set will-change: transform on its panel container.`);
+    }
+  }
+
+  const panelHost = readText("src/lib/shared/panelHost.ts");
+  if (!panelHost.includes("requestAnimationFrame")) {
+    errors.push("src/lib/shared/panelHost.ts must reclaim focus through requestAnimationFrame.");
+  }
+  if (!panelHost.includes("activePanelCleanup")) {
+    errors.push("src/lib/shared/panelHost.ts must keep single-panel cleanup state.");
+  }
+}
+
+checkPackageDependencies();
+checkSourceImports();
+checkOverlayContracts();
+checkUiGlitchBaseline();
+
+if (errors.length > 0) {
+  console.error("[lint] FAILED");
+  for (const error of errors) {
+    console.error(`- ${error}`);
+  }
+  process.exit(1);
+}
+
+console.log("[lint] OK");
+console.log(`- Checked overlay modules: ${OVERLAY_TS_FILES.length}`);
+console.log(`- Checked overlay styles: ${OVERLAY_CSS_FILES.length}`);
+console.log(`- Banned UI packages: ${BANNED_UI_PACKAGES.length}`);

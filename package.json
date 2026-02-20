@@ -2,7 +2,7 @@
   "name": "harpoon-telescope",
   "version": "2.0.0",
   "private": true,
-  "description": "Harpoon + Telescope inspired Firefox extension",
+  "description": "Harpoon + Telescope inspired browser extension",
   "scripts": {
     "build": "node esBuildConfig/build.mjs",
     "build:firefox": "node esBuildConfig/build.mjs --target firefox",
@@ -10,8 +10,11 @@
     "watch": "node esBuildConfig/build.mjs --watch",
     "watch:firefox": "node esBuildConfig/build.mjs --watch --target firefox",
     "watch:chrome": "node esBuildConfig/build.mjs --watch --target chrome",
+    "lint": "node esBuildConfig/lint.mjs",
+    "test": "node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "verify:compat": "node esBuildConfig/verifyCompat.mjs",
+    "ci": "npm run lint && npm run test && npm run typecheck && npm run verify:compat && npm run build:firefox && npm run build:chrome",
     "clean": "rm -rf dist"
   },
   "devDependencies": {

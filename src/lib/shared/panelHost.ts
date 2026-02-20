@@ -31,7 +31,7 @@ export function createPanelHost(): PanelHost {
   host.id = "ht-panel-host";
   host.tabIndex = -1;
   host.style.cssText =
-    "position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2147483647;pointer-events:auto;";
+    "position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2147483647;pointer-events:auto;contain:layout style paint;";
   const shadow = host.attachShadow({ mode: "open" });
   document.body.appendChild(host);
 
@@ -84,7 +84,7 @@ export function vimBadgeHtml(config: KeybindingsConfig): string {
   return `<span class="ht-vim-badge ${isVim ? "on" : "off"}">vim</span>`;
 }
 
-/** Shared Ghostty-inspired terminal styles used by all overlay panels */
+/** Shared overlay shell styles used by all panels */
 export function getBaseStyles(): string {
   return `
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -94,6 +94,8 @@ export function getBaseStyles(): string {
       font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
       font-size: 13px;
       color: #e0e0e0;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
     }
 
     .ht-backdrop {
@@ -151,5 +153,12 @@ export function getBaseStyles(): string {
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
   `;
 }

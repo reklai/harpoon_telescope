@@ -3,6 +3,14 @@
   "name": "Harpoon Telescope",
   "version": "2.0.0",
   "description": "Harpoon + Telescope inspired browser extension — grep tabs, live preview, vim motions, and anchor up to 4 tabs with scroll memory.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "@harpoon-telescope.reklai",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
   "permissions": [
     "tabs",
     "activeTab",
@@ -28,7 +36,7 @@
       "description": "Open Tab Manager panel"
     },
     "tab-manager-add": {
-      "suggested_key": { "default": "Alt+A" },
+      "suggested_key": { "default": "Alt+Shift+T" },
       "description": "Add current tab to Tab Manager"
     },
     "tab-manager-tab-1": {

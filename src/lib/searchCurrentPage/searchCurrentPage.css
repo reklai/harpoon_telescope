@@ -7,6 +7,8 @@
   border-radius: 10px;
   display: flex; flex-direction: column; overflow: hidden;
   box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  backface-visibility: hidden;
+  will-change: transform;
 }
 .ht-search-page-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .ht-search-page-input-wrap {

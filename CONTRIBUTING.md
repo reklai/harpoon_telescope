@@ -3,8 +3,11 @@
 ## Local Setup
 
 1. `npm ci`
-2. `npm run typecheck`
-3. `npm run build:firefox` or `npm run build:chrome`
+2. `npm run lint`
+3. `npm run test`
+4. `npm run typecheck`
+5. `npm run verify:compat`
+6. `npm run build:firefox` or `npm run build:chrome`
 
 ## Naming Conventions
 
@@ -41,10 +44,20 @@
 - `src/lib/shared/*`: cross-feature utilities and shared state helpers.
 - Feature modules should depend on `shared`, not on other feature internals unless necessary.
 
+## Engineering Promise Guardrails
+
+- Keep runtime UI framework-free: prefer browser primitives, Shadow DOM, and plain TypeScript.
+- New overlays must compose from `createPanelHost()`, `getBaseStyles()`, and `registerPanelCleanup()`.
+- Treat UI smoothness as a default requirement: avoid full-list rerenders, prefer rAF-throttled work, and keep compositor-friendly panel containers.
+- Preserve Firefox/Chrome parity when touching commands, permissions, or manifests.
+
 ## Pull Request Checklist
 
 - Naming follows this guide.
 - Any renamed path/function has all references updated.
+- `npm run lint` passes.
+- `npm run test` passes.
 - `npm run typecheck` passes.
-- `npm run build` passes.
+- `npm run verify:compat` passes.
+- `npm run build:firefox` and `npm run build:chrome` pass.
 - `README.md` and/or this file updated if contributor-facing structure changed.

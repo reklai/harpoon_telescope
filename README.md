@@ -152,7 +152,7 @@ Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps
 
 ## Project Structure
 
-``` 
+```
 harpoon_telescope/
 ├── src/
 │   ├── entryPoints/                        # Browser-executed entry bundles
@@ -241,17 +241,6 @@ harpoon_telescope/
 
 See `CONTRIBUTING.md` for naming conventions, module boundaries, and PR checklist.
 Architecture walkthrough for contributors: `docs/ARCHITECTURE.md`.
-
-## Engineering Promise
-
-- **Ghostty-inspired UX** — terminal-like, low-distraction visual language with platform-native font rendering and minimal chrome.
-- **Native browser primitives first** — DOM + Shadow DOM overlays, WebExtension APIs, and plain TypeScript (no UI framework runtime).
-- **Fast by default** — rAF-throttled rendering, virtualized result panes, capped datasets, and lazy work on demand.
-- **Minimal UI glitching** — one active panel host, isolated styles, explicit focus reclaim, and compositor-friendly overlay containers.
-- **Cross-platform parity** — shared TypeScript bundles across Firefox/Zen and Chrome with MV2/MV3 compatibility guardrails.
-- **Enforced in CI** — `npm run lint`, `npm run test`, `npm run typecheck`, `npm run verify:compat`, `npm run verify:upgrade`, and `npm run verify:store`.
-
-Visual theme is customizable and separate from this engineering contract.
 
 ## License
 

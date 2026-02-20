@@ -19,7 +19,7 @@ How I use this guide:
 5. Ask: why this approach, what tradeoff, what failure mode?
 6. Capture one reusable engineering pattern in my own words.
 
-Companion reference for contributors: `docs/ARCHITECTURE.md`
+This guide is self-contained: no prerequisite docs are required to learn the system end-to-end.
 
 ---
 

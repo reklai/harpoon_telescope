@@ -30,8 +30,8 @@ How I use this guide:
 5. [Manifests — MV2 and MV3](#manifests--mv2-and-mv3)
 6. [Shared Types — src/types.d.ts](#shared-types--srctypesdts)
 7. [Keybinding System — src/lib/shared/keybindings.ts](#keybinding-system--srclibsharedkeybindingsts)
-8. [Content Script Boot — src/esBuildBundle/contentScript](#content-script-boot--srcesbuildbundlecontentscript)
-9. [Background Process — src/esBuildBundle/browserBackgroundProcess](#background-process--srcesbuildbundlebrowserbackgroundprocess)
+8. [Content Script Boot — src/entrypoints/content-script](#content-script-boot--srcentrypointscontent-script)
+9. [Background Process — src/entrypoints/background](#background-process--srcentrypointsbackground)
 10. [Search Current Page — src/lib/searchCurrentPage](#search-current-page--srclibsearchcurrentpage)
 11. [Search Open Tabs — src/lib/searchOpenTabs](#search-open-tabs--srclibsearchopentabs)
 12. [Tab Manager — src/lib/tabManager](#tab-manager--srclibtabmanager)
@@ -127,7 +127,7 @@ Interview articulation:
 
 User presses `Alt+Shift+T` to add the current tab. The content script in `src/lib/appInit/appInit.ts` catches the keybind and sends `{ type: "TAB_MANAGER_ADD" }` to the background. Only the background has `browser.tabs.*` API access — content scripts are sandboxed and cannot manipulate browser tabs directly. This is the browser's security model.
 
-The background in `src/esBuildBundle/browserBackgroundProcess/browserBackgroundProcess.ts` first calls `ensureTabManagerLoaded()` to load state from storage if needed. MV3 service workers can be killed at any time, so every function that touches state calls this guard first — it's idempotent, safe to call multiple times. Then the background sends `GET_SCROLL` back to the content script to capture the current scroll position, because scroll state is page-owned and the background cannot read `window.scrollX` directly. With scroll position in hand, the background creates a `TabManagerEntry`, compacts slots to keep them sequential (1, 2, 3 instead of 1, 3, 4), saves to `browser.storage.local`, and returns. The content script shows a feedback toast via `src/lib/shared/feedback.ts` saying "Added to slot 1".
+The background in `src/entrypoints/background/background.ts` first calls `ensureTabManagerLoaded()` to load state from storage if needed. MV3 service workers can be killed at any time, so every function that touches state calls this guard first — it's idempotent, safe to call multiple times. Then the background sends `GET_SCROLL` back to the content script to capture the current scroll position, because scroll state is page-owned and the background cannot read `window.scrollX` directly. With scroll position in hand, the background creates a `TabManagerEntry`, compacts slots to keep them sequential (1, 2, 3 instead of 1, 3, 4), saves to `browser.storage.local`, and returns. The content script shows a feedback toast via `src/lib/shared/feedback.ts` saying "Added to Tab Manager [slot]".
 
 Later, the user presses `Alt+1` to jump. The content script sends `{ type: "TAB_MANAGER_JUMP", slot: 1 }`. The background finds the entry and either activates the existing tab or, if it was closed, re-opens the URL in a new tab and restores scroll.
 
@@ -168,7 +168,7 @@ Interview articulation:
 2. "I used explicit message contracts to separate page and browser responsibilities."
 3. "I guarded state access for MV3 worker restarts."
 
-**Files to trace:** `src/lib/appInit/appInit.ts` (keybind handler), `src/esBuildBundle/browserBackgroundProcess/browserBackgroundProcess.ts` (state + message handling), `src/lib/shared/feedback.ts` (toast).
+**Files to trace:** `src/lib/appInit/appInit.ts` (keybind handler), `src/entrypoints/background/background.ts` (state + message handling), `src/lib/shared/feedback.ts` (toast).
 
 ---
 
@@ -213,13 +213,13 @@ Interview articulation:
 2. "I prioritized user orientation by keeping tree context visible."
 3. "I balanced precision and recall with ranked substring+fuzzy matching."
 
-**Files to trace:** `src/lib/bookmarks/bookmarks.ts` (overlay UI + state), `src/esBuildBundle/browserBackgroundProcess/browserBackgroundProcess.ts` (API wrappers).
+**Files to trace:** `src/lib/bookmarks/bookmarks.ts` (overlay UI + state), `src/entrypoints/background/background.ts` (API wrappers).
 
 ---
 
 ### Flow D — Session Restore on Startup
 
-User closes the browser with tabs pinned in Tab Manager. When the browser reopens, `browser.runtime.onStartup` fires in the background process at `src/esBuildBundle/browserBackgroundProcess/browserBackgroundProcess.ts`. Tab IDs are not stable across browser restarts — the old `tabManagerList` is useless because all those tab IDs now point to nothing. The background clears the stale list and loads `tabManagerSessions` from storage to prepare for restore.
+User closes the browser with tabs pinned in Tab Manager. When the browser reopens, `browser.runtime.onStartup` fires in the background process at `src/entrypoints/background/background.ts`. Tab IDs are not stable across browser restarts — the old `tabManagerList` is useless because all those tab IDs now point to nothing. The background clears the stale list and loads `tabManagerSessions` from storage to prepare for restore.
 
 The challenge is timing. Content scripts load asynchronously, and at startup the background is ready before any tab's content script has finished initializing. If the background immediately tries to send `SHOW_SESSION_RESTORE` to the active tab, the message fails because no listener exists yet.
 
@@ -257,7 +257,7 @@ Interview articulation:
 2. "I separated persistent session data from runtime tab identity."
 3. "I designed a graceful fallback instead of hard failure."
 
-**Files to trace:** `src/esBuildBundle/browserBackgroundProcess/browserBackgroundProcess.ts` (startup handler), `src/lib/tabManager/session.ts` (session restore UI).
+**Files to trace:** `src/entrypoints/background/background.ts` (startup handler), `src/lib/tabManager/session.ts` (session restore UI).
 
 ---
 
@@ -271,19 +271,19 @@ harpoon_telescope/
 │   └── manifest_v3.json            # Chrome manifest (MV3)
 ├── src/
 │   ├── types.d.ts                  # Global TS types
-│   ├── esBuildBundle/
-│   │   ├── browserBackgroundProcess/
-│   │   │   └── browserBackgroundProcess.ts
-│   │   ├── contentScript/
-│   │   │   └── contentScript.ts
-│   │   ├── toolBarPopUp/
-│   │   │   ├── toolBarPopUp.ts
-│   │   │   ├── toolBarPopUp.html
-│   │   │   └── toolBarPopUp.css
-│   │   └── extensionSettingsPage/
-│   │       ├── extensionSettingsPage.ts
-│   │       ├── extensionSettingsPage.html
-│   │       └── extensionSettingsPage.css
+│   ├── entrypoints/
+│   │   ├── background/
+│   │   │   └── background.ts
+│   │   ├── content-script/
+│   │   │   └── content-script.ts
+│   │   ├── toolbar-popup/
+│   │   │   ├── toolbar-popup.ts
+│   │   │   ├── toolbar-popup.html
+│   │   │   └── toolbar-popup.css
+│   │   └── options-page/
+│   │       ├── options-page.ts
+│   │       ├── options-page.html
+│   │       └── options-page.css
 │   ├── lib/
 │   │   ├── appInit/                 # content-script bootstrap
 │   │   ├── shared/                  # keybindings, helpers, sessions, scroll, feedback
@@ -307,10 +307,10 @@ harpoon_telescope/
 
 The build script bundles four entry points into IIFEs and copies static assets to `dist/`:
 
-- `browserBackgroundProcess.ts` -> `dist/browserBackgroundProcess.js`
-- `contentScript.ts` -> `dist/contentScript.js`
-- `toolBarPopUp.ts` -> `dist/toolBarPopUp/toolBarPopUp.js`
-- `extensionSettingsPage.ts` -> `dist/extensionSettingsPage/extensionSettingsPage.js`
+- `src/entrypoints/background/background.ts` -> `dist/background.js`
+- `src/entrypoints/content-script/content-script.ts` -> `dist/content-script.js`
+- `src/entrypoints/toolbar-popup/toolbar-popup.ts` -> `dist/toolbar-popup/toolbar-popup.js`
+- `src/entrypoints/options-page/options-page.ts` -> `dist/options-page/options-page.js`
 
 **Why IIFE?**
 
@@ -375,9 +375,9 @@ Arrow keys always work. j/k are bonuses when vim mode is on. Users don't need to
 
 ---
 
-## Content Script Boot — src/esBuildBundle/contentScript
+## Content Script Boot — src/entrypoints/content-script
 
-Entry point is minimal: it calls `initApp()` in `src/lib/appInit/appInit.ts`.
+Entry point `src/entrypoints/content-script/content-script.ts` is minimal: it calls `initApp()` in `src/lib/appInit/appInit.ts`.
 
 `initApp()` handles:
 
@@ -396,9 +396,9 @@ Every keypress calls `getConfig()`. Without caching, that's an async message rou
 
 ---
 
-## Background Process — src/esBuildBundle/browserBackgroundProcess
+## Background Process — src/entrypoints/background
 
-The background process owns:
+Background entry `src/entrypoints/background/background.ts` owns:
 
 - tab manager list + scroll restore
 - sessions storage and restore prompt

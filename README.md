@@ -122,9 +122,9 @@ npm run clean            # rm -rf dist
 
 The JS bundles are identical across targets — `webextension-polyfill` handles API differences at runtime. Only the manifest differs (MV2 vs MV3).
 
-### Chrome's 4-command limit
+### Command Registration Strategy
 
-Chrome MV3 only allows 4 registered `commands`. The primary shortcuts (open harpoon, add tab, search page) are registered as commands. Everything else (slot jumps, cycling, frecency, bookmarks, history, help, vim toggle) is handled by a `keydown` listener in the content script.
+Both manifests register browser-level commands for open/search/add and slot jumps. The content script still handles the full keybinding matrix (custom bindings, vim mode, and panel-local actions), so behavior stays consistent across Firefox, Chrome, and Zen.
 
 ## Installation (Development)
 
@@ -200,7 +200,7 @@ harpoon_telescope/
 ### Key Design Decisions
 - **Shadow DOM** — overlays are injected as Shadow DOM elements to prevent style leakage from host pages
 - **webextension-polyfill** — unified `browser.*` API across Chrome and Firefox
-- **Dual manifests** — MV2 for Firefox/Zen, MV3 for Chrome (service worker, 4-command limit)
+- **Dual manifests** — MV2 for Firefox/Zen, MV3 for Chrome (service worker lifecycle)
 - **`ensureTabManagerLoaded()` guards** — state is lazily reloaded when background context is cold-started
 - **Configurable keybindings** — all bindings in `browser.storage.local` with per-scope collision detection
 - **Navigation modes** — vim mode adds aliases on top of basic keys (never replaces)

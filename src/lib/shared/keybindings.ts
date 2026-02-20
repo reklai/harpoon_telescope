@@ -1,5 +1,5 @@
 // Shared keybinding configuration, defaults, collision detection, and key matching.
-// Used by background, content-script, popup, and options page.
+// Used by background, contentScript, popup, and options page.
 
 import browser from "webextension-polyfill";
 

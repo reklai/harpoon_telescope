@@ -1,0 +1,16 @@
+{
+  "description": "Keeps unknown future schema snapshots untouched",
+  "expectedChanged": false,
+  "input": {
+    "storageSchemaVersion": 2,
+    "futureOnlyKey": {
+      "shape": "unknown-to-v1"
+    }
+  },
+  "expected": {
+    "storageSchemaVersion": 2,
+    "futureOnlyKey": {
+      "shape": "unknown-to-v1"
+    }
+  }
+}

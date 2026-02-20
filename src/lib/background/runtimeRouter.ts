@@ -12,8 +12,8 @@ export type RuntimeMessageHandler = (
 export function registerRuntimeMessageRouter(
   handlers: RuntimeMessageHandler[],
 ): void {
-  browser.runtime.onMessage.addListener(async (msg: unknown, sender: browser.Runtime.MessageSender) => {
-    const message = msg as BackgroundRuntimeMessage;
+  browser.runtime.onMessage.addListener(async (receivedMessage: unknown, sender: browser.Runtime.MessageSender) => {
+    const message = receivedMessage as BackgroundRuntimeMessage;
     for (const handler of handlers) {
       const result = await handler(message, sender);
       if (result !== UNHANDLED) {

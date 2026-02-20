@@ -7,32 +7,35 @@
 3. `npm run test`
 4. `npm run typecheck`
 5. `npm run verify:compat`
-6. `npm run verify:store`
-7. `npm run build:firefox` or `npm run build:chrome`
+6. `npm run verify:upgrade`
+7. `npm run verify:store`
+8. `npm run build:firefox` or `npm run build:chrome`
 
 Architecture reference: `docs/ARCHITECTURE.md`
 
 ## Release Flow
 
 1. Keep `manifest_v2.json`, `manifest_v3.json`, `STORE.md`, and `PRIVACY.md` updated together whenever permissions, storage limits, or privacy claims change.
-2. Run `npm run ci` before release; this includes `verify:compat` and `verify:store`.
+2. Run `npm run ci` before release; this includes `verify:compat`, `verify:upgrade`, and `verify:store`.
 3. Use `STORE.md` and `PRIVACY.md` as the canonical text for AMO/Chrome submission fields.
 
 ## Naming Conventions
 
 ### Files and Folders
 
-- `src/entrypoints/*`: use **kebab-case** for browser-facing entrypoint paths and asset names.
+- `src/entryPoints/*`: use **camelCase** for browser-facing entrypoint paths and asset names.
 - `src/lib/*`: keep feature folders in existing **camelCase** style (`tabManager`, `searchCurrentPage`, etc.).
+- Naming is lint-enforced: `src/lib/*` paths must be camelCase; `src/entryPoints/*` paths must be camelCase.
 - Keep filename and primary export aligned where practical:
   - `tabManager.ts` -> `openTabManager(...)`
-  - `options-page.ts` -> options page bootstrap logic
+  - `optionsPage.ts` -> options page bootstrap logic
 
 ### Functions
 
 - Use verb-based names for actions:
   - `open...`, `render...`, `load...`, `save...`, `remove...`, `handle...`
 - Use `ensure...Loaded` for lazy initialization guards.
+- Function declarations inside `src/lib/*` and `src/entryPoints/*` should be camelCase (lint-enforced).
 - Avoid ambiguous abbreviations in exported API names.
 
 ### Variables
@@ -40,6 +43,8 @@ Architecture reference: `docs/ARCHITECTURE.md`
 - Booleans: prefix with `is`, `has`, `can`, or `should`.
 - Arrays/collections: use plural nouns (`sessions`, `entries`, `filters`).
 - Message payload objects: prefer descriptive names (`receivedMessage` instead of `m`).
+- Runtime/request payload variables: avoid `msg`; use domain names like `bookmarkAddRequest` or `receivedMessage`.
+- DOM event parameters: prefer `event` over single-letter aliases.
 - Avoid one-letter variable names except short-lived loop indexes (`i`, `j`) in obvious loops.
 
 ### Constants
@@ -49,7 +54,7 @@ Architecture reference: `docs/ARCHITECTURE.md`
 
 ## Module Boundaries
 
-- `src/entrypoints/*`: thin startup/adaptor layers only.
+- `src/entryPoints/*`: thin startup/adaptor layers only.
 - `src/lib/shared/*`: cross-feature utilities and shared state helpers.
 - Feature modules should depend on `shared`, not on other feature internals unless necessary.
 - Runtime message contract changes must go through `src/lib/shared/runtimeMessages.ts`.
@@ -71,6 +76,7 @@ Architecture reference: `docs/ARCHITECTURE.md`
 - `npm run test` passes.
 - `npm run typecheck` passes.
 - `npm run verify:compat` passes.
+- `npm run verify:upgrade` passes.
 - `npm run verify:store` passes.
 - `npm run build:firefox` and `npm run build:chrome` pass.
 - `README.md`, `learn.md`, and/or this file updated if contributor-facing release flow changed.

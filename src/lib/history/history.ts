@@ -771,7 +771,7 @@ export async function openHistoryOverlay(
     }
 
     // --- Keyboard handler ---
-    function keyHandler(e: KeyboardEvent): void {
+    function keyHandler(event: KeyboardEvent): void {
       if (!panelOpen) {
         document.removeEventListener("keydown", keyHandler, true);
         return;
@@ -779,25 +779,25 @@ export async function openHistoryOverlay(
 
       // --- Confirm delete mode: y/Enter to confirm, n/Esc to cancel ---
       if (detailMode === "confirmDelete") {
-        if (e.key === "y" || e.key === "Enter") {
-          e.preventDefault();
-          e.stopPropagation();
+        if (event.key === "y" || event.key === "Enter") {
+          event.preventDefault();
+          event.stopPropagation();
           pendingDeleteEntry = null;
           detailMode = "tree";
           removeSelectedHistory();
           updateFooter();
           return;
         }
-        if (e.key === "n" || e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
+        if (event.key === "n" || event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
           pendingDeleteEntry = null;
           detailMode = "tree";
           scheduleDetailUpdate();
           updateFooter();
           return;
         }
-        e.stopPropagation();
+        event.stopPropagation();
         return;
       }
 
@@ -805,59 +805,59 @@ export async function openHistoryOverlay(
       if (detailMode === "treeNav") {
         // Tree open confirmation sub-state
         if (pendingTreeOpenEntry) {
-          if (e.key === "y" || e.key === "Enter") {
-            e.preventDefault();
-            e.stopPropagation();
+          if (event.key === "y" || event.key === "Enter") {
+            event.preventDefault();
+            event.stopPropagation();
             const entry = pendingTreeOpenEntry;
             pendingTreeOpenEntry = null;
             openHistoryEntry(entry);
             return;
           }
-          if (e.key === "n" || e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation();
+          if (event.key === "n" || event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
             pendingTreeOpenEntry = null;
             renderTreeView();
             updateFooter();
             return;
           }
-          e.stopPropagation();
+          event.stopPropagation();
           return;
         }
 
         // Tree delete confirmation sub-state
         if (pendingTreeDeleteEntry) {
-          if (e.key === "y" || e.key === "Enter") {
-            e.preventDefault();
-            e.stopPropagation();
+          if (event.key === "y" || event.key === "Enter") {
+            event.preventDefault();
+            event.stopPropagation();
             removeTreeHistoryEntry();
             updateFooter();
             return;
           }
-          if (e.key === "n" || e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation();
+          if (event.key === "n" || event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
             pendingTreeDeleteEntry = null;
             renderTreeView();
             updateFooter();
             return;
           }
-          e.stopPropagation();
+          event.stopPropagation();
           return;
         }
 
-        if (e.key === "Escape" || e.key.toLowerCase() === "t") {
-          e.preventDefault();
-          e.stopPropagation();
+        if (event.key === "Escape" || event.key.toLowerCase() === "t") {
+          event.preventDefault();
+          event.stopPropagation();
           detailMode = "tree";
           scheduleDetailUpdate();
           updateFooter();
           return;
         }
         // Delete entry in tree: d (only works on entry nodes)
-        if (e.key.toLowerCase() === "d" && !e.ctrlKey && !e.altKey && !e.metaKey) {
-          e.preventDefault();
-          e.stopPropagation();
+        if (event.key.toLowerCase() === "d" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+          event.preventDefault();
+          event.stopPropagation();
           const item = treeVisibleItems[treeCursorIndex];
           if (!item || item.type !== "entry") return;
           const sepIdx = item.id.indexOf(":");
@@ -871,9 +871,9 @@ export async function openHistoryOverlay(
           return;
         }
         // Enter: fold on bucket, open on entry
-        if (e.key === "Enter") {
-          e.preventDefault();
-          e.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.stopPropagation();
           const item = treeVisibleItems[treeCursorIndex];
           if (!item) return;
           if (item.type === "bucket") {
@@ -893,34 +893,34 @@ export async function openHistoryOverlay(
         }
         // j/k/arrows navigate the tree cursor
         const vim = config.navigationMode === "vim";
-        if (e.key === "ArrowDown" || (vim && e.key.toLowerCase() === "j")) {
-          e.preventDefault();
-          e.stopPropagation();
+        if (event.key === "ArrowDown" || (vim && event.key.toLowerCase() === "j")) {
+          event.preventDefault();
+          event.stopPropagation();
           moveTreeCursor(1);
           return;
         }
-        if (e.key === "ArrowUp" || (vim && e.key.toLowerCase() === "k")) {
-          e.preventDefault();
-          e.stopPropagation();
+        if (event.key === "ArrowUp" || (vim && event.key.toLowerCase() === "k")) {
+          event.preventDefault();
+          event.stopPropagation();
           moveTreeCursor(-1);
           return;
         }
-        e.stopPropagation();
+        event.stopPropagation();
         return;
       }
 
       // Escape: close overlay
-      if (matchesAction(e, config, "search", "close")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "search", "close")) {
+        event.preventDefault();
+        event.stopPropagation();
         close();
         return;
       }
 
       // Backspace on empty input removes the last active filter pill
-      if (e.key === "Backspace" && focusedPane === "input"
+      if (event.key === "Backspace" && focusedPane === "input"
           && input.value === "" && activeFilters.length > 0) {
-        e.preventDefault();
+        event.preventDefault();
         activeFilters.pop();
         input.value = activeFilters.map((f) => `/${f}`).join(" ") + (activeFilters.length ? " " : "");
         updateTitle();
@@ -932,17 +932,17 @@ export async function openHistoryOverlay(
       }
 
       // --- Normal mode ---
-      if (matchesAction(e, config, "search", "accept")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "search", "accept")) {
+        event.preventDefault();
+        event.stopPropagation();
         if (filtered[activeIndex]) openHistoryEntry(filtered[activeIndex]);
         return;
       }
 
       // Tab cycles between input and results list
-      if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        event.preventDefault();
+        event.stopPropagation();
         if (filtered.length === 0) return;
         if (focusedPane === "input") {
           if (activeItemEl) {
@@ -962,9 +962,9 @@ export async function openHistoryOverlay(
       const inputFocused = focusedPane === "input";
 
       // Remove history entry: d/D (case-insensitive, only when list is focused)
-      if (e.key.toLowerCase() === "d" && !e.ctrlKey && !e.altKey && !e.metaKey && !inputFocused) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (event.key.toLowerCase() === "d" && !event.ctrlKey && !event.altKey && !event.metaKey && !inputFocused) {
+        event.preventDefault();
+        event.stopPropagation();
         const entry = filtered[activeIndex];
         if (!entry) return;
         pendingDeleteEntry = entry;
@@ -975,9 +975,9 @@ export async function openHistoryOverlay(
       }
 
       // Toggle tree nav: t/T (case-insensitive, only when list is focused)
-      if (e.key.toLowerCase() === "t" && !e.ctrlKey && !e.altKey && !e.metaKey && !inputFocused) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (event.key.toLowerCase() === "t" && !event.ctrlKey && !event.altKey && !event.metaKey && !inputFocused) {
+        event.preventDefault();
+        event.stopPropagation();
         if (filtered.length === 0) return;
         detailMode = "treeNav";
         treeCursorIndex = 0;
@@ -998,9 +998,9 @@ export async function openHistoryOverlay(
       }
 
       // Clear search: c/C (case-insensitive, only when list is focused)
-      if (e.key.toLowerCase() === "c" && !e.ctrlKey && !e.altKey && !e.metaKey && !inputFocused) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (event.key.toLowerCase() === "c" && !event.ctrlKey && !event.altKey && !event.metaKey && !inputFocused) {
+        event.preventDefault();
+        event.stopPropagation();
         input.value = "";
         activeFilters = [];
         currentQuery = "";
@@ -1012,22 +1012,22 @@ export async function openHistoryOverlay(
         return;
       }
 
-      if (matchesAction(e, config, "search", "moveDown")) {
-        const lk = e.key.toLowerCase();
+      if (matchesAction(event, config, "search", "moveDown")) {
+        const lk = event.key.toLowerCase();
         if ((lk === "j" || lk === "k") && inputFocused) return;
-        e.preventDefault();
-        e.stopPropagation();
+        event.preventDefault();
+        event.stopPropagation();
         if (filtered.length > 0) {
           setActiveIndex(Math.min(activeIndex + 1, filtered.length - 1));
         }
         return;
       }
 
-      if (matchesAction(e, config, "search", "moveUp")) {
-        const lk = e.key.toLowerCase();
+      if (matchesAction(event, config, "search", "moveUp")) {
+        const lk = event.key.toLowerCase();
         if ((lk === "j" || lk === "k") && inputFocused) return;
-        e.preventDefault();
-        e.stopPropagation();
+        event.preventDefault();
+        event.stopPropagation();
         if (filtered.length > 0) {
           setActiveIndex(Math.max(activeIndex - 1, 0));
         }
@@ -1035,13 +1035,13 @@ export async function openHistoryOverlay(
       }
 
       // Block all other keys from reaching the page
-      e.stopPropagation();
+      event.stopPropagation();
     }
 
     // --- Event binding ---
     closeBtn.addEventListener("click", close);
     backdrop.addEventListener("click", close);
-    backdrop.addEventListener("mousedown", (e) => e.preventDefault());
+    backdrop.addEventListener("mousedown", (event) => event.preventDefault());
 
     // Detail header x button — exits sub-modes back to passive tree
     detailHeaderClose.addEventListener("click", () => {
@@ -1056,14 +1056,14 @@ export async function openHistoryOverlay(
     });
 
     // Event delegation for results list
-    resultsList.addEventListener("click", (e) => {
-      const item = (e.target as HTMLElement).closest(".ht-hist-item") as HTMLElement | null;
+    resultsList.addEventListener("click", (event) => {
+      const item = (event.target as HTMLElement).closest(".ht-hist-item") as HTMLElement | null;
       if (!item || !item.dataset.index) return;
       setActiveIndex(Number(item.dataset.index));
     });
 
-    resultsList.addEventListener("dblclick", (e) => {
-      const item = (e.target as HTMLElement).closest(".ht-hist-item") as HTMLElement | null;
+    resultsList.addEventListener("dblclick", (event) => {
+      const item = (event.target as HTMLElement).closest(".ht-hist-item") as HTMLElement | null;
       if (!item || !item.dataset.index) return;
       const idx = Number(item.dataset.index);
       activeIndex = idx;
@@ -1075,11 +1075,11 @@ export async function openHistoryOverlay(
     resultsList.addEventListener("focus", () => { setFocusedPane("results"); }, true);
 
     // Mouse wheel on results pane
-    resultsPane.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    resultsPane.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       if (filtered.length === 0) return;
-      if (e.deltaY > 0) {
+      if (event.deltaY > 0) {
         setActiveIndex(Math.min(activeIndex + 1, filtered.length - 1));
       } else {
         setActiveIndex(Math.max(activeIndex - 1, 0));
@@ -1087,9 +1087,9 @@ export async function openHistoryOverlay(
     });
 
     // Tree click handler — bucket collapse in both modes, cursor only in treeNav
-    detailContent.addEventListener("click", (e) => {
+    detailContent.addEventListener("click", (event) => {
       if (detailMode !== "tree" && detailMode !== "treeNav") return;
-      const target = (e.target as HTMLElement).closest("[data-tree-idx]") as HTMLElement | null;
+      const target = (event.target as HTMLElement).closest("[data-tree-idx]") as HTMLElement | null;
       if (!target) return;
       const idx = Number(target.dataset.treeIdx);
       if (isNaN(idx) || idx < 0 || idx >= treeVisibleItems.length) return;
@@ -1117,9 +1117,9 @@ export async function openHistoryOverlay(
     });
 
     // Double-click on tree entry — open with confirmation (treeNav only)
-    detailContent.addEventListener("dblclick", (e) => {
+    detailContent.addEventListener("dblclick", (event) => {
       if (detailMode !== "treeNav") return;
-      const target = (e.target as HTMLElement).closest("[data-tree-idx]") as HTMLElement | null;
+      const target = (event.target as HTMLElement).closest("[data-tree-idx]") as HTMLElement | null;
       if (!target) return;
       const idx = Number(target.dataset.treeIdx);
       if (isNaN(idx) || idx < 0 || idx >= treeVisibleItems.length) return;
@@ -1139,11 +1139,11 @@ export async function openHistoryOverlay(
     });
 
     // Scroll wheel on detail pane — moves cursor (treeNav only)
-    detailContent.addEventListener("wheel", (e) => {
+    detailContent.addEventListener("wheel", (event) => {
       if (detailMode !== "treeNav") return;
-      e.preventDefault();
-      e.stopPropagation();
-      moveTreeCursor(e.deltaY > 0 ? 1 : -1);
+      event.preventDefault();
+      event.stopPropagation();
+      moveTreeCursor(event.deltaY > 0 ? 1 : -1);
     });
 
     input.addEventListener("input", () => {

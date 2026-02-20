@@ -1,6 +1,6 @@
 // Runtime message contracts between background and content scripts.
 
-// Messages handled by content-script listeners (sent from background).
+// Messages handled by contentScript listeners (sent from background).
 export type ContentRuntimeMessage =
   | { type: "GET_SCROLL" }
   | { type: "SET_SCROLL"; scrollX: number; scrollY: number }

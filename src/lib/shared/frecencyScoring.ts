@@ -122,7 +122,7 @@ export async function recordFrecencyVisit(tab: Tabs.Tab): Promise<void> {
 export async function getFrecencyList(): Promise<FrecencyEntry[]> {
   await ensureFrecencyLoaded();
   const tabs = await browser.tabs.query({ currentWindow: true });
-  const tabIds = new Set(tabs.map((t) => t.id));
+  const tabIds = new Set(tabs.map((tab) => tab.id));
 
   // Prune closed tabs from frecency map
   for (const id of frecencyMap.keys()) {

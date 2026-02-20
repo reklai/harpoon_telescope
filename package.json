@@ -14,8 +14,9 @@
     "test": "node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "verify:compat": "node esBuildConfig/verifyCompat.mjs",
+    "verify:upgrade": "node esBuildConfig/verifyUpgrade.mjs",
     "verify:store": "node esBuildConfig/verifyStore.mjs",
-    "ci": "npm run lint && npm run test && npm run typecheck && npm run verify:compat && npm run verify:store && npm run build:firefox && npm run build:chrome",
+    "ci": "npm run lint && npm run test && npm run typecheck && npm run verify:compat && npm run verify:upgrade && npm run verify:store && npm run build:firefox && npm run build:chrome",
     "clean": "rm -rf dist"
   },
   "devDependencies": {

@@ -22,9 +22,9 @@ interface BookmarkFolder {
 function flattenFolders(folders: BookmarkFolder[]): { id: string; title: string; depth: number }[] {
   const flat: { id: string; title: string; depth: number }[] = [];
   function walk(nodes: BookmarkFolder[]): void {
-    for (const f of nodes) {
-      flat.push({ id: f.id, title: f.title, depth: f.depth });
-      if (f.children.length > 0) walk(f.children);
+    for (const folder of nodes) {
+      flat.push({ id: folder.id, title: folder.title, depth: folder.depth });
+      if (folder.children.length > 0) walk(folder.children);
     }
   }
   walk(folders);
@@ -125,8 +125,8 @@ export async function openAddBookmarkOverlay(
 
       // Click handler
       const list = body.querySelector(".ht-addbm-list") as HTMLElement;
-      list.addEventListener("click", (e) => {
-        const item = (e.target as HTMLElement).closest("[data-idx]") as HTMLElement;
+      list.addEventListener("click", (event) => {
+        const item = (event.target as HTMLElement).closest("[data-idx]") as HTMLElement;
         if (!item) return;
         const idx = parseInt(item.dataset.idx!);
         chosenType = idx === 0 ? "file" : idx === 1 ? "folder" : "folderAndFile";
@@ -158,11 +158,11 @@ export async function openAddBookmarkOverlay(
         </div>`;
 
       for (let i = 0; i < flatFolders.length; i++) {
-        const f = flatFolders[i];
-        const indent = f.depth > 0 ? `padding-left:${14 + f.depth * 16}px;` : "";
+        const folder = flatFolders[i];
+        const indent = folder.depth > 0 ? `padding-left:${14 + folder.depth * 16}px;` : "";
         html += `<div class="ht-addbm-item${activeIndex === i + 1 ? " active" : ""}" data-idx="${i + 1}" style="${indent}">
           <span class="ht-addbm-icon">\u{1F4C1}</span>
-          <span class="ht-addbm-name">${escapeHtml(f.title)}</span>
+          <span class="ht-addbm-name">${escapeHtml(folder.title)}</span>
         </div>`;
       }
 
@@ -177,8 +177,8 @@ export async function openAddBookmarkOverlay(
 
       // Click handler
       const list = body.querySelector(".ht-addbm-list") as HTMLElement;
-      list.addEventListener("click", (e) => {
-        const item = (e.target as HTMLElement).closest("[data-idx]") as HTMLElement;
+      list.addEventListener("click", (event) => {
+        const item = (event.target as HTMLElement).closest("[data-idx]") as HTMLElement;
         if (!item) return;
         const idx = parseInt(item.dataset.idx!);
         confirmDest(idx);
@@ -197,10 +197,10 @@ export async function openAddBookmarkOverlay(
       if (chosenType === "file") {
         // Save bookmark directly
         const parentId = getParentId(idx);
-        const msg: Record<string, unknown> = { type: "BOOKMARK_ADD" };
-        if (parentId) msg.parentId = parentId;
+        const bookmarkAddRequest: Record<string, unknown> = { type: "BOOKMARK_ADD" };
+        if (parentId) bookmarkAddRequest.parentId = parentId;
 
-        const result = (await browser.runtime.sendMessage(msg)) as {
+        const result = (await browser.runtime.sendMessage(bookmarkAddRequest)) as {
           ok: boolean;
           title?: string;
         };
@@ -244,9 +244,9 @@ export async function openAddBookmarkOverlay(
       nameInputEl.dataset.destIdx = String(destIdx);
     }
 
-    function showError(msg: string): void {
+    function showError(message: string): void {
       if (!errorEl) return;
-      errorEl.textContent = msg;
+      errorEl.textContent = message;
       errorEl.style.display = "";
       if (nameInputEl) nameInputEl.style.borderBottom = "1px solid #ff5f57";
       setTimeout(() => {
@@ -265,13 +265,13 @@ export async function openAddBookmarkOverlay(
       const destIdx = parseInt(nameInputEl.dataset.destIdx || "0");
       const parentId = getParentId(destIdx);
 
-      const msg: Record<string, unknown> = {
+      const createFolderRequest: Record<string, unknown> = {
         type: "BOOKMARK_CREATE_FOLDER",
         title: name,
       };
-      if (parentId) msg.parentId = parentId;
+      if (parentId) createFolderRequest.parentId = parentId;
 
-      const result = (await browser.runtime.sendMessage(msg)) as {
+      const result = (await browser.runtime.sendMessage(createFolderRequest)) as {
         ok: boolean;
         id?: string;
         title?: string;
@@ -316,7 +316,7 @@ export async function openAddBookmarkOverlay(
     }
 
     // --- Keyboard handler (dispatches per step) ---
-    function keyHandler(e: KeyboardEvent): void {
+    function keyHandler(event: KeyboardEvent): void {
       if (!document.getElementById("ht-panel-host")) {
         document.removeEventListener("keydown", keyHandler, true);
         return;
@@ -324,9 +324,9 @@ export async function openAddBookmarkOverlay(
 
       // --- nameInput step ---
       if (step === "nameInput") {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
           // Go back to chooseDest
           step = "chooseDest";
           nameInputEl = null;
@@ -334,21 +334,21 @@ export async function openAddBookmarkOverlay(
           renderChooseDest();
           return;
         }
-        if (e.key === "Enter") {
-          e.preventDefault();
-          e.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          event.stopPropagation();
           confirmFolderCreate();
           return;
         }
         // Let typing flow to the input
-        e.stopPropagation();
+        event.stopPropagation();
         return;
       }
 
       // --- chooseType / chooseDest steps ---
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
         if (step === "chooseDest") {
           // Go back to chooseType
           step = "chooseType";
@@ -360,9 +360,9 @@ export async function openAddBookmarkOverlay(
         return;
       }
 
-      if (e.key === "Enter") {
-        e.preventDefault();
-        e.stopPropagation();
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
         if (step === "chooseType") {
           chosenType = activeIndex === 0 ? "file" : activeIndex === 1 ? "folder" : "folderAndFile";
           transitionToChooseDest();
@@ -375,26 +375,26 @@ export async function openAddBookmarkOverlay(
       const totalItems = step === "chooseType" ? 3 : flatFolders.length + 1;
       const vim = config.navigationMode === "vim";
 
-      if (e.key === "ArrowDown" || (vim && e.key === "j")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (event.key === "ArrowDown" || (vim && event.key === "j")) {
+        event.preventDefault();
+        event.stopPropagation();
         updateHighlight(Math.min(activeIndex + 1, totalItems - 1), totalItems);
         return;
       }
 
-      if (e.key === "ArrowUp" || (vim && e.key === "k")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (event.key === "ArrowUp" || (vim && event.key === "k")) {
+        event.preventDefault();
+        event.stopPropagation();
         updateHighlight(Math.max(activeIndex - 1, 0), totalItems);
         return;
       }
 
-      e.stopPropagation();
+      event.stopPropagation();
     }
 
     // Event binding
     backdrop.addEventListener("click", close);
-    backdrop.addEventListener("mousedown", (e) => e.preventDefault());
+    backdrop.addEventListener("mousedown", (event) => event.preventDefault());
     titlebar.querySelector(".ht-dot-close")!.addEventListener("click", close);
 
     document.addEventListener("keydown", keyHandler, true);

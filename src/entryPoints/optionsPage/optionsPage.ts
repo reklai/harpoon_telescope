@@ -107,8 +107,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const changeBtn = row.querySelector(".change-btn") as HTMLButtonElement;
     changeBtn.textContent = "cancel";
     changeBtn.classList.add("cancel-btn");
-    changeBtn.onclick = (e: MouseEvent) => {
-      e.stopPropagation();
+    changeBtn.onclick = (event: MouseEvent) => {
+      event.stopPropagation();
       cancelRecording();
     };
   }
@@ -123,13 +123,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Capture keydown while recording to assign new keybinding
   document.addEventListener(
     "keydown",
-    async (e: KeyboardEvent) => {
+    async (event: KeyboardEvent) => {
       if (!recordingState) return;
 
-      e.preventDefault();
-      e.stopPropagation();
+      event.preventDefault();
+      event.stopPropagation();
 
-      const keyStr = keyEventToString(e);
+      const keyStr = keyEventToString(event);
       if (!keyStr) return; // modifier-only press
 
       const { scope, action } = recordingState;

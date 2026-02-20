@@ -64,6 +64,32 @@ const REQUIRED_PERF_BUDGET_KEYS = [
   "history.renderVisibleItems",
 ];
 
+const DISALLOWED_IDENTIFIER_PATTERNS = [
+  {
+    pattern: /\b(?:const|let|var)\s+msg\b/g,
+    message: 'Use a descriptive name instead of "msg" for payload objects.',
+  },
+  {
+    pattern: /\bfunction\s+\w+\s*\(\s*msg\s*:/g,
+    message: 'Use a descriptive name instead of "msg" for function parameters.',
+  },
+  {
+    pattern: /\(\s*msg\s*:\s*[^)]*\)\s*=>/g,
+    message: 'Use a descriptive name instead of "msg" for arrow-function parameters.',
+  },
+  {
+    pattern: /\bfunction\s+\w+\s*\(\s*e\s*:\s*(?:KeyboardEvent|MouseEvent|FocusEvent|WheelEvent|Event)\b/g,
+    message: 'Use "event" instead of "e" for event-handler parameters.',
+  },
+  {
+    pattern: /addEventListener\(\s*["'][^"']+["']\s*,\s*\(\s*e\b/g,
+    message: 'Use "event" instead of "e" for addEventListener callback parameters.',
+  },
+];
+
+const CAMEL_CASE_NAME = /^[a-z][a-zA-Z0-9]*$/;
+const FUNCTION_DECLARATION_PATTERN = /\bfunction\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g;
+
 const errors = [];
 
 function readText(relativePath) {
@@ -81,6 +107,16 @@ function walkFiles(dir, extensions, out = []) {
     if (extensions.has(extname(entry))) out.push(fullPath);
   }
   return out;
+}
+
+function getLineNumber(source, index) {
+  return source.slice(0, index).split("\n").length;
+}
+
+function stripFileExtension(filename) {
+  if (filename.endsWith(".d.ts")) return filename.slice(0, -".d.ts".length);
+  const extension = extname(filename);
+  return extension ? filename.slice(0, -extension.length) : filename;
 }
 
 function isBannedPackage(name) {
@@ -205,12 +241,77 @@ function checkPerfGuardrails() {
   }
 }
 
+function checkPathNamingConventions() {
+  const libRoot = resolve(ROOT, "src/lib");
+  const entryPointsRoot = resolve(ROOT, "src/entryPoints");
+
+  function walkNaming(rootPath, namingPattern, scopeLabel) {
+    for (const entry of readdirSync(rootPath)) {
+      const fullPath = resolve(rootPath, entry);
+      const stat = statSync(fullPath);
+      if (stat.isDirectory()) {
+        if (!namingPattern.test(entry)) {
+          errors.push(`${relative(ROOT, fullPath)} must use ${scopeLabel} naming.`);
+        }
+        walkNaming(fullPath, namingPattern, scopeLabel);
+        continue;
+      }
+      const basename = stripFileExtension(entry);
+      if (!namingPattern.test(basename)) {
+        errors.push(`${relative(ROOT, fullPath)} must use ${scopeLabel} naming.`);
+      }
+    }
+  }
+
+  walkNaming(libRoot, CAMEL_CASE_NAME, "camelCase");
+  walkNaming(entryPointsRoot, CAMEL_CASE_NAME, "camelCase");
+}
+
+function checkFunctionNamingConventions() {
+  const tsFiles = [
+    ...walkFiles(resolve(ROOT, "src/lib"), new Set([".ts"])),
+    ...walkFiles(resolve(ROOT, "src/entryPoints"), new Set([".ts"])),
+  ];
+  for (const fullPath of tsFiles) {
+    const relPath = relative(ROOT, fullPath);
+    const source = readFileSync(fullPath, "utf8");
+    FUNCTION_DECLARATION_PATTERN.lastIndex = 0;
+    let match;
+    while ((match = FUNCTION_DECLARATION_PATTERN.exec(source)) !== null) {
+      const functionName = match[1];
+      if (!CAMEL_CASE_NAME.test(functionName)) {
+        const line = getLineNumber(source, match.index);
+        errors.push(`${relPath}:${line} function "${functionName}" must use camelCase naming.`);
+      }
+    }
+  }
+}
+
+function checkNamingConsistency() {
+  const tsFiles = walkFiles(resolve(ROOT, "src"), new Set([".ts"]));
+  for (const fullPath of tsFiles) {
+    const relPath = relative(ROOT, fullPath);
+    const source = readFileSync(fullPath, "utf8");
+    for (const rule of DISALLOWED_IDENTIFIER_PATTERNS) {
+      rule.pattern.lastIndex = 0;
+      let match;
+      while ((match = rule.pattern.exec(source)) !== null) {
+        const line = getLineNumber(source, match.index);
+        errors.push(`${relPath}:${line} ${rule.message}`);
+      }
+    }
+  }
+}
+
 checkPackageDependencies();
 checkSourceImports();
 checkOverlayContracts();
 checkUiGlitchBaseline();
 checkContributorDocs();
 checkPerfGuardrails();
+checkPathNamingConventions();
+checkFunctionNamingConventions();
+checkNamingConsistency();
 
 if (errors.length > 0) {
   console.error("[lint] FAILED");

@@ -162,13 +162,13 @@ export async function openTabManager(
         }
         close();
       });
-      backdrop.addEventListener("mousedown", (e) => e.preventDefault());
+      backdrop.addEventListener("mousedown", (event) => event.preventDefault());
       closeBtn.addEventListener("click", close);
 
       // Item click: normal mode -> jump, swap mode -> pick
       shadow.querySelectorAll(".ht-tab-manager-item").forEach((el) => {
-        el.addEventListener("click", (e) => {
-          const target = (e as MouseEvent).target as HTMLElement;
+        el.addEventListener("click", (event) => {
+          const target = (event as MouseEvent).target as HTMLElement;
           if (target.closest(".ht-tab-manager-delete")) return;
           const idx = parseInt((el as HTMLElement).dataset.index!);
           if (!list[idx]) return;
@@ -183,8 +183,8 @@ export async function openTabManager(
 
       // Delete buttons
       shadow.querySelectorAll(".ht-tab-manager-delete").forEach((el) => {
-        el.addEventListener("click", async (e) => {
-          e.stopPropagation();
+        el.addEventListener("click", async (event) => {
+          event.stopPropagation();
           const tabId = parseInt((el as HTMLElement).dataset.tabId!);
           const idx = list.findIndex((item) => item.tabId === tabId);
           if (idx !== -1) undoEntry = { entry: { ...list[idx] }, index: idx };
@@ -274,7 +274,7 @@ export async function openTabManager(
     }
 
     // -- Keyboard handler --
-    function keyHandler(e: KeyboardEvent): void {
+    function keyHandler(event: KeyboardEvent): void {
       if (!document.getElementById("ht-panel-host")) {
         document.removeEventListener("keydown", keyHandler, true);
         return;
@@ -282,26 +282,26 @@ export async function openTabManager(
 
       // Delegate to session view key handlers
       if (viewMode === "saveSession") {
-        handleSaveSessionKey(sessionCtx, e);
+        handleSaveSessionKey(sessionCtx, event);
         return;
       }
       if (viewMode === "sessionList") {
-        handleSessionListKey(sessionCtx, e);
+        handleSessionListKey(sessionCtx, event);
         return;
       }
       if (viewMode === "replaceSession") {
-        handleReplaceSessionKey(sessionCtx, e);
+        handleReplaceSessionKey(sessionCtx, event);
         return;
       }
 
       // -- Tab Manager mode key handling --
 
       // Number keys 1-4: instant jump to slot
-      if (!e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
-        const num = parseInt(e.key);
+      if (!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
+        const num = parseInt(event.key);
         if (num >= 1 && num <= MAX_TAB_MANAGER_SLOTS) {
-          e.preventDefault();
-          e.stopPropagation();
+          event.preventDefault();
+          event.stopPropagation();
           const item = list.find((it) => it.slot === num);
           if (item) jumpToSlot(item);
           return;
@@ -309,9 +309,9 @@ export async function openTabManager(
       }
 
       // Swap mode toggle ("w" key)
-      if (matchesAction(e, config, "tabManager", "swap")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "tabManager", "swap")) {
+        event.preventDefault();
+        event.stopPropagation();
         if (swapMode) {
           exitSwapMode();
         } else {
@@ -323,9 +323,9 @@ export async function openTabManager(
       }
 
       // Save session ("s" key)
-      if (matchesAction(e, config, "tabManager", "saveSession")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "tabManager", "saveSession")) {
+        event.preventDefault();
+        event.stopPropagation();
         if (list.length === 0) return;
         viewMode = "saveSession";
         render();
@@ -333,9 +333,9 @@ export async function openTabManager(
       }
 
       // Load session ("l" key)
-      if (matchesAction(e, config, "tabManager", "loadSession")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "tabManager", "loadSession")) {
+        event.preventDefault();
+        event.stopPropagation();
         (async () => {
           sessions = (await browser.runtime.sendMessage({
             type: "SESSION_LIST",
@@ -347,18 +347,18 @@ export async function openTabManager(
         return;
       }
 
-      if (matchesAction(e, config, "tabManager", "close")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "tabManager", "close")) {
+        event.preventDefault();
+        event.stopPropagation();
         if (swapMode) {
           exitSwapMode();
           render();
           return;
         }
         close();
-      } else if (matchesAction(e, config, "tabManager", "moveDown")) {
-        e.preventDefault();
-        e.stopPropagation();
+      } else if (matchesAction(event, config, "tabManager", "moveDown")) {
+        event.preventDefault();
+        event.stopPropagation();
         if (list.length > 0) {
           const newIdx = Math.min(activeIndex + 1, list.length - 1);
           if (swapMode) {
@@ -368,9 +368,9 @@ export async function openTabManager(
             setActiveIndex(newIdx);
           }
         }
-      } else if (matchesAction(e, config, "tabManager", "moveUp")) {
-        e.preventDefault();
-        e.stopPropagation();
+      } else if (matchesAction(event, config, "tabManager", "moveUp")) {
+        event.preventDefault();
+        event.stopPropagation();
         if (list.length > 0) {
           const newIdx = Math.max(activeIndex - 1, 0);
           if (swapMode) {
@@ -380,17 +380,17 @@ export async function openTabManager(
             setActiveIndex(newIdx);
           }
         }
-      } else if (matchesAction(e, config, "tabManager", "jump")) {
-        e.preventDefault();
-        e.stopPropagation();
+      } else if (matchesAction(event, config, "tabManager", "jump")) {
+        event.preventDefault();
+        event.stopPropagation();
         if (swapMode && list[activeIndex]) {
           performSwapPick(activeIndex);
         } else if (list[activeIndex]) {
           jumpToSlot(list[activeIndex]);
         }
-      } else if (matchesAction(e, config, "tabManager", "remove")) {
-        e.preventDefault();
-        e.stopPropagation();
+      } else if (matchesAction(event, config, "tabManager", "remove")) {
+        event.preventDefault();
+        event.stopPropagation();
         if (list[activeIndex]) {
           (async () => {
             undoEntry = { entry: { ...list[activeIndex] }, index: activeIndex };
@@ -408,10 +408,16 @@ export async function openTabManager(
             render();
           })();
         }
-      } else if (e.key.toLowerCase() === "u" && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
+      } else if (
+        event.key.toLowerCase() === "u"
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.shiftKey
+        && !event.metaKey
+      ) {
         // Undo last remove
-        e.preventDefault();
-        e.stopPropagation();
+        event.preventDefault();
+        event.stopPropagation();
         if (!undoEntry) return;
         if (list.length >= MAX_TAB_MANAGER_SLOTS) {
           undoEntry = null;
@@ -431,7 +437,7 @@ export async function openTabManager(
         })();
       } else {
         // Block all other keys from reaching the page
-        e.stopPropagation();
+        event.stopPropagation();
       }
     }
 

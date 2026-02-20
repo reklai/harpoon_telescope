@@ -73,7 +73,7 @@ export async function renderSaveSession(ctx: SessionContext): Promise<void> {
     ctx.setViewMode("tabManager");
     ctx.render();
   });
-  backdrop.addEventListener("mousedown", (e) => e.preventDefault());
+  backdrop.addEventListener("mousedown", (event) => event.preventDefault());
   closeBtn.addEventListener("click", () => {
     ctx.setViewMode("tabManager");
     ctx.render();
@@ -145,7 +145,7 @@ export function renderSessionList(ctx: SessionContext): void {
     ctx.setViewMode("tabManager");
     ctx.render();
   });
-  backdrop.addEventListener("mousedown", (e) => e.preventDefault());
+  backdrop.addEventListener("mousedown", (event) => event.preventDefault());
   closeBtn.addEventListener("click", () => {
     ctx.setViewMode("tabManager");
     ctx.render();
@@ -153,8 +153,8 @@ export function renderSessionList(ctx: SessionContext): void {
 
   // Click to load (skip if clicking delete button)
   shadow.querySelectorAll(".ht-session-item").forEach((el) => {
-    el.addEventListener("click", (e) => {
-      if ((e.target as HTMLElement).closest(".ht-session-delete")) return;
+    el.addEventListener("click", (event) => {
+      if ((event.target as HTMLElement).closest(".ht-session-delete")) return;
       const idx = parseInt((el as HTMLElement).dataset.index!);
       loadSession(ctx, sessions[idx]);
     });
@@ -162,8 +162,8 @@ export function renderSessionList(ctx: SessionContext): void {
 
   // Click x to delete
   shadow.querySelectorAll(".ht-session-delete").forEach((el) => {
-    el.addEventListener("click", (e) => {
-      e.stopPropagation();
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
       const idx = parseInt((el as HTMLElement).dataset.index!);
       deleteSession(ctx, idx);
     });
@@ -215,7 +215,7 @@ export function renderReplaceSession(ctx: SessionContext): void {
     ctx.setViewMode("saveSession");
     ctx.render();
   });
-  backdrop.addEventListener("mousedown", (e) => e.preventDefault());
+  backdrop.addEventListener("mousedown", (event) => event.preventDefault());
   closeBtn.addEventListener("click", () => {
     ctx.setViewMode("saveSession");
     ctx.render();
@@ -251,39 +251,39 @@ async function replaceSession(ctx: SessionContext, idx: number): Promise<void> {
 }
 
 /** Handle keydown events in replaceSession view. Returns true if handled. */
-export function handleReplaceSessionKey(ctx: SessionContext, e: KeyboardEvent): boolean {
-  if (e.key === "Escape") {
-    e.preventDefault();
-    e.stopPropagation();
+export function handleReplaceSessionKey(ctx: SessionContext, event: KeyboardEvent): boolean {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
     ctx.setViewMode("saveSession");
     ctx.render();
     return true;
   }
-  if (e.key === "Enter") {
-    e.preventDefault();
-    e.stopPropagation();
+  if (event.key === "Enter") {
+    event.preventDefault();
+    event.stopPropagation();
     if (ctx.sessions[ctx.sessionIndex]) replaceSession(ctx, ctx.sessionIndex);
     return true;
   }
-  if (matchesAction(e, ctx.config, "tabManager", "moveDown")) {
-    e.preventDefault();
-    e.stopPropagation();
+  if (matchesAction(event, ctx.config, "tabManager", "moveDown")) {
+    event.preventDefault();
+    event.stopPropagation();
     if (ctx.sessions.length > 0) {
       ctx.setSessionIndex(Math.min(ctx.sessionIndex + 1, ctx.sessions.length - 1));
       ctx.render();
     }
     return true;
   }
-  if (matchesAction(e, ctx.config, "tabManager", "moveUp")) {
-    e.preventDefault();
-    e.stopPropagation();
+  if (matchesAction(event, ctx.config, "tabManager", "moveUp")) {
+    event.preventDefault();
+    event.stopPropagation();
     if (ctx.sessions.length > 0) {
       ctx.setSessionIndex(Math.max(ctx.sessionIndex - 1, 0));
       ctx.render();
     }
     return true;
   }
-  e.stopPropagation();
+  event.stopPropagation();
   return true;
 }
 
@@ -348,9 +348,9 @@ async function validateSessionSave(name: string): Promise<string | null> {
     browser.runtime.sendMessage({ type: "SESSION_LIST" }) as Promise<TabManagerSession[]>,
   ]);
   // Check identical content first (more specific error)
-  const currentUrls = tabManagerList.map((e) => e.url).join("\n");
+  const currentUrls = tabManagerList.map((entry) => entry.url).join("\n");
   for (const s of sessions) {
-    const sessionUrls = s.entries.map((e) => e.url).join("\n");
+    const sessionUrls = s.entries.map((entry) => entry.url).join("\n");
     if (currentUrls === sessionUrls) return `Identical to "${s.name}"`;
   }
   // Check duplicate name
@@ -362,17 +362,17 @@ async function validateSessionSave(name: string): Promise<string | null> {
 }
 
 /** Handle keydown events in saveSession view. Returns true if handled. */
-export function handleSaveSessionKey(ctx: SessionContext, e: KeyboardEvent): boolean {
-  if (e.key === "Escape") {
-    e.preventDefault();
-    e.stopPropagation();
+export function handleSaveSessionKey(ctx: SessionContext, event: KeyboardEvent): boolean {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
     ctx.setViewMode("tabManager");
     ctx.render();
     return true;
   }
-  if (e.key === "Enter") {
-    e.preventDefault();
-    e.stopPropagation();
+  if (event.key === "Enter") {
+    event.preventDefault();
+    event.stopPropagation();
     const input = ctx.shadow.querySelector(".ht-session-input") as HTMLInputElement;
     if (input && !input.value.trim()) {
       const errorEl = ctx.shadow.querySelector(".ht-session-error") as HTMLElement;
@@ -402,24 +402,24 @@ export function handleSaveSessionKey(ctx: SessionContext, e: KeyboardEvent): boo
     return true;
   }
   // Let typing through to the input
-  e.stopPropagation();
+  event.stopPropagation();
   return true;
 }
 
 /** Handle keydown events in sessionList view. Returns true if handled. */
-export function handleSessionListKey(ctx: SessionContext, e: KeyboardEvent): boolean {
+export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent): boolean {
   // During rename mode, only handle Enter/Escape — let all other keys through to the input
   if (isRenameModeActive) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
       isRenameModeActive = false;
       ctx.render();
       return true;
     }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      e.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
       const input = ctx.shadow.querySelector(".ht-session-rename-input") as HTMLInputElement;
       if (input && input.value.trim()) {
         const oldName = ctx.sessions[ctx.sessionIndex].name;
@@ -446,15 +446,15 @@ export function handleSessionListKey(ctx: SessionContext, e: KeyboardEvent): boo
       return true;
     }
     // Let typing reach the input (don't preventDefault)
-    e.stopPropagation();
+    event.stopPropagation();
     return true;
   }
 
   // During overwrite confirmation, only accept y/n/Escape
   if (isOverwriteConfirmationActive) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.key.toLowerCase() === "y") {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key.toLowerCase() === "y") {
       const session = ctx.sessions[ctx.sessionIndex];
       isOverwriteConfirmationActive = false;
       (async () => {
@@ -481,50 +481,56 @@ export function handleSessionListKey(ctx: SessionContext, e: KeyboardEvent): boo
     return true;
   }
 
-  if (matchesAction(e, ctx.config, "tabManager", "close") || e.key === "Escape") {
-    e.preventDefault();
-    e.stopPropagation();
+  if (matchesAction(event, ctx.config, "tabManager", "close") || event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
     isRenameModeActive = false;
     isOverwriteConfirmationActive = false;
     ctx.setViewMode("tabManager");
     ctx.render();
     return true;
   }
-  if (matchesAction(e, ctx.config, "tabManager", "moveDown")) {
-    e.preventDefault();
-    e.stopPropagation();
+  if (matchesAction(event, ctx.config, "tabManager", "moveDown")) {
+    event.preventDefault();
+    event.stopPropagation();
     if (ctx.sessions.length > 0) {
       ctx.setSessionIndex(Math.min(ctx.sessionIndex + 1, ctx.sessions.length - 1));
       ctx.render();
     }
     return true;
   }
-  if (matchesAction(e, ctx.config, "tabManager", "moveUp")) {
-    e.preventDefault();
-    e.stopPropagation();
+  if (matchesAction(event, ctx.config, "tabManager", "moveUp")) {
+    event.preventDefault();
+    event.stopPropagation();
     if (ctx.sessions.length > 0) {
       ctx.setSessionIndex(Math.max(ctx.sessionIndex - 1, 0));
       ctx.render();
     }
     return true;
   }
-  if (matchesAction(e, ctx.config, "tabManager", "jump")) {
-    e.preventDefault();
-    e.stopPropagation();
+  if (matchesAction(event, ctx.config, "tabManager", "jump")) {
+    event.preventDefault();
+    event.stopPropagation();
     if (ctx.sessions[ctx.sessionIndex]) loadSession(ctx, ctx.sessions[ctx.sessionIndex]);
     return true;
   }
-  if (matchesAction(e, ctx.config, "tabManager", "remove")) {
-    e.preventDefault();
-    e.stopPropagation();
+  if (matchesAction(event, ctx.config, "tabManager", "remove")) {
+    event.preventDefault();
+    event.stopPropagation();
     if (ctx.sessions[ctx.sessionIndex]) deleteSession(ctx, ctx.sessionIndex);
     return true;
   }
 
   // Rename session ("r" key)
-  if (e.key.toLowerCase() === "r" && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
-    e.preventDefault();
-    e.stopPropagation();
+  if (
+    event.key.toLowerCase() === "r"
+    && !event.ctrlKey
+    && !event.altKey
+    && !event.shiftKey
+    && !event.metaKey
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
     if (ctx.sessions.length === 0) return true;
     isRenameModeActive = true;
     // Re-render to show inline input, then focus it
@@ -535,16 +541,22 @@ export function handleSessionListKey(ctx: SessionContext, e: KeyboardEvent): boo
   }
 
   // Overwrite session ("o" key) — show confirmation prompt
-  if (e.key.toLowerCase() === "o" && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
-    e.preventDefault();
-    e.stopPropagation();
+  if (
+    event.key.toLowerCase() === "o"
+    && !event.ctrlKey
+    && !event.altKey
+    && !event.shiftKey
+    && !event.metaKey
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
     if (ctx.sessions.length === 0) return true;
     isOverwriteConfirmationActive = true;
     ctx.render();
     return true;
   }
 
-  e.stopPropagation();
+  event.stopPropagation();
   return true;
 }
 
@@ -611,7 +623,7 @@ export async function openSessionRestoreOverlay(): Promise<void> {
       const closeBtn = shadow.querySelector(".ht-dot-close") as HTMLElement;
 
       backdrop.addEventListener("click", close);
-      backdrop.addEventListener("mousedown", (e) => e.preventDefault());
+      backdrop.addEventListener("mousedown", (event) => event.preventDefault());
       closeBtn.addEventListener("click", close);
 
       shadow.querySelectorAll(".ht-session-restore-item").forEach((el) => {
@@ -636,39 +648,39 @@ export async function openSessionRestoreOverlay(): Promise<void> {
       }
     }
 
-    function keyHandler(e: KeyboardEvent): void {
+    function keyHandler(event: KeyboardEvent): void {
       if (!document.getElementById("ht-panel-host")) {
         document.removeEventListener("keydown", keyHandler, true);
         return;
       }
 
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
         close();
         return;
       }
-      if (e.key === "Enter") {
-        e.preventDefault();
-        e.stopPropagation();
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
         if (sessions[activeIndex]) restoreSession(sessions[activeIndex]);
         return;
       }
-      if (matchesAction(e, config, "tabManager", "moveDown")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "tabManager", "moveDown")) {
+        event.preventDefault();
+        event.stopPropagation();
         activeIndex = Math.min(activeIndex + 1, sessions.length - 1);
         render();
         return;
       }
-      if (matchesAction(e, config, "tabManager", "moveUp")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "tabManager", "moveUp")) {
+        event.preventDefault();
+        event.stopPropagation();
         activeIndex = Math.max(activeIndex - 1, 0);
         render();
         return;
       }
-      e.stopPropagation();
+      event.stopPropagation();
     }
 
     document.addEventListener("keydown", keyHandler, true);

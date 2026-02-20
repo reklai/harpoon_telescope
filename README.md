@@ -120,8 +120,9 @@ npm run lint             # lightweight repository lint checks
 npm run test             # node:test suite (manifest/docs guardrails)
 npm run typecheck        # tsc --noEmit
 npm run verify:compat    # manifest + permission sanity checks
+npm run verify:upgrade   # fixture-based storage migration compatibility checks
 npm run verify:store     # manifest/store/privacy policy consistency checks
-npm run ci               # lint + test + typecheck + compat + store + both builds
+npm run ci               # lint + test + typecheck + compat + upgrade + store + both builds
 npm run clean            # rm -rf dist
 ```
 
@@ -134,7 +135,7 @@ Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps
 ### Release Flow
 
 1. If permissions, storage limits, or privacy claims changed, update `manifest_v2.json`, `manifest_v3.json`, `STORE.md`, and `PRIVACY.md` together in the same PR.
-2. Run `npm run ci` before tagging a release. This now includes `npm run verify:store`, which blocks releases when manifest/docs/privacy policy drift.
+2. Run `npm run ci` before tagging a release. This now includes `npm run verify:upgrade` and `npm run verify:store`, which block releases on migration regressions or manifest/docs/privacy policy drift.
 3. Build the target package (`npm run build:firefox` and/or `npm run build:chrome`) and use `STORE.md` + `PRIVACY.md` as the source of truth for store submission text.
 
 ## Installation (Development)
@@ -154,17 +155,17 @@ Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps
 ``` 
 harpoon_telescope/
 ├── src/
-│   ├── entrypoints/                        # Browser-executed entry bundles
+│   ├── entryPoints/                        # Browser-executed entry bundles
 │   │   ├── background/background.ts        # Background bootstrap + router composition
-│   │   ├── content-script/content-script.ts
-│   │   ├── options-page/
-│   │   │   ├── options-page.ts
-│   │   │   ├── options-page.html
-│   │   │   └── options-page.css
-│   │   └── toolbar-popup/
-│   │       ├── toolbar-popup.ts
-│   │       ├── toolbar-popup.html
-│   │       └── toolbar-popup.css
+│   │   ├── contentScript/contentScript.ts
+│   │   ├── optionsPage/
+│   │   │   ├── optionsPage.ts
+│   │   │   ├── optionsPage.html
+│   │   │   └── optionsPage.css
+│   │   └── toolbarPopup/
+│   │       ├── toolbarPopup.ts
+│   │       ├── toolbarPopup.html
+│   │       └── toolbarPopup.css
 │   ├── lib/                                # Feature modules + shared utilities
 │   │   ├── appInit/
 │   │   ├── addBookmark/
@@ -196,7 +197,7 @@ harpoon_telescope/
       runtime messages          runtime messages
                 │                      │
    ┌────────────▼──────────┐   ┌──────▼───────────────┐
-   │ content-script.js     │   │ options-page.js      │
+   │ contentScript.js     │   │ optionsPage.js      │
    │ overlay UI + keybinds │   │ keybinding editor    │
    │ + page grep + preview │   │ + nav mode settings  │
    └────────────┬──────────┘   └──────────────────────┘
@@ -204,7 +205,7 @@ harpoon_telescope/
         opens/jumps tabs
                 │
        ┌────────▼─────────┐
-       │ toolbar-popup.js │
+       │ toolbarPopup.js │
        │ quick tab actions│
        └──────────────────┘
 ```
@@ -234,6 +235,7 @@ harpoon_telescope/
 | `frecencyData` | `FrecencyEntry[]` | Frecency visit history (max 50) |
 | `bookmarkUsage` | `Record<string, BookmarkUsage>` | Per-URL bookmark usage counts and recency |
 | `keybindings` | `KeybindingsConfig` | User keybindings + navigation mode |
+| `storageSchemaVersion` | `number` | Schema version used by startup migrations |
 
 ## Contributing
 
@@ -247,7 +249,7 @@ Architecture walkthrough for contributors: `docs/ARCHITECTURE.md`.
 - **Fast by default** — rAF-throttled rendering, virtualized result panes, capped datasets, and lazy work on demand.
 - **Minimal UI glitching** — one active panel host, isolated styles, explicit focus reclaim, and compositor-friendly overlay containers.
 - **Cross-platform parity** — shared TypeScript bundles across Firefox/Zen and Chrome with MV2/MV3 compatibility guardrails.
-- **Enforced in CI** — `npm run lint`, `npm run test`, `npm run typecheck`, `npm run verify:compat`, and `npm run verify:store`.
+- **Enforced in CI** — `npm run lint`, `npm run test`, `npm run typecheck`, `npm run verify:compat`, `npm run verify:upgrade`, and `npm run verify:store`.
 
 Visual theme is customizable and separate from this engineering contract.
 

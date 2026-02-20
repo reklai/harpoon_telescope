@@ -11,7 +11,7 @@ Harpoon Telescope
 
 ## Summary (short — 132 characters max for AMO)
 
-Pin your most-used tabs, search any page instantly, and switch tabs by frequency. Optional vim motions. No data collection.
+Pin your most-used tabs, search any page instantly,  switch tabs by frequency. Optional vim motions. No data collection.
 
 ## Description
 

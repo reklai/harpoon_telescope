@@ -1,0 +1,84 @@
+{
+  "description": "Leaves an already-current snapshot unchanged",
+  "expectedChanged": false,
+  "input": {
+    "storageSchemaVersion": 1,
+    "tabManagerList": [
+      {
+        "tabId": 101,
+        "url": "https://stable.example",
+        "title": "Stable",
+        "scrollX": 0,
+        "scrollY": 0,
+        "slot": 1
+      }
+    ],
+    "tabManagerSessions": [
+      {
+        "name": "Stable Session",
+        "entries": [
+          {
+            "url": "https://stable.example",
+            "title": "Stable",
+            "scrollX": 0,
+            "scrollY": 0
+          }
+        ],
+        "savedAt": 1700000000123
+      }
+    ],
+    "bookmarkUsage": {
+      "https://stable.example": { "visitCount": 2, "lastVisit": 1700000000123 }
+    },
+    "frecencyData": [
+      {
+        "tabId": 101,
+        "url": "https://stable.example",
+        "title": "Stable",
+        "visitCount": 2,
+        "lastVisit": 1700000000123,
+        "frecencyScore": 200
+      }
+    ]
+  },
+  "expected": {
+    "storageSchemaVersion": 1,
+    "tabManagerList": [
+      {
+        "tabId": 101,
+        "url": "https://stable.example",
+        "title": "Stable",
+        "scrollX": 0,
+        "scrollY": 0,
+        "slot": 1
+      }
+    ],
+    "tabManagerSessions": [
+      {
+        "name": "Stable Session",
+        "entries": [
+          {
+            "url": "https://stable.example",
+            "title": "Stable",
+            "scrollX": 0,
+            "scrollY": 0
+          }
+        ],
+        "savedAt": 1700000000123
+      }
+    ],
+    "bookmarkUsage": {
+      "https://stable.example": { "visitCount": 2, "lastVisit": 1700000000123 }
+    },
+    "frecencyData": [
+      {
+        "tabId": 101,
+        "url": "https://stable.example",
+        "title": "Stable",
+        "visitCount": 2,
+        "lastVisit": 1700000000123,
+        "frecencyScore": 200
+      }
+    ]
+  }
+}

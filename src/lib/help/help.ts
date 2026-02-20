@@ -215,44 +215,44 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
       removePanelHost();
     }
 
-    function keyHandler(e: KeyboardEvent): void {
+    function keyHandler(event: KeyboardEvent): void {
       if (!document.getElementById("ht-panel-host")) {
         document.removeEventListener("keydown", keyHandler, true);
         return;
       }
 
-      if (matchesAction(e, config, "search", "close")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "search", "close")) {
+        event.preventDefault();
+        event.stopPropagation();
         close();
         return;
       }
 
       // Arrow keys or j/k (vim mode) scroll the body
-      const isDown = matchesAction(e, config, "search", "moveDown");
-      const isUp = matchesAction(e, config, "search", "moveUp");
+      const isDown = matchesAction(event, config, "search", "moveDown");
+      const isUp = matchesAction(event, config, "search", "moveUp");
 
       if (isDown) {
-        e.preventDefault();
-        e.stopPropagation();
+        event.preventDefault();
+        event.stopPropagation();
         body.scrollTop += SCROLL_STEP;
         return;
       }
 
       if (isUp) {
-        e.preventDefault();
-        e.stopPropagation();
+        event.preventDefault();
+        event.stopPropagation();
         body.scrollTop -= SCROLL_STEP;
         return;
       }
 
       // Block all other keys from reaching the page
-      e.stopPropagation();
+      event.stopPropagation();
     }
 
     // Bind events
     backdrop.addEventListener("click", close);
-    backdrop.addEventListener("mousedown", (e) => e.preventDefault());
+    backdrop.addEventListener("mousedown", (event) => event.preventDefault());
     titlebar.querySelector(".ht-dot-close")!.addEventListener("click", close);
     document.addEventListener("keydown", keyHandler, true);
     registerPanelCleanup(close);

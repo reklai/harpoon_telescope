@@ -39,8 +39,8 @@ export function createPanelHost(): PanelHost {
   // Must check both host.contains() and shadowRoot.contains() because
   // Shadow DOM children aren't found by host.contains().
   let reclaimId = 0;
-  host.addEventListener("focusout", (e: FocusEvent) => {
-    const related = e.relatedTarget as Node | null;
+  host.addEventListener("focusout", (event: FocusEvent) => {
+    const related = event.relatedTarget as Node | null;
     const staysInPanel =
       related &&
       (host.contains(related) || host.shadowRoot!.contains(related));
@@ -55,9 +55,9 @@ export function createPanelHost(): PanelHost {
   });
 
   // Prevent clicks on the transparent backdrop from shifting focus behind the overlay
-  host.addEventListener("mousedown", (e: MouseEvent) => {
-    if (e.target === host) {
-      e.preventDefault();
+  host.addEventListener("mousedown", (event: MouseEvent) => {
+    if (event.target === host) {
+      event.preventDefault();
     }
   });
 

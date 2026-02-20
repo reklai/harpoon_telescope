@@ -32,8 +32,8 @@ Companion reference for contributors: `docs/ARCHITECTURE.md`
 5. [Manifests — MV2 and MV3](#manifests--mv2-and-mv3)
 6. [Shared Types — src/types.d.ts](#shared-types--srctypesdts)
 7. [Keybinding System — src/lib/shared/keybindings.ts](#keybinding-system--srclibsharedkeybindingsts)
-8. [Content Script Boot — src/entrypoints/content-script](#content-script-boot--srcentrypointscontent-script)
-9. [Background Process — src/entrypoints/background](#background-process--srcentrypointsbackground)
+8. [Content Script Boot — src/entryPoints/contentScript](#contentScript-boot--srcentryPointscontentScript)
+9. [Background Process — src/entryPoints/background](#background-process--srcentryPointsbackground)
 10. [Search Current Page — src/lib/searchCurrentPage](#search-current-page--srclibsearchcurrentpage)
 11. [Search Open Tabs — src/lib/searchOpenTabs](#search-open-tabs--srclibsearchopentabs)
 12. [Tab Manager — src/lib/tabManager](#tab-manager--srclibtabmanager)
@@ -45,6 +45,8 @@ Companion reference for contributors: `docs/ARCHITECTURE.md`
 18. [Performance Patterns](#performance-patterns)
 19. [UI Conventions (Footers, Vim, Filters)](#ui-conventions-footers-vim-filters)
 20. [Patterns Worth Reusing](#patterns-worth-reusing)
+21. [Interview Prep + Codebase Walkthrough](#interview-prep--codebase-walkthrough)
+22. [Final Thought](#final-thought)
 
 ---
 
@@ -71,8 +73,10 @@ How to naturally walk these chapters:
 1. Read one flow from trigger to side effect.
 2. Extract the core concepts from that flow.
 3. Identify the exact algorithmic steps used.
-4. Practice one extension/change for that flow.
-5. Explain the flow out loud in interview style.
+4. Do one no-AI rep (small change from memory, then verify in code).
+5. Run the relevant tests or manual checks.
+6. Explain the flow out loud in interview style.
+7. Capture one lesson I can reuse in another codebase.
 
 ---
 
@@ -124,13 +128,56 @@ Interview articulation:
 
 **Files to trace:** `src/lib/appInit/appInit.ts` (global key handler), `src/lib/searchCurrentPage/searchCurrentPage.ts` (overlay UI + state), `src/lib/searchCurrentPage/grep.ts` (DOM walking + fuzzy scoring), `src/lib/shared/scroll.ts` (scroll-to-text).
 
+Visual map (Flow A):
+
+```text
+[User Alt+F]
+    |
+    v
+[appInit.ts keydown handler] --matchesAction--> [openSearchCurrentPage()]
+    |
+    v
+[Shadow DOM panel host + local state]
+    |
+    v
+[input event] -> [currentQuery/activeFilters update]
+    |
+    v
+[grepPage cache+score] -> [results]
+    |
+    v
+[renderResults + updatePreview]
+    |
+    v
+[Enter] -> [scroll.ts scroll-to-target] -> [dismiss panel]
+```
+
+Practice loop (no AI, data-flow first):
+
+1. Trace: keydown -> `matchesAction` -> `openSearchCurrentPage` -> `applyFilter` -> `grepPage` -> `renderResults` -> `updatePreview`.
+2. Modify: add one new slash filter token end-to-end (`searchCurrentPage.ts` parser + `grep.ts` collector + UI pills/title badges).
+3. Verify: run tests plus manual check on a long document; confirm no panel duplication and no visible keystroke lag.
+4. Explain: defend why caching + virtualization + lazy preview are combined, not optional.
+
+Failure drill:
+
+1. Temporarily bypass the panel guard and trigger `Alt+F` repeatedly.
+2. Observe failure mode (duplicate hosts, conflicting key handlers, visual glitches).
+3. Revert, then explain exactly why guard placement in `appInit.ts` is a correctness boundary.
+
+Growth checkpoint:
+
+1. Junior signal: can trace every state variable (`currentQuery`, `activeFilters`, `results`, `activeIndex`) through one full query cycle.
+2. Mid signal: can add a new filter and keep ranking deterministic with tests.
+3. Senior signal: can quantify a latency budget change and justify a tradeoff with data.
+
 ---
 
 ### Flow B — Tab Manager Add + Jump
 
 User presses `Alt+Shift+T` to add the current tab. The content script in `src/lib/appInit/appInit.ts` catches the keybind and sends `{ type: "TAB_MANAGER_ADD" }` to the background. Only the background has `browser.tabs.*` API access — content scripts are sandboxed and cannot manipulate browser tabs directly. This is the browser's security model.
 
-The background bootstrap in `src/entrypoints/background/background.ts` delegates tab-manager state to `src/lib/background/tabManagerDomain.ts`. That domain first calls `ensureTabManagerLoaded()` to load state from storage if needed. MV3 service workers can be killed at any time, so every stateful handler calls this guard before reads/writes — it's idempotent and safe to call repeatedly. Then the domain sends `GET_SCROLL` back to the content script to capture the current scroll position, because scroll state is page-owned and the background cannot read `window.scrollX` directly. With scroll position in hand, it creates a `TabManagerEntry`, compacts slots to keep them sequential (1, 2, 3 instead of 1, 3, 4), saves to `browser.storage.local`, and returns. The content script shows a feedback toast via `src/lib/shared/feedback.ts` saying "Added to Tab Manager [slot]".
+The background bootstrap in `src/entryPoints/background/background.ts` delegates tab-manager state to `src/lib/background/tabManagerDomain.ts`. That domain first calls `ensureTabManagerLoaded()` to load state from storage if needed. MV3 service workers can be killed at any time, so every stateful handler calls this guard before reads/writes — it's idempotent and safe to call repeatedly. Then the domain sends `GET_SCROLL` back to the content script to capture the current scroll position, because scroll state is page-owned and the background cannot read `window.scrollX` directly. With scroll position in hand, it creates a `TabManagerEntry`, compacts slots to keep them sequential (1, 2, 3 instead of 1, 3, 4), saves to `browser.storage.local`, and returns. The content script shows a feedback toast via `src/lib/shared/feedback.ts` saying "Added to Tab Manager [slot]".
 
 Later, the user presses `Alt+1` to jump. The content script sends `{ type: "TAB_MANAGER_JUMP", slot: 1 }`. The background finds the entry and either activates the existing tab or, if it was closed, re-opens the URL in a new tab and restores scroll.
 
@@ -171,7 +218,52 @@ Interview articulation:
 2. "I used explicit message contracts to separate page and browser responsibilities."
 3. "I guarded state access for MV3 worker restarts."
 
-**Files to trace:** `src/lib/appInit/appInit.ts` (keybind handler), `src/entrypoints/background/background.ts` (router composition), `src/lib/background/tabManagerDomain.ts` (state + commands), `src/lib/background/tabManagerMessageHandler.ts` (runtime API surface), `src/lib/shared/feedback.ts` (toast).
+**Files to trace:** `src/lib/appInit/appInit.ts` (keybind handler), `src/entryPoints/background/background.ts` (router composition), `src/lib/background/tabManagerDomain.ts` (state + commands), `src/lib/background/tabManagerMessageHandler.ts` (runtime API surface), `src/lib/shared/feedback.ts` (toast).
+
+Visual map (Flow B):
+
+```text
+[User Alt+Shift+T in page]
+    |
+    v
+[Content script keydown]
+    |
+    v
+sendMessage TAB_MANAGER_ADD ----------------------------.
+                                                       |
+                                                       v
+                                        [Background router/domain]
+                                                       |
+                                                       v
+                                 ensureLoaded -> GET_SCROLL -> save storage
+                                                       |
+                                                       v
+<---------------------------- response -----------------'
+    |
+    v
+[Content script toast feedback]
+
+[User Alt+1] -> TAB_MANAGER_JUMP -> activate tab OR reopen URL + restore scroll
+```
+
+Practice loop (no AI, data-flow first):
+
+1. Trace: keydown -> runtime message -> background domain guard -> storage write -> feedback toast.
+2. Modify: add one safe tab-manager action (for example, "move slot up") across message contract, domain operation, and overlay keybind.
+3. Verify: test add/jump/reopen flows after browser restart; confirm slot compaction and closed-entry behavior still hold.
+4. Explain: defend why background owns canonical state and content scripts remain stateless views.
+
+Failure drill:
+
+1. Remove `ensureTabManagerLoaded()` from one handler and trigger add/list/jump in a fresh worker lifecycle.
+2. Observe stale or missing state behavior.
+3. Reintroduce guard and explain idempotent-load patterns for MV3 worker restarts.
+
+Growth checkpoint:
+
+1. Junior signal: can explain why tab IDs are unstable and why URL+scroll is persisted.
+2. Mid signal: can add a new command without breaking message contracts.
+3. Senior signal: can reason about race ordering and prove sequential event-loop safety.
 
 ---
 
@@ -218,11 +310,57 @@ Interview articulation:
 
 **Files to trace:** `src/lib/bookmarks/bookmarks.ts` (overlay UI + state), `src/lib/background/bookmarkDomain.ts` (bookmark tree + usage), `src/lib/background/bookmarkMessageHandler.ts` (API wrappers).
 
+Visual map (Flow C):
+
+```text
+[User Alt+B]
+    |
+    v
+[bookmarks overlay opens in content script]
+    |
+    v
+sendMessage BOOKMARK_LIST ------------------------------.
+                                                       |
+                                                       v
+                                      [Background bookmarkDomain]
+                                                       |
+                                                       v
+                                     browser.bookmarks.getTree()
+                                                       |
+                                                       v
+<----------------------- flattened entries -------------'
+    |
+    v
+[allEntries state] -> [filter + rank] -> [left results + right tree]
+    |
+    v
+[detailMode transitions: tree / treeNav / confirmDelete]
+```
+
+Practice loop (no AI, data-flow first):
+
+1. Trace: open overlay -> request list -> background API -> local `allEntries` -> filter/rank -> render left/right panes.
+2. Modify: add a new scoped filter (for example `/domain`) and define explicit ranking tie-breakers.
+3. Verify: run tests/manual checks for tree focus, confirm-delete mode, and footer hint consistency.
+4. Explain: defend the `detailMode` state machine as protection against ambiguous keyboard behavior.
+
+Failure drill:
+
+1. Force an invalid mode transition (for example, allow delete confirm while tree cursor is stale).
+2. Observe UI inconsistency and keybinding confusion.
+3. Repair transition table and explain why explicit finite states reduce hidden UX bugs.
+
+Growth checkpoint:
+
+1. Junior signal: can map each key to state transitions in one mode.
+2. Mid signal: can add a new filter + ranking rule with no regressions in focus behavior.
+3. Senior signal: can simplify mode logic while preserving keyboard predictability.
+
 ---
 
 ### Flow D — Session Restore on Startup
 
-User closes the browser with tabs pinned in Tab Manager. When the browser reopens, `browser.runtime.onStartup` fires and is handled by `src/lib/background/startupRestore.ts` (registered from `src/entrypoints/background/background.ts`). Tab IDs are not stable across browser restarts — the old `tabManagerList` is useless because all those tab IDs now point to nothing. The background clears the stale list and loads `tabManagerSessions` from storage to prepare for restore.
+User closes the browser with tabs pinned in Tab Manager. When the browser reopens, `browser.runtime.onStartup` fires and is handled by `src/lib/background/startupRestore.ts` (registered from `src/entryPoints/background/background.ts`). Tab IDs are not stable across browser restarts — the old `tabManagerList` is useless because all those tab IDs now point to nothing. The background clears the stale list and loads `tabManagerSessions` from storage to prepare for restore.
 
 The challenge is timing. Content scripts load asynchronously, and at startup the background is ready before any tab's content script has finished initializing. If the background immediately tries to send `SHOW_SESSION_RESTORE` to the active tab, the message fails because no listener exists yet.
 
@@ -262,6 +400,49 @@ Interview articulation:
 
 **Files to trace:** `src/lib/background/startupRestore.ts` (startup handler), `src/lib/tabManager/session.ts` (session restore UI).
 
+Visual map (Flow D):
+
+```text
+[Browser startup]
+    |
+    v
+onStartup -> startupRestore.ts
+    |
+    v
+[load sessions + clear stale runtime list]
+    |
+    v
+setTimeout(initial delay)
+    |
+    v
+try send SHOW_SESSION_RESTORE to active tab
+    | success                          | failure
+    v                                  v
+[restore UI shown]              [wait + retry up to max]
+                                         |
+                                         v
+                             [manual fallback remains available]
+```
+
+Practice loop (no AI, data-flow first):
+
+1. Trace: `onStartup` -> load sessions -> clear stale runtime list -> delayed prompt send -> retries -> restore UI -> `SESSION_LOAD`.
+2. Modify: tune retry timing behind constants and document the startup latency tradeoff.
+3. Verify: simulate startup with delayed content-script readiness and confirm bounded retries + manual fallback.
+4. Explain: defend why this is eventual consistency, not synchronous initialization.
+
+Failure drill:
+
+1. Remove retry/backoff and keep single-shot prompt delivery.
+2. Reproduce missing restore prompt on slow startup tabs.
+3. Restore retries and explain why bounded retry with fallback is more resilient than aggressive polling.
+
+Growth checkpoint:
+
+1. Junior signal: can describe lifecycle mismatch between background and content script readiness.
+2. Mid signal: can tune retry strategy safely and keep behavior deterministic.
+3. Senior signal: can design startup recovery paths that degrade gracefully under partial failure.
+
 ---
 
 ## Folder Structure
@@ -274,21 +455,21 @@ harpoon_telescope/
 │   └── manifest_v3.json            # Chrome manifest (MV3)
 ├── src/
 │   ├── types.d.ts                  # Global TS types
-│   ├── entrypoints/
+│   ├── entryPoints/
 │   │   ├── background/
 │   │   │   └── background.ts
-│   │   ├── content-script/
-│   │   │   └── content-script.ts
-│   │   ├── toolbar-popup/
-│   │   │   ├── toolbar-popup.ts
-│   │   │   ├── toolbar-popup.html
-│   │   │   └── toolbar-popup.css
-│   │   └── options-page/
-│   │       ├── options-page.ts
-│   │       ├── options-page.html
-│   │       └── options-page.css
+│   │   ├── contentScript/
+│   │   │   └── contentScript.ts
+│   │   ├── toolbarPopup/
+│   │   │   ├── toolbarPopup.ts
+│   │   │   ├── toolbarPopup.html
+│   │   │   └── toolbarPopup.css
+│   │   └── optionsPage/
+│   │       ├── optionsPage.ts
+│   │       ├── optionsPage.html
+│   │       └── optionsPage.css
 │   ├── lib/
-│   │   ├── appInit/                 # content-script bootstrap
+│   │   ├── appInit/                 # contentScript bootstrap
 │   │   ├── background/              # background domains + runtime/command routers
 │   │   ├── shared/                  # keybindings, helpers, sessions, scroll, feedback
 │   │   ├── tabManager/              # Tab Manager panel + sessions UI
@@ -311,10 +492,10 @@ harpoon_telescope/
 
 The build script bundles four entry points into IIFEs and copies static assets to `dist/`:
 
-- `src/entrypoints/background/background.ts` -> `dist/background.js`
-- `src/entrypoints/content-script/content-script.ts` -> `dist/content-script.js`
-- `src/entrypoints/toolbar-popup/toolbar-popup.ts` -> `dist/toolbar-popup/toolbar-popup.js`
-- `src/entrypoints/options-page/options-page.ts` -> `dist/options-page/options-page.js`
+- `src/entryPoints/background/background.ts` -> `dist/background.js`
+- `src/entryPoints/contentScript/contentScript.ts` -> `dist/contentScript.js`
+- `src/entryPoints/toolbarPopup/toolbarPopup.ts` -> `dist/toolbarPopup/toolbarPopup.js`
+- `src/entryPoints/optionsPage/optionsPage.ts` -> `dist/optionsPage/optionsPage.js`
 
 **Why IIFE?**
 
@@ -336,9 +517,32 @@ CSS is loaded as text via esbuild loader (`{ '.css': 'text' }`). This allows inj
 
 `npm run verify:store` validates manifest/store/privacy consistency: permissions must match docs, privacy claims must stay present, and documented storage caps must match source constants.
 
+**Upgrade migration check:**
+
+`npm run verify:upgrade` runs fixture snapshots through versioned storage migrations to prove old installs upgrade safely.
+
 **Release flow:**
 
-Before cutting a release, run `npm run ci` (includes both verify scripts), then use `STORE.md` and `PRIVACY.md` as the canonical store-submission text.
+Before cutting a release, run `npm run ci` (includes all verify scripts), then use `STORE.md` and `PRIVACY.md` as the canonical store-submission text.
+
+Practice loop (no AI, chapter-specific):
+
+1. Trace: `package.json` scripts -> verify scripts -> build outputs in `dist/`.
+2. Modify: add one new guardrail check script and wire it into `npm run ci`.
+3. Verify: run the new script directly, then run `npm run ci` and confirm failure/success behavior.
+4. Explain: defend why release safety belongs in automation, not memory.
+
+Failure drill:
+
+1. Intentionally desync one manifest/doc claim in a temporary branch.
+2. Run `npm run verify:store` and observe the gate fail.
+3. Fix the drift and explain the exact class of release bug this prevents.
+
+Growth checkpoint:
+
+1. Junior signal: can explain every CI script and what risk it catches.
+2. Mid signal: can add a new release gate without breaking developer flow.
+3. Senior signal: can tune guardrails for signal over noise (strict enough, not brittle).
 
 ---
 
@@ -354,6 +558,25 @@ Chrome moved to MV3; Firefox still supports MV2. MV3 changes background lifecycl
 **How we handle commands across browsers:**
 
 Most shortcuts go through the content script's `keydown` listener, not `browser.commands`. The manifests keep only core suggested commands (open/add/search) for MV3 compatibility, while the content script handles slot jumps and the full keybinding system (including user-customized bindings and panel-local behavior).
+
+Practice loop (no AI, chapter-specific):
+
+1. Trace: manifest command declarations -> runtime keybinding behavior -> browser-specific constraints.
+2. Modify: add one command-related change and keep MV2/MV3 parity.
+3. Verify: run `npm run verify:compat` and manually test the shortcut in Firefox + Chrome builds.
+4. Explain: defend why command scope is split between manifests and content-script routing.
+
+Failure drill:
+
+1. Remove or rename a required command in one manifest only.
+2. Run compatibility checks and observe divergence detection.
+3. Restore parity and explain how MV2/MV3 lifecycle differences affect design choices.
+
+Growth checkpoint:
+
+1. Junior signal: can explain why two manifests exist.
+2. Mid signal: can modify permissions/commands safely across both manifests.
+3. Senior signal: can predict cross-browser regression risk before testing.
 
 ---
 
@@ -391,9 +614,9 @@ Arrow keys always work. j/k are bonuses when vim mode is on. Users don't need to
 
 ---
 
-## Content Script Boot — src/entrypoints/content-script
+## Content Script Boot — src/entryPoints/contentScript
 
-Entry point `src/entrypoints/content-script/content-script.ts` is minimal: it calls `initApp()` in `src/lib/appInit/appInit.ts`.
+Entry point `src/entryPoints/contentScript/contentScript.ts` is minimal: it calls `initApp()` in `src/lib/appInit/appInit.ts`.
 
 `initApp()` handles:
 
@@ -412,9 +635,9 @@ Every keypress calls `getConfig()`. Without caching, that's an async message rou
 
 ---
 
-## Background Process — src/entrypoints/background
+## Background Process — src/entryPoints/background
 
-Background entry `src/entrypoints/background/background.ts` orchestrates:
+Background entry `src/entryPoints/background/background.ts` orchestrates:
 
 - tab manager domain (`src/lib/background/tabManagerDomain.ts`)
 - bookmark domain (`src/lib/background/bookmarkDomain.ts`)
@@ -524,6 +747,25 @@ If the user customizes shortcuts, the help menu reflects their actual bindings, 
 - `frecencyScoring.ts`: frecency scoring + eviction
 - `runtimeMessages.ts`: typed message contracts for background <-> content runtime channels
 
+Practice loop (no AI, chapter-specific):
+
+1. Trace one shared helper from caller -> helper -> returned value usage in UI/background.
+2. Modify one shared contract in `runtimeMessages.ts` and update all call sites.
+3. Verify: run lint/typecheck/tests and manually trigger the affected runtime flow.
+4. Explain: defend why shared modules should stay minimal and stable.
+
+Failure drill:
+
+1. Introduce a contract mismatch between sender and receiver payload shape.
+2. Observe TypeScript/runtime failure points.
+3. Repair and explain why typed message contracts reduce cross-context bugs.
+
+Growth checkpoint:
+
+1. Junior signal: can find where a shared util is consumed.
+2. Mid signal: can evolve a shared contract without hidden breakage.
+3. Senior signal: can decide what belongs in `shared` vs feature-specific modules.
+
 ---
 
 ## Panel Lifecycle + Guards
@@ -547,6 +789,25 @@ Prevents conflicts. `Alt+F` opens the panel; once open, pressing `Alt+F` should 
 - **Cached DOM grep + mutation invalidation:** Walk the DOM once, cache lines, invalidate on changes.
 - **Lazy computation:** Expensive fields (domContext, ancestorHeading) are computed on-demand, not upfront.
 - **Responsive pane switching:** two-pane overlays collapse to stacked panes on smaller viewports.
+
+Practice loop (no AI, chapter-specific):
+
+1. Trace one hot path (`filter` or `render`) from event handler to measured trace output.
+2. Modify one performance-sensitive block (for example list rendering) with a measurable hypothesis.
+3. Verify: inspect perf traces + run perf guardrail tests.
+4. Explain: justify tradeoff between readability and latency on that path.
+
+Failure drill:
+
+1. Temporarily disable virtualization or rAF scheduling in a local branch.
+2. Reproduce jank on larger datasets.
+3. Restore optimization and explain the before/after complexity and frame-budget impact.
+
+Growth checkpoint:
+
+1. Junior signal: can identify which code path is hot.
+2. Mid signal: can reduce latency without changing behavior.
+3. Senior signal: can set and defend measurable budgets in code review.
 
 ---
 
@@ -572,6 +833,59 @@ Consistency across panels. Users learn the pattern once and can predict where ke
 - **Unidirectional data flow:** Events mutate state; render reads state.
 - **Ranked text matching:** Combine substring and fuzzy matching, then rank by quality so exact/tighter title hits rise first.
 - **Virtual scrolling:** O(visible) rendering for large lists.
+
+---
+
+## Interview Prep + Codebase Walkthrough
+
+Use this as the final section before interviews or live walkthroughs.
+
+10-minute walkthrough script:
+
+1. Product + target user (30s): keyboard-first tab/search workflow for power users.
+2. Architecture (90s): content script owns page DOM, background owns browser APIs + canonical state, runtime messages connect them.
+3. Flow A demo (2 min): keypress -> search pipeline -> cached grep -> virtualized render -> scroll side effect.
+4. Flow B demo (2 min): add/jump tab path, unstable tab-ID problem, URL+scroll recovery strategy.
+5. Flow C demo (90s): two-pane state machine and explicit mode transitions.
+6. Flow D demo (90s): startup race handling with bounded retries and fallback.
+7. Release confidence (60s): CI gates (`verify:compat`, `verify:upgrade`, `verify:store`) + Firefox/Chrome builds.
+
+Interview question drill:
+
+1. Why no framework?
+Answer frame: browser primitives reduce overhead, keep control over focus/latency, and map well to extension constraints.
+2. How do you prevent state drift between contexts?
+Answer frame: background is canonical source of truth, overlays request fresh state, message contracts are explicit.
+3. What was the hardest bug class?
+Answer frame: lifecycle and readiness races (MV3 worker restart, startup prompt delivery), solved with idempotent guards and bounded retries.
+4. How do you prove performance claims?
+Answer frame: virtualized rendering, rAF scheduling, perf traces, and CI budget tests.
+5. How is this extension store-ready?
+Answer frame: manifest/privacy/store docs are policy-checked; compatibility and migration gates run in CI.
+
+Proof-of-ownership checklist (run this per feature):
+
+1. Flow A ownership proof: trace `appInit.ts` -> `searchCurrentPage.ts` -> `grep.ts`; run search-related tests/manual grep pass; implement one new slash filter; explain ranking + virtualization tradeoffs.
+2. Flow B ownership proof: trace runtime message path into `tabManagerDomain.ts`; run tab-manager add/jump/session checks; implement one command evolution with contract updates; explain tab-ID instability design.
+3. Flow C ownership proof: trace bookmarks request -> render -> mode transitions; run two-pane and delete-confirm checks; implement one new scoped filter; explain state-machine invariants.
+4. Flow D ownership proof: trace startup restore retries in `startupRestore.ts`; run startup/fallback checks; tune retry constants safely; explain eventual consistency vs synchronous assumptions.
+5. Platform ownership proof: run `npm run ci`; explain what `verify:compat`, `verify:upgrade`, and `verify:store` each prevent in release risk.
+
+30/60/90 growth track in this repo:
+
+1. Day 1-30 (Junior -> strong junior): trace all four flows, pass all tests locally, ship one low-risk feature per flow with tests.
+2. Day 31-60 (Mid ramp): own one cross-cutting refactor (message contracts or panel host tokens), keep CI green, and write regression tests for one bug class.
+3. Day 61-90 (Senior trajectory): lead one design change with explicit tradeoffs, define/update one engineering guardrail, and defend architecture + failure strategy in interview-style review.
+
+Quick summary of everything learned:
+
+1. I can trace real data flow from keypress to render/storage/side effects across browser contexts.
+2. I understand extension boundaries: page DOM vs browser APIs vs runtime messaging.
+3. I can design explicit state machines for keyboard-heavy UIs.
+4. I can reason about performance budgets and enforce them with instrumentation/tests.
+5. I can design resilient startup/recovery behavior for async lifecycle mismatches.
+6. I can ship with release guardrails: compatibility, upgrade safety, and store-policy consistency.
+7. I can extend this codebase confidently and explain tradeoffs like an owner, not a passenger.
 
 ---
 

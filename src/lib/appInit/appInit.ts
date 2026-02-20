@@ -1,5 +1,5 @@
 // App init — wires up keybindings, message routing, and panel lifecycle.
-// Imported by content-script.ts as the single bootstrap for all content-side logic.
+// Imported by contentScript.ts as the single bootstrap for all content-side logic.
 
 import browser from "webextension-polyfill";
 import { matchesAction, saveKeybindings } from "../shared/keybindings";
@@ -77,15 +77,15 @@ export function initApp(): void {
   // Runs on capture phase so pages that call stopPropagation() on keydown
   // can't break our keybinds. Fully synchronous — no microtask overhead.
 
-  function globalKeyHandler(e: KeyboardEvent): void {
+  function globalKeyHandler(event: KeyboardEvent): void {
     if (!cachedConfig) return; // Config not loaded yet
     const config = cachedConfig;
 
     // toggleVim works regardless of whether a panel is open.
     // stopImmediatePropagation prevents overlay handlers from double-firing.
-    if (matchesAction(e, config, "global", "toggleVim")) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
+    if (matchesAction(event, config, "global", "toggleVim")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
       config.navigationMode = config.navigationMode === "vim" ? "basic" : "vim";
       saveKeybindings(config); // fire-and-forget persistence
       showFeedback(config.navigationMode === "vim" ? "Vim motions ON" : "Vim motions OFF");
@@ -103,61 +103,61 @@ export function initApp(): void {
     // Block all actions when a panel is already open — user must close it first.
     if (document.getElementById("ht-panel-host")) return;
 
-    if (matchesAction(e, config, "global", "openTabManager")) {
-      e.preventDefault();
-      e.stopPropagation();
+    if (matchesAction(event, config, "global", "openTabManager")) {
+      event.preventDefault();
+      event.stopPropagation();
       openPanel(() => openTabManager(config));
-    } else if (matchesAction(e, config, "global", "addTab")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "addTab")) {
+      event.preventDefault();
+      event.stopPropagation();
       browser.runtime.sendMessage({ type: "TAB_MANAGER_ADD" });
-    } else if (matchesAction(e, config, "global", "jumpSlot1")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "jumpSlot1")) {
+      event.preventDefault();
+      event.stopPropagation();
       browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 1 });
-    } else if (matchesAction(e, config, "global", "jumpSlot2")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "jumpSlot2")) {
+      event.preventDefault();
+      event.stopPropagation();
       browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 2 });
-    } else if (matchesAction(e, config, "global", "jumpSlot3")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "jumpSlot3")) {
+      event.preventDefault();
+      event.stopPropagation();
       browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 3 });
-    } else if (matchesAction(e, config, "global", "jumpSlot4")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "jumpSlot4")) {
+      event.preventDefault();
+      event.stopPropagation();
       browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 4 });
-    } else if (matchesAction(e, config, "global", "cyclePrev")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "cyclePrev")) {
+      event.preventDefault();
+      event.stopPropagation();
       browser.runtime.sendMessage({ type: "TAB_MANAGER_CYCLE", direction: "prev" });
-    } else if (matchesAction(e, config, "global", "cycleNext")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "cycleNext")) {
+      event.preventDefault();
+      event.stopPropagation();
       browser.runtime.sendMessage({ type: "TAB_MANAGER_CYCLE", direction: "next" });
-    } else if (matchesAction(e, config, "global", "searchInPage")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "searchInPage")) {
+      event.preventDefault();
+      event.stopPropagation();
       openPanel(() => openSearchCurrentPage(config));
-    } else if (matchesAction(e, config, "global", "openFrecency")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "openFrecency")) {
+      event.preventDefault();
+      event.stopPropagation();
       openPanel(() => openSearchOpenTabs(config));
-    } else if (matchesAction(e, config, "global", "openBookmarks")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "openBookmarks")) {
+      event.preventDefault();
+      event.stopPropagation();
       openPanel(() => openBookmarkOverlay(config));
-    } else if (matchesAction(e, config, "global", "addBookmark")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "addBookmark")) {
+      event.preventDefault();
+      event.stopPropagation();
       openPanel(() => openAddBookmarkOverlay(config));
-    } else if (matchesAction(e, config, "global", "openHistory")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "openHistory")) {
+      event.preventDefault();
+      event.stopPropagation();
       openPanel(() => openHistoryOverlay(config));
-    } else if (matchesAction(e, config, "global", "openHelp")) {
-      e.preventDefault();
-      e.stopPropagation();
+    } else if (matchesAction(event, config, "global", "openHelp")) {
+      event.preventDefault();
+      event.stopPropagation();
       openPanel(() => openHelpOverlay(config));
     }
   }

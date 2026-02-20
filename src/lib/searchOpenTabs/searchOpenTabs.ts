@@ -199,8 +199,8 @@ export async function openSearchOpenTabs(
       }
     }
 
-    function onListClick(e: Event): void {
-      const item = (e.target as HTMLElement).closest(".ht-open-tabs-item") as HTMLElement;
+    function onListClick(event: Event): void {
+      const item = (event.target as HTMLElement).closest(".ht-open-tabs-item") as HTMLElement;
       if (!item) return;
       const idx = parseInt(item.dataset.index!);
       if (filtered[idx]) jumpToTab(filtered[idx]);
@@ -296,23 +296,23 @@ export async function openSearchOpenTabs(
       });
     }
 
-    function keyHandler(e: KeyboardEvent): void {
+    function keyHandler(event: KeyboardEvent): void {
       if (!document.getElementById("ht-panel-host")) {
         document.removeEventListener("keydown", keyHandler, true);
         return;
       }
 
-      if (matchesAction(e, config, "search", "close")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "search", "close")) {
+        event.preventDefault();
+        event.stopPropagation();
         close();
         return;
       }
 
       // Tab cycles between input and results list (only if results exist)
-      if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        event.preventDefault();
+        event.stopPropagation();
         if (filtered.length === 0) return;
         const shadowActive = host.shadowRoot?.activeElement;
         if (shadowActive === input) {
@@ -333,10 +333,10 @@ export async function openSearchOpenTabs(
       const inputFocused = host.shadowRoot?.activeElement === input;
 
       // Clear search: c/C (case-insensitive, only when list is focused)
-      if (e.key.toLowerCase() === "c" && !e.ctrlKey && !e.altKey && !e.metaKey
+      if (event.key.toLowerCase() === "c" && !event.ctrlKey && !event.altKey && !event.metaKey
           && !inputFocused) {
-        e.preventDefault();
-        e.stopPropagation();
+        event.preventDefault();
+        event.stopPropagation();
         input.value = "";
         query = "";
         buildHighlightRegex();
@@ -345,18 +345,18 @@ export async function openSearchOpenTabs(
         return;
       }
 
-      if (matchesAction(e, config, "search", "accept")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "search", "accept")) {
+        event.preventDefault();
+        event.stopPropagation();
         if (filtered[activeIndex]) jumpToTab(filtered[activeIndex]);
         return;
       }
 
-      if (matchesAction(e, config, "search", "moveDown")) {
-        const lk = e.key.toLowerCase();
+      if (matchesAction(event, config, "search", "moveDown")) {
+        const lk = event.key.toLowerCase();
         if ((lk === "j" || lk === "k") && inputFocused) return;
-        e.preventDefault();
-        e.stopPropagation();
+        event.preventDefault();
+        event.stopPropagation();
         if (filtered.length > 0) {
           updateActiveHighlight(Math.min(activeIndex + 1, filtered.length - 1));
           if (!inputFocused && activeItemEl) activeItemEl.focus();
@@ -364,11 +364,11 @@ export async function openSearchOpenTabs(
         return;
       }
 
-      if (matchesAction(e, config, "search", "moveUp")) {
-        const lk = e.key.toLowerCase();
+      if (matchesAction(event, config, "search", "moveUp")) {
+        const lk = event.key.toLowerCase();
         if ((lk === "j" || lk === "k") && inputFocused) return;
-        e.preventDefault();
-        e.stopPropagation();
+        event.preventDefault();
+        event.stopPropagation();
         if (filtered.length > 0) {
           updateActiveHighlight(Math.max(activeIndex - 1, 0));
           if (!inputFocused && activeItemEl) activeItemEl.focus();
@@ -377,21 +377,21 @@ export async function openSearchOpenTabs(
       }
 
       // Block all other keys from reaching the page
-      e.stopPropagation();
+      event.stopPropagation();
     }
 
     // Bind static events
     backdrop.addEventListener("click", close);
-    backdrop.addEventListener("mousedown", (e) => e.preventDefault());
+    backdrop.addEventListener("mousedown", (event) => event.preventDefault());
     titlebar.querySelector(".ht-dot-close")!.addEventListener("click", close);
     listEl.addEventListener("click", onListClick);
 
     // Mouse wheel on results list: navigate items, block page scroll
-    listEl.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    listEl.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       if (filtered.length === 0) return;
-      if (e.deltaY > 0) {
+      if (event.deltaY > 0) {
         updateActiveHighlight(Math.min(activeIndex + 1, filtered.length - 1));
       } else {
         updateActiveHighlight(Math.max(activeIndex - 1, 0));

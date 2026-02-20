@@ -8,17 +8,17 @@ This repository is intentionally browser-primitive and framework-free, with a Gh
 
 ## High-Level Runtime Model
 
-- `src/entrypoints/background/background.ts`
+- `src/entryPoints/background/background.ts`
   - Thin orchestration layer for background startup.
   - Registers domain handlers from `src/lib/background/*`.
-- `src/entrypoints/content-script/content-script.ts`
+- `src/entryPoints/contentScript/contentScript.ts`
   - Bootstraps in-page overlays and message handling.
-- `src/entrypoints/options-page/*`
+- `src/entryPoints/optionsPage/*`
   - Keybinding settings UI.
-- `src/entrypoints/toolbar-popup/*`
+- `src/entryPoints/toolbarPopup/*`
   - Lightweight browser-action popup.
 
-All feature modules live in `src/lib/*` and are imported by entrypoints.
+All feature modules live in `src/lib/*` and are imported by entryPoints.
 
 ## Module Layers
 
@@ -57,10 +57,12 @@ This keeps privileged state centralized and UI logic decoupled.
   - Manifest permissions and command constraints.
   - MV2 Gecko metadata checks for AMO.
   - Core command and asset sanity checks.
+- `npm run verify:upgrade`
+  - Fixture-based storage migration checks for upgrade safety.
 - `npm run verify:store`
   - Store listing + privacy + manifest consistency checks.
 - `npm run ci`
-  - `lint` + `test` + `typecheck` + `verify:compat` + `verify:store` + Firefox/Chrome builds.
+  - `lint` + `test` + `typecheck` + `verify:compat` + `verify:upgrade` + `verify:store` + Firefox/Chrome builds.
 
 ## Contributor Path (Recommended)
 

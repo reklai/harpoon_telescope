@@ -90,17 +90,17 @@ for (const commandName of ["open-tab-manager", "tab-manager-add", "open-search-c
   }
 }
 
-if (manifestV2.options_ui?.page !== "options-page/options-page.html") {
-  errors.push('MV2 options_ui.page must be "options-page/options-page.html".');
+if (manifestV2.options_ui?.page !== "optionsPage/optionsPage.html") {
+  errors.push('MV2 options_ui.page must be "optionsPage/optionsPage.html".');
 }
-if (manifestV3.options_ui?.page !== "options-page/options-page.html") {
-  errors.push('MV3 options_ui.page must be "options-page/options-page.html".');
+if (manifestV3.options_ui?.page !== "optionsPage/optionsPage.html") {
+  errors.push('MV3 options_ui.page must be "optionsPage/optionsPage.html".');
 }
 
 const v2Popup = manifestV2.browser_action?.default_popup;
 const v3Popup = manifestV3.action?.default_popup;
-if (v2Popup !== "toolbar-popup/toolbar-popup.html" || v3Popup !== "toolbar-popup/toolbar-popup.html") {
-  errors.push('Both manifests must use "toolbar-popup/toolbar-popup.html" as default popup.');
+if (v2Popup !== "toolbarPopup/toolbarPopup.html" || v3Popup !== "toolbarPopup/toolbarPopup.html") {
+  errors.push('Both manifests must use "toolbarPopup/toolbarPopup.html" as default popup.');
 }
 
 for (const [name, manifest] of [
@@ -116,12 +116,12 @@ for (const [name, manifest] of [
 }
 
 const requiredSourceFiles = [
-  "src/entrypoints/content-script/content-script.ts",
-  "src/entrypoints/background/background.ts",
-  "src/entrypoints/options-page/options-page.html",
-  "src/entrypoints/options-page/options-page.css",
-  "src/entrypoints/toolbar-popup/toolbar-popup.html",
-  "src/entrypoints/toolbar-popup/toolbar-popup.css",
+  "src/entryPoints/contentScript/contentScript.ts",
+  "src/entryPoints/background/background.ts",
+  "src/entryPoints/optionsPage/optionsPage.html",
+  "src/entryPoints/optionsPage/optionsPage.css",
+  "src/entryPoints/toolbarPopup/toolbarPopup.html",
+  "src/entryPoints/toolbarPopup/toolbarPopup.css",
   "src/icons/icon-48.png",
   "src/icons/icon-96.png",
   "src/icons/icon-128.png",

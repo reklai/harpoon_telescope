@@ -1,0 +1,309 @@
+{
+  "description": "Migrates a legacy v0 snapshot with malformed values into normalized v1 storage",
+  "expectedChanged": true,
+  "input": {
+    "customFlag": true,
+    "keybindings": {
+      "navigationMode": "vim",
+      "bindings": {
+        "global": {
+          "openTabManager": { "key": "Alt+X", "default": "Alt+T" }
+        }
+      }
+    },
+    "tabManagerList": [
+      {
+        "tabId": 11,
+        "url": "https://one.com",
+        "title": "One",
+        "scrollX": "12.5",
+        "scrollY": -4,
+        "slot": 99
+      },
+      {
+        "tabId": "bad",
+        "url": "https://invalid.com",
+        "title": "Invalid",
+        "scrollX": 0,
+        "scrollY": 0,
+        "slot": 2
+      },
+      {
+        "tabId": 33,
+        "url": "https://three.com",
+        "title": "Three",
+        "scrollX": -2,
+        "scrollY": "9",
+        "slot": 2,
+        "closed": true
+      },
+      {
+        "tabId": 44,
+        "url": "https://four.com",
+        "title": null,
+        "scrollX": 0,
+        "scrollY": 0,
+        "slot": 8
+      },
+      {
+        "tabId": 55,
+        "url": "https://five.com",
+        "title": "Five",
+        "scrollX": 1,
+        "scrollY": 2,
+        "slot": 9
+      },
+      {
+        "tabId": 66,
+        "url": "https://six.com",
+        "title": "Six",
+        "scrollX": 3,
+        "scrollY": 4,
+        "slot": 10
+      }
+    ],
+    "tabManagerSessions": [
+      {
+        "name": "  Focus Sprint  ",
+        "entries": [
+          {
+            "url": "https://one.com",
+            "title": "One",
+            "scrollX": "3",
+            "scrollY": "-4"
+          },
+          {
+            "url": "",
+            "title": "Bad",
+            "scrollX": 1,
+            "scrollY": 1
+          }
+        ],
+        "savedAt": "1700000000000"
+      },
+      {
+        "name": "focus sprint",
+        "entries": [
+          {
+            "url": "https://dup.com",
+            "title": "Dup",
+            "scrollX": 0,
+            "scrollY": 0
+          }
+        ],
+        "savedAt": 1
+      },
+      {
+        "name": "Empty Session",
+        "entries": [],
+        "savedAt": 5
+      },
+      {
+        "name": "Bugs",
+        "entries": [
+          {
+            "url": "https://bugs.com",
+            "title": "Bugs",
+            "scrollX": "1.5",
+            "scrollY": "2"
+          }
+        ],
+        "savedAt": "NaN"
+      },
+      {
+        "name": "Docs",
+        "entries": [
+          {
+            "url": "https://docs.com",
+            "title": "Docs",
+            "scrollX": 1,
+            "scrollY": 1
+          }
+        ],
+        "savedAt": 42
+      },
+      {
+        "name": "Research",
+        "entries": [
+          {
+            "url": "https://research.com",
+            "title": "Research",
+            "scrollX": 0,
+            "scrollY": 0
+          }
+        ],
+        "savedAt": 84
+      },
+      {
+        "name": "Extra",
+        "entries": [
+          {
+            "url": "https://extra.com",
+            "title": "Extra",
+            "scrollX": 0,
+            "scrollY": 0
+          }
+        ],
+        "savedAt": 100
+      }
+    ],
+    "bookmarkUsage": {
+      "https://one.com": { "visitCount": "3", "lastVisit": "1700000000000" },
+      "https://two.com": { "visitCount": 0, "lastVisit": "x" },
+      "broken": "nope"
+    },
+    "frecencyData": [
+      {
+        "tabId": "11",
+        "url": "https://one.com",
+        "title": "One",
+        "visitCount": "4",
+        "lastVisit": "170",
+        "frecencyScore": "250"
+      },
+      {
+        "tabId": 22,
+        "url": "",
+        "title": "Missing URL",
+        "visitCount": 1,
+        "lastVisit": 1,
+        "frecencyScore": 1
+      },
+      {
+        "tabId": "bad",
+        "url": "https://bad.com",
+        "title": "Bad",
+        "visitCount": 1,
+        "lastVisit": 1,
+        "frecencyScore": 1
+      },
+      {
+        "tabId": 44,
+        "url": "https://four.com",
+        "title": 123,
+        "visitCount": -1,
+        "lastVisit": -8,
+        "frecencyScore": -2
+      }
+    ]
+  },
+  "expected": {
+    "customFlag": true,
+    "keybindings": {
+      "navigationMode": "vim",
+      "bindings": {
+        "global": {
+          "openTabManager": { "key": "Alt+X", "default": "Alt+T" }
+        }
+      }
+    },
+    "tabManagerList": [
+      {
+        "tabId": 11,
+        "url": "https://one.com",
+        "title": "One",
+        "scrollX": 12.5,
+        "scrollY": 0,
+        "slot": 1
+      },
+      {
+        "tabId": 33,
+        "url": "https://three.com",
+        "title": "Three",
+        "scrollX": 0,
+        "scrollY": 9,
+        "slot": 2,
+        "closed": true
+      },
+      {
+        "tabId": 44,
+        "url": "https://four.com",
+        "title": "",
+        "scrollX": 0,
+        "scrollY": 0,
+        "slot": 3
+      },
+      {
+        "tabId": 55,
+        "url": "https://five.com",
+        "title": "Five",
+        "scrollX": 1,
+        "scrollY": 2,
+        "slot": 4
+      }
+    ],
+    "tabManagerSessions": [
+      {
+        "name": "Focus Sprint",
+        "entries": [
+          {
+            "url": "https://one.com",
+            "title": "One",
+            "scrollX": 3,
+            "scrollY": 0
+          }
+        ],
+        "savedAt": 1700000000000
+      },
+      {
+        "name": "Bugs",
+        "entries": [
+          {
+            "url": "https://bugs.com",
+            "title": "Bugs",
+            "scrollX": 1.5,
+            "scrollY": 2
+          }
+        ],
+        "savedAt": 0
+      },
+      {
+        "name": "Docs",
+        "entries": [
+          {
+            "url": "https://docs.com",
+            "title": "Docs",
+            "scrollX": 1,
+            "scrollY": 1
+          }
+        ],
+        "savedAt": 42
+      },
+      {
+        "name": "Research",
+        "entries": [
+          {
+            "url": "https://research.com",
+            "title": "Research",
+            "scrollX": 0,
+            "scrollY": 0
+          }
+        ],
+        "savedAt": 84
+      }
+    ],
+    "bookmarkUsage": {
+      "https://one.com": { "visitCount": 3, "lastVisit": 1700000000000 },
+      "https://two.com": { "visitCount": 1, "lastVisit": 0 }
+    },
+    "frecencyData": [
+      {
+        "tabId": 11,
+        "url": "https://one.com",
+        "title": "One",
+        "visitCount": 4,
+        "lastVisit": 170,
+        "frecencyScore": 250
+      },
+      {
+        "tabId": 44,
+        "url": "https://four.com",
+        "title": "",
+        "visitCount": 0,
+        "lastVisit": 0,
+        "frecencyScore": 0
+      }
+    ],
+    "storageSchemaVersion": 1
+  }
+}

@@ -325,6 +325,10 @@ It's fast (10-100x faster than webpack) and simple. The build script is ~50 line
 
 CSS is loaded as text via esbuild loader (`{ '.css': 'text' }`). This allows injecting styles into Shadow DOM as a `<style>` tag, keeping overlay styles isolated from page CSS.
 
+**Compatibility check:**
+
+`npm run verify:compat` validates MV2/MV3 permissions and ensures MV3 stays within Chrome suggested-command limits.
+
 ---
 
 ## Manifests — MV2 and MV3
@@ -501,11 +505,13 @@ If the user customizes shortcuts, the help menu reflects their actual bindings, 
 ## Shared Utilities — src/lib/shared
 
 - `helpers.ts`: `escapeHtml`, `escapeRegex`, `buildFuzzyPattern`, `extractDomain`
+- `filterInput.ts`: shared slash-filter parsing used by search/bookmarks/history overlays
 - `panelHost.ts`: shadow host, base styles, focus trapping, vim badge
 - `scroll.ts`: scroll-to-text highlight
 - `feedback.ts`: toast messages
 - `sessions.ts`: session CRUD helpers
 - `frecencyScoring.ts`: frecency scoring + eviction
+- `runtimeMessages.ts`: typed message contracts for background <-> content runtime channels
 
 ---
 

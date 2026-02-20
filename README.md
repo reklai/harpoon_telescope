@@ -205,6 +205,7 @@ harpoon_telescope/
 - **Shadow DOM** — overlays are injected as Shadow DOM elements to prevent style leakage from host pages
 - **webextension-polyfill** — unified `browser.*` API across Chrome and Firefox
 - **Dual manifests** — MV2 for Firefox/Zen, MV3 for Chrome (service worker lifecycle)
+- **Compatibility guardrail** — `npm run verify:compat` checks manifest permission/command invariants
 - **`ensureTabManagerLoaded()` guards** — state is lazily reloaded when background context is cold-started
 - **Configurable keybindings** — all bindings in `browser.storage.local` with per-scope collision detection
 - **Navigation modes** — vim mode adds aliases on top of basic keys (never replaces)

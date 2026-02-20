@@ -5,6 +5,7 @@ import browser, { Tabs } from "webextension-polyfill";
 import { MAX_TAB_MANAGER_SLOTS, loadKeybindings, saveKeybindings } from "../../lib/shared/keybindings";
 import { recordFrecencyVisit, getFrecencyList, removeFrecencyEntry } from "../../lib/shared/frecencyScoring";
 import { TabManagerState, sessionSave, sessionList, sessionLoad, sessionDelete, sessionRename, sessionUpdate } from "../../lib/shared/sessions";
+import { BackgroundRuntimeMessage } from "../../lib/shared/runtimeMessages";
 
 // -- Tab Manager State --
 
@@ -514,12 +515,12 @@ browser.commands.onCommand.addListener(async (command: string) => {
 
 browser.runtime.onMessage.addListener(
   async (msg: unknown, sender: browser.Runtime.MessageSender): Promise<unknown> => {
-    const m = msg as Record<string, unknown>;
+    const m = msg as BackgroundRuntimeMessage;
     switch (m.type) {
       case "GREP_CURRENT":
-        return await grepCurrentTab(m.query as string, (m.filters as SearchFilter[]) || []);
+        return await grepCurrentTab(m.query, m.filters || []);
       case "GET_PAGE_CONTENT":
-        return await getPageContent(m.tabId as number);
+        return await getPageContent(m.tabId);
       case "TAB_MANAGER_ADD": {
         const [tab] = await browser.tabs.query({
           active: true,
@@ -528,13 +529,13 @@ browser.runtime.onMessage.addListener(
         return await tabManagerAdd(tab);
       }
       case "TAB_MANAGER_REMOVE":
-        await tabManagerRemove(m.tabId as number);
+        await tabManagerRemove(m.tabId);
         return { ok: true };
       case "TAB_MANAGER_LIST":
         await reconcileTabManager();
         return tabManagerList;
       case "TAB_MANAGER_JUMP":
-        await tabManagerJump(m.slot as number);
+        await tabManagerJump(m.slot);
         return { ok: true };
       case "TAB_MANAGER_CYCLE": {
         await ensureTabManagerLoaded();
@@ -546,7 +547,7 @@ browser.runtime.onMessage.addListener(
         const curIdx = curTab
           ? tabManagerList.findIndex((e) => e.tabId === curTab.id)
           : -1;
-        const dir = m.direction as "prev" | "next";
+        const dir = m.direction;
         let targetIdx: number;
         if (curIdx === -1) {
           // Current tab not in tab manager — jump to first or last
@@ -565,7 +566,7 @@ browser.runtime.onMessage.addListener(
         return { ok: true };
       case "TAB_MANAGER_REORDER":
         await ensureTabManagerLoaded();
-        tabManagerList = m.list as TabManagerEntry[];
+        tabManagerList = m.list;
         recompactSlots();
         await saveTabManager();
         return { ok: true };
@@ -579,11 +580,11 @@ browser.runtime.onMessage.addListener(
       case "GET_KEYBINDINGS":
         return await loadKeybindings();
       case "SAVE_KEYBINDINGS":
-        await saveKeybindings(m.config as KeybindingsConfig);
+        await saveKeybindings(m.config);
         return { ok: true };
       case "SWITCH_TO_TAB":
         try {
-          await browser.tabs.update(m.tabId as number, { active: true });
+          await browser.tabs.update(m.tabId, { active: true });
         } catch (_) {}
         return { ok: true };
       case "FRECENCY_LIST":
@@ -591,8 +592,8 @@ browser.runtime.onMessage.addListener(
       case "BOOKMARK_LIST":
         return await getBookmarkList();
       case "HISTORY_LIST": {
-        const maxResults = (m.maxResults as number) || 500;
-        const text = (m.text as string) || "";
+        const maxResults = m.maxResults || 500;
+        const text = m.text || "";
         const items = await browser.history.search({
           text,
           maxResults,
@@ -611,7 +612,7 @@ browser.runtime.onMessage.addListener(
         return entries;
       }
       case "OPEN_BOOKMARK_TAB": {
-        const url = m.url as string;
+        const url = m.url;
         try {
           // Check if URL is already open in current window — switch to it
           const tabs = await browser.tabs.query({ currentWindow: true });
@@ -635,7 +636,7 @@ browser.runtime.onMessage.addListener(
           };
           // Optional folder placement — if parentId is provided, save into that folder
           if (m.parentId) {
-            opts.parentId = m.parentId as string;
+            opts.parentId = m.parentId;
           }
           const created = await browser.bookmarks.create(opts);
           return { ok: true, id: created.id, title: tab.title };
@@ -649,7 +650,7 @@ browser.runtime.onMessage.addListener(
           // Clean up usage data for removed bookmark
           if (m.url) {
             await ensureBookmarkUsageLoaded();
-            delete bookmarkUsageMap[m.url as string];
+            delete bookmarkUsageMap[m.url];
             await saveBookmarkUsage();
           }
           return { ok: true };
@@ -659,7 +660,7 @@ browser.runtime.onMessage.addListener(
       }
       case "BOOKMARK_REMOVE_TREE": {
         try {
-          await browser.bookmarks.removeTree(m.id as string);
+          await browser.bookmarks.removeTree(m.id);
           return { ok: true };
         } catch (_) {
           return { ok: false, reason: "Failed to remove folder" };
@@ -670,10 +671,10 @@ browser.runtime.onMessage.addListener(
       case "BOOKMARK_CREATE_FOLDER": {
         try {
           const opts: browser.Bookmarks.CreateDetails = {
-            title: m.title as string,
+            title: m.title,
           };
           if (m.parentId) {
-            opts.parentId = m.parentId as string;
+            opts.parentId = m.parentId;
           }
           const created = await browser.bookmarks.create(opts);
           return { ok: true, title: m.title, id: created.id };
@@ -684,8 +685,8 @@ browser.runtime.onMessage.addListener(
       case "BOOKMARK_MOVE": {
         try {
           const dest: { parentId?: string; index?: number } = {};
-          if (m.parentId) dest.parentId = m.parentId as string;
-          await browser.bookmarks.move(m.id as string, dest);
+          if (m.parentId) dest.parentId = m.parentId;
+          await browser.bookmarks.move(m.id, dest);
           return { ok: true };
         } catch (_) {
           return { ok: false, reason: "Failed to move bookmark" };
@@ -704,17 +705,17 @@ browser.runtime.onMessage.addListener(
         return { ok: true };
       }
       case "SESSION_SAVE":
-        return await sessionSave(tabManagerState, m.name as string);
+        return await sessionSave(tabManagerState, m.name);
       case "SESSION_LIST":
         return await sessionList();
       case "SESSION_LOAD":
-        return await sessionLoad(tabManagerState, m.name as string);
+        return await sessionLoad(tabManagerState, m.name);
       case "SESSION_DELETE":
-        return await sessionDelete(m.name as string);
+        return await sessionDelete(m.name);
       case "SESSION_RENAME":
-        return await sessionRename(m.oldName as string, m.newName as string);
+        return await sessionRename(m.oldName, m.newName);
       case "SESSION_UPDATE":
-        return await sessionUpdate(tabManagerState, m.name as string);
+        return await sessionUpdate(tabManagerState, m.name);
       default:
         return null;
     }

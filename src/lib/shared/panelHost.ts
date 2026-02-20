@@ -84,7 +84,7 @@ export function vimBadgeHtml(config: KeybindingsConfig): string {
   return `<span class="ht-vim-badge ${isVim ? "on" : "off"}">vim</span>`;
 }
 
-/** Shared macOS Terminal.app styles used by all overlay panels */
+/** Shared Ghostty-inspired terminal styles used by all overlay panels */
 export function getBaseStyles(): string {
   return `
     * { margin: 0; padding: 0; box-sizing: border-box; }

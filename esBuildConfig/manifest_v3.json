@@ -35,22 +35,6 @@
     "open-search-current": {
       "suggested_key": { "default": "Alt+F" },
       "description": "Search in current tab"
-    },
-    "tab-manager-tab-1": {
-      "suggested_key": { "default": "Alt+1" },
-      "description": "Jump to Tab Manager slot 1"
-    },
-    "tab-manager-tab-2": {
-      "suggested_key": { "default": "Alt+2" },
-      "description": "Jump to Tab Manager slot 2"
-    },
-    "tab-manager-tab-3": {
-      "suggested_key": { "default": "Alt+3" },
-      "description": "Jump to Tab Manager slot 3"
-    },
-    "tab-manager-tab-4": {
-      "suggested_key": { "default": "Alt+4" },
-      "description": "Jump to Tab Manager slot 4"
     }
   },
   "options_ui": {

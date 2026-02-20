@@ -10,6 +10,7 @@ import browser from "webextension-polyfill";
 import { matchesAction, keyToDisplay } from "../shared/keybindings";
 import { createPanelHost, removePanelHost, registerPanelCleanup, getBaseStyles, vimBadgeHtml } from "../shared/panelHost";
 import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../shared/helpers";
+import { parseSlashFilterQuery } from "../shared/filterInput";
 import { showFeedback } from "../shared/feedback";
 import historyStyles from "./history.css";
 
@@ -192,21 +193,7 @@ export async function openHistoryOverlay(
 
     // --- Input parsing (mirrors bookmark overlay pattern) ---
     function parseInput(raw: string): { filters: HistoryFilter[]; query: string } {
-      const tokens = raw.trimStart().split(/\s+/);
-      const filters: HistoryFilter[] = [];
-      let queryStart = 0;
-      for (let i = 0; i < tokens.length; i++) {
-        const token = tokens[i];
-        if (VALID_FILTERS[token]) {
-          const filter = VALID_FILTERS[token];
-          if (!filters.includes(filter)) filters.push(filter);
-          queryStart = i + 1;
-        } else {
-          break;
-        }
-      }
-      const query = tokens.slice(queryStart).join(" ").trim();
-      return { filters, query };
+      return parseSlashFilterQuery(raw, VALID_FILTERS);
     }
 
     // --- Title bar updates ---

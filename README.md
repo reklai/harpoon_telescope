@@ -117,6 +117,7 @@ Other scripts:
 
 ```sh
 npm run typecheck        # tsc --noEmit
+npm run verify:compat    # manifest + permission sanity checks
 npm run clean            # rm -rf dist
 ```
 
@@ -124,7 +125,7 @@ The JS bundles are identical across targets — `webextension-polyfill` handles 
 
 ### Command Registration Strategy
 
-Both manifests register browser-level commands for open/search/add and slot jumps. The content script still handles the full keybinding matrix (custom bindings, vim mode, and panel-local actions), so behavior stays consistent across Firefox, Chrome, and Zen.
+Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps only core shortcuts (`open`, `add`, `search`), and the content script handles slot jumps, cycling, vim mode, and panel-local actions so behavior stays consistent across Firefox, Chrome, and Zen.
 
 ## Installation (Development)
 
@@ -224,7 +225,7 @@ See `CONTRIBUTING.md` for naming conventions, module boundaries, and PR checklis
 
 ## Theme
 
-Styled with a **macOS Terminal.app** aesthetic — red traffic light dot, clean dark backgrounds (`#1e1e1e`, `#252525`, `#3a3a3c`), accent color `#0a84ff`, monospace font stack.
+Styled with a **Ghostty-inspired terminal** aesthetic — red traffic light dot, clean dark backgrounds (`#1e1e1e`, `#252525`, `#3a3a3c`), accent color `#0a84ff`, monospace font stack.
 
 ## License
 

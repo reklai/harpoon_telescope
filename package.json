@@ -11,6 +11,7 @@
     "watch:firefox": "node esBuildConfig/build.mjs --watch --target firefox",
     "watch:chrome": "node esBuildConfig/build.mjs --watch --target chrome",
     "typecheck": "tsc --noEmit",
+    "verify:compat": "node esBuildConfig/verifyCompat.mjs",
     "clean": "rm -rf dist"
   },
   "devDependencies": {

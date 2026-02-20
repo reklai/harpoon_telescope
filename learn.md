@@ -56,6 +56,7 @@ Harpoon Telescope is a keyboard-first browser extension inspired by Neovim plugi
 - Bookmarks + History: two-pane browsers with tree views and confirmations.
 
 Everything runs in plain TypeScript with no UI framework. Overlays are Shadow DOM panels injected into the active page.
+UI direction promise: keep overlays Ghostty-inspired so the visual identity stays intentional while features evolve.
 
 ---
 
@@ -337,7 +338,7 @@ Chrome moved to MV3; Firefox still supports MV2. MV3 changes background lifecycl
 
 **How we handle commands across browsers:**
 
-Most shortcuts go through the content script's `keydown` listener, not `browser.commands`. The manifests currently register the core commands plus slot jumps, while the content script still handles the full keybinding system (including user-customized bindings and panel-local behavior).
+Most shortcuts go through the content script's `keydown` listener, not `browser.commands`. The manifests keep only core suggested commands (open/add/search) for MV3 compatibility, while the content script handles slot jumps and the full keybinding system (including user-customized bindings and panel-local behavior).
 
 ---
 

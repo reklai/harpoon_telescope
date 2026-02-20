@@ -14,6 +14,7 @@ import { openAddBookmarkOverlay } from "../addBookmark/addBookmark";
 import { openHistoryOverlay } from "../history/history";
 import { openHelpOverlay } from "../help/help";
 import { dismissPanel } from "../shared/panelHost";
+import { ContentRuntimeMessage } from "../shared/runtimeMessages";
 import { openSessionRestoreOverlay } from "../tabManager/session";
 
 // Extend Window to track injection state
@@ -165,7 +166,7 @@ export function initApp(): void {
 
   // -- Message Router --
   function messageHandler(message: unknown): Promise<unknown> | undefined {
-    const receivedMessage = message as Record<string, unknown>;
+    const receivedMessage = message as ContentRuntimeMessage;
     switch (receivedMessage.type) {
       case "GET_SCROLL":
         return Promise.resolve({
@@ -173,13 +174,13 @@ export function initApp(): void {
           scrollY: window.scrollY,
         });
       case "SET_SCROLL":
-        window.scrollTo(receivedMessage.scrollX as number, receivedMessage.scrollY as number);
+        window.scrollTo(receivedMessage.scrollX, receivedMessage.scrollY);
         return Promise.resolve({ ok: true });
       case "GREP":
         return Promise.resolve(
           grepPage(
-            receivedMessage.query as string,
-            (receivedMessage.filters as SearchFilter[]) || [],
+            receivedMessage.query,
+            receivedMessage.filters || [],
           ),
         );
       case "GET_CONTENT":
@@ -214,7 +215,7 @@ export function initApp(): void {
           openSessionRestoreOverlay();
         return Promise.resolve({ ok: true });
       case "SCROLL_TO_TEXT":
-        scrollToText(receivedMessage.text as string);
+        scrollToText(receivedMessage.text);
         return Promise.resolve({ ok: true });
       case "TAB_MANAGER_ADDED_FEEDBACK":
         showFeedback(

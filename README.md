@@ -29,7 +29,7 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 ### Bookmarks
 - **`Alt+B`** opens a two-pane bookmark browser with virtual scrolling
 - **Type to filter** — fuzzy matching against title, URL, and folder path
-- **Slash filters** — `/folder` narrows by folder path, `/file` narrows by URL
+- **Slash filters** — `/folder` narrows by folder path
 - **Detail pane** — shows title, URL, folder path, date added, domain, and usage score
 - **Tree view** (`t`) — full hierarchical folder/bookmark tree with collapse indicators (`▶`/`▼`), j/k cursor navigation, Enter to fold/open
 - **Open confirmation** — Enter or double-click on a tree entry shows "Open 'title'?" dialog (y/n)
@@ -41,7 +41,7 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 ### History
 - **`Alt+Y`** opens a two-pane history browser with virtual scrolling (max 200 entries)
 - **Type to filter** — fuzzy matching against title and URL
-- **Slash filters** — `/today`, `/week`, `/month` narrow by time range
+- **Slash filters** — `/hour`, `/today`, `/week`, `/month` narrow by time range
 - **Detail pane** — shows title, URL, domain, visit count, last visit time, and first visit time
 - **Tree view** (`t`) — time-bucketed tree (Today / Yesterday / This Week / Last Week / This Month / Older) with entries nested inside, collapse indicators, j/k cursor navigation
 - **Open confirmation** — Enter or double-click on a tree entry shows "Open 'title'?" dialog with domain shown underneath (y/n)
@@ -56,7 +56,7 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 
 ### Help Menu
 - **`Alt+M`** opens a quick reference overlay showing all keybindings and features
-- Sections: Global Commands, Harpoon Panel, Search Panel, Vim Navigation, Search/Bookmark/History filters
+- Sections include panel-specific actions and filter cheatsheets
 - Reflects current (possibly customized) keybindings live
 - Scroll to browse, Esc to close
 
@@ -142,43 +142,42 @@ Chrome MV3 only allows 4 registered `commands`. The primary shortcuts (open harp
 
 ```
 harpoon_telescope/
-├── src/
-│   ├── background.ts               # Harpoon state, tab events, session mgmt, message router (749 lines)
-│   ├── content-script.ts           # Global keybinds, message handler, overlay injection (213 lines)
-│   ├── types.d.ts                  # Shared type declarations (110 lines)
+├── esBuildConfig/
+│   ├── build.mjs                   # esbuild bundler (--target firefox|chrome)
 │   ├── manifest_v2.json            # Firefox/Zen manifest (MV2)
-│   ├── manifest_v3.json            # Chrome manifest (MV3, service worker, 4-command limit)
+│   └── manifest_v3.json            # Chrome manifest (MV3, 4-command limit)
+├── src/
+│   ├── types.d.ts                  # Shared type declarations
+│   ├── esBuildBundle/
+│   │   ├── browserBackgroundProcess/
+│   │   │   └── browserBackgroundProcess.ts   # Background script entry
+│   │   ├── contentScript/
+│   │   │   └── contentScript.ts              # Content script entry
+│   │   ├── toolBarPopUp/
+│   │   │   ├── toolBarPopUp.ts               # Toolbar popup script
+│   │   │   ├── toolBarPopUp.html
+│   │   │   └── toolBarPopUp.css
+│   │   └── extensionSettingsPage/
+│   │       ├── extensionSettingsPage.ts      # Options page script
+│   │       ├── extensionSettingsPage.html
+│   │       └── extensionSettingsPage.css
 │   ├── lib/
-│   │   ├── keybindings.ts          # Keybinding defaults, vim aliases, collision detection, matching (266 lines)
-│   │   ├── helpers.ts              # escapeHtml, escapeRegex, extractDomain (23 lines)
-│   │   ├── panel-host.ts           # Shadow DOM host, focus trapping, base styles, vim badge (131 lines)
-│   │   ├── grep.ts                 # DOM tree walker, structural filters, fuzzy scoring (574 lines)
-│   │   ├── scroll.ts               # Scroll-to-text with highlight removal (110 lines)
-│   │   ├── feedback.ts             # Center-screen toast notifications (34 lines)
-│   │   ├── harpoon-overlay.ts      # Tab Manager panel (list, swap, keybinds) (525 lines)
-│   │   ├── search-overlay.ts       # Telescope search (input, results, preview, virtual scroll) (850 lines)
-│   │   ├── bookmark-overlay.ts     # Bookmark browser (fuzzy filter, tree view, move, add/remove) (1954 lines)
-│   │   ├── history-overlay.ts      # History browser (fuzzy filter, time buckets, tree view) (1317 lines)
-│   │   ├── frecency-overlay.ts     # Frecency tab list (filter, Tab cycling, rAF rendering) (423 lines)
-│   │   ├── help-overlay.ts         # Help menu (fuzzy search, section filters, collapsible) (708 lines)
-│   │   ├── frecency.ts             # Frecency scoring, max 50 with lowest-score eviction (123 lines)
-│   │   ├── sessions.ts             # Session CRUD with duplicate rejection (100 lines)
-│   │   └── session-views.ts        # Session save/load/delete/restore UI (593 lines)
-│   ├── popup/
-│   │   ├── popup.ts                # Toolbar popup logic
-│   │   ├── popup.html
-│   │   └── popup.css
-│   ├── options/
-│   │   ├── options.ts              # Settings page (keybindings, nav mode toggle)
-│   │   ├── options.html
-│   │   └── options.css
+│   │   ├── shared/                   # helpers, keybindings, sessions, scroll, feedback
+│   │   ├── tabManager/               # Tab Manager panel + sessions UI
+│   │   ├── searchCurrentPage/        # Telescope search (current page)
+│   │   ├── searchOpenTabs/           # Frecency open tabs list
+│   │   ├── bookmarks/                # Bookmarks browser
+│   │   ├── history/                  # History browser
+│   │   ├── addBookmark/              # Add bookmark wizard
+│   │   ├── help/                     # Help overlay
+│   │   └── appInit/                  # Overlay bootstrap
 │   └── icons/
 │       ├── icon-48.png
-│       └── icon-96.png
-├── build.mjs                       # esbuild bundler (--target firefox|chrome)
+│       ├── icon-96.png
+│       └── icon-128.png
 ├── package.json
-├── tsconfig.json                   # ES2022 target
-└── dist/                           # Build output (loaded by browser)
+├── tsconfig.json                    # ES2022 target
+└── dist/                            # Build output (loaded by browser)
 ```
 
 Total: ~8,600 lines of TypeScript across 18 source files.
@@ -187,7 +186,7 @@ Total: ~8,600 lines of TypeScript across 18 source files.
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                  background.ts                        │
+│              browserBackgroundProcess.ts              │
 │  ┌──────────────┐  ┌───────────────────────────────┐ │
 │  │ Harpoon Mgr  │  │ Message Router                │ │
 │  │ - 4 slots    │  │ - routes to content            │ │
@@ -200,7 +199,7 @@ Total: ~8,600 lines of TypeScript across 18 source files.
 └────────┬──────────────────────┬───────────────────────┘
          │ messages              │ messages
   ┌──────▼──────────┐    ┌──────▼───────────────┐
-  │ content-script  │    │ options page          │
+  │ contentScript   │    │ options page          │
   │ - grep page     │    │ - keybinding editor   │
   │ - scroll r/w    │    │ - nav mode toggle     │
   │ - harpoon UI    │    │ - collision detection  │

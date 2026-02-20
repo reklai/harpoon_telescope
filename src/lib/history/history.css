@@ -3,33 +3,33 @@
 .ht-history-container {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
   width: min(92vw, 980px); height: min(78vh, 680px); min-height: 300px;
-  background: #1e1e1e; border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 10px;
+  background: var(--ht-color-bg); border: 1px solid var(--ht-color-border);
+  border-radius: var(--ht-radius);
   display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  box-shadow: var(--ht-shadow-overlay);
   backface-visibility: hidden;
   will-change: transform;
   contain: layout style paint;
   overscroll-behavior: contain;
 }
-.ht-history-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #1e1e1e; }
+.ht-history-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--ht-color-bg); }
 .ht-history-input-wrap {
   display: flex; align-items: center; padding: 8px 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.06); background: #252525;
+  border-bottom: 1px solid var(--ht-color-border-soft); background: var(--ht-color-bg-elevated);
 }
-.ht-history-prompt { color: #0a84ff; margin-right: 8px; font-weight: 600; font-size: 14px; }
+.ht-history-prompt { color: var(--ht-color-accent); margin-right: 8px; font-weight: 600; font-size: 14px; }
 .ht-history-input {
   flex: 1; background: transparent; border: none; outline: none;
-  color: #e0e0e0; font-family: inherit; font-size: 13px;
-  caret-color: #ffffff; caret-shape: block;
+  color: var(--ht-color-text); font-family: inherit; font-size: 13px;
+  caret-color: var(--ht-color-text-strong); caret-shape: block;
 }
-.ht-history-input::placeholder { color: #666; }
-.ht-history-columns { flex: 1; display: flex; overflow: hidden; background: #1e1e1e; }
+.ht-history-input::placeholder { color: var(--ht-color-text-dim); }
+.ht-history-columns { flex: 1; display: flex; overflow: hidden; background: var(--ht-color-bg); }
 
 /* Left pane: results list */
 .ht-hist-results-pane {
-  width: 40%; border-right: 1px solid rgba(255,255,255,0.06);
-  overflow-y: auto; position: relative; background: #1e1e1e;
+  width: 40%; border-right: 1px solid var(--ht-color-border-soft);
+  overflow-y: auto; position: relative; background: var(--ht-color-bg);
 }
 .ht-hist-results-sentinel { width: 100%; pointer-events: none; }
 .ht-hist-results-list {
@@ -38,98 +38,98 @@
 }
 .ht-hist-item {
   padding: 4px 10px; cursor: pointer;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--ht-color-border-faint);
   display: flex; align-items: center;
   height: 44px; box-sizing: border-box;
   outline: none; user-select: none;
 }
-.ht-hist-item:hover { background: rgba(255,255,255,0.06); }
+.ht-hist-item:hover { background: var(--ht-color-border-soft); }
 .ht-hist-item.active {
-  background: rgba(10,132,255,0.15);
-  border-left: 2px solid #0a84ff;
+  background: var(--ht-color-accent-active);
+  border-left: 2px solid var(--ht-color-accent);
 }
 .ht-hist-results-pane.focused .ht-hist-item.active {
-  background: rgba(255,255,255,0.13);
-  border-left: 2px solid #fff;
+  background: var(--ht-color-focus-active);
+  border-left: 2px solid var(--ht-color-text-strong);
 }
 /* Dim active item when tree pane is focused (treeNav mode) */
 .ht-hist-results-pane.dimmed .ht-hist-item.active {
-  background: rgba(255,255,255,0.04);
-  border-left: 2px solid rgba(255,255,255,0.15);
+  background: var(--ht-color-border-faint);
+  border-left: 2px solid var(--ht-color-surface-strong);
 }
 .ht-hist-info { flex: 1; overflow: hidden; }
 .ht-hist-title {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font-size: 12px; color: #e0e0e0;
+  font-size: 12px; color: var(--ht-color-text);
 }
 .ht-hist-title mark {
-  background: #f9d45c; color: #1e1e1e; border-radius: 2px; padding: 0 1px;
+  background: var(--ht-color-mark-bg); color: var(--ht-color-bg); border-radius: 2px; padding: 0 1px;
 }
 .ht-hist-url-line {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font-size: 10px; color: #808080; margin-top: 2px;
+  font-size: 10px; color: var(--ht-color-text-muted); margin-top: 2px;
 }
 .ht-hist-url-line mark {
-  background: #f9d45c; color: #1e1e1e; border-radius: 2px; padding: 0 1px;
+  background: var(--ht-color-mark-bg); color: var(--ht-color-bg); border-radius: 2px; padding: 0 1px;
 }
-.ht-hist-time-tag { color: #0a84ff; margin-right: 4px; font-size: 10px; }
+.ht-hist-time-tag { color: var(--ht-color-accent); margin-right: 4px; font-size: 10px; }
 
 /* Right pane: detail / tree */
 .ht-hist-detail-pane {
   width: 60%; display: flex; flex-direction: column; overflow: hidden;
-  background: #1e1e1e;
+  background: var(--ht-color-bg);
   border-left: 2px solid transparent;
   transition: border-color 0.15s, background 0.15s;
 }
 .ht-hist-detail-pane.focused {
-  background: #1a2230;
-  border-left-color: #0a84ff;
+  background: var(--ht-color-bg-detail-focus);
+  border-left-color: var(--ht-color-accent);
 }
 .ht-hist-detail-pane.focused .ht-hist-detail-header {
-  background: #1e2a3a;
-  color: #a0c0e0;
+  background: var(--ht-color-bg-detail-focus-header);
+  color: var(--ht-color-text-detail-focus);
 }
 .ht-hist-detail-pane.focused .ht-hist-detail-content {
-  background: #1a2230;
+  background: var(--ht-color-bg-detail-focus);
 }
 .ht-hist-detail-header {
-  padding: 5px 14px; font-size: 11px; color: #808080;
-  background: #252525; border-bottom: 1px solid rgba(255,255,255,0.04);
+  padding: 5px 14px; font-size: 11px; color: var(--ht-color-text-muted);
+  background: var(--ht-color-bg-elevated); border-bottom: 1px solid var(--ht-color-border-faint);
   font-weight: 500; display: flex; align-items: center;
 }
 .ht-hist-detail-header-text { flex: 1; }
 .ht-hist-detail-header-close {
-  display: none; cursor: pointer; color: #808080; font-size: 14px;
+  display: none; cursor: pointer; color: var(--ht-color-text-muted); font-size: 14px;
   line-height: 1; padding: 0 2px; border: none; background: none;
   font-family: inherit;
 }
-.ht-hist-detail-header-close:hover { color: #e0e0e0; }
+.ht-hist-detail-header-close:hover { color: var(--ht-color-text); }
 .ht-hist-detail-content {
   flex: 1; overflow-y: auto; padding: 16px 20px;
-  background: #1e1e1e;
+  background: var(--ht-color-bg);
 }
 .ht-hist-detail-placeholder {
   flex: 1; display: flex; align-items: center; justify-content: center;
-  color: #555; font-size: 14px; background: #1e1e1e;
+  color: var(--ht-color-text-faint); font-size: 14px; background: var(--ht-color-bg);
 }
 .ht-hist-no-results {
-  padding: 24px; text-align: center; color: #808080; font-size: 12px;
+  padding: 24px; text-align: center; color: var(--ht-color-text-muted); font-size: 12px;
 }
 
 
 /* Titlebar — left-aligned with filter indicators */
 .ht-history-container .ht-titlebar-text {
-  flex: 1; text-align: left; font-size: 12px; color: #e0e0e0;
+  flex: 1; text-align: left; font-size: 12px; color: var(--ht-color-text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   display: flex; align-items: center; gap: 8px;
   margin-right: 0;
 }
-.ht-hist-title-label { flex-shrink: 0; color: #a0a0a0; }
-.ht-hist-title-sep { color: #555; flex-shrink: 0; }
-.ht-hist-title-filters { color: #808080; font-size: 11px; flex-shrink: 0; }
-.ht-hist-title-filter { color: #666; }
-.ht-hist-title-filter.active { color: #0a84ff; font-weight: 600; }
-.ht-hist-title-count { color: #808080; font-size: 11px; margin-left: auto; flex-shrink: 0; }
+.ht-hist-title-label { flex-shrink: 0; color: var(--ht-color-text-title); }
+.ht-hist-title-sep { color: var(--ht-color-text-faint); flex-shrink: 0; }
+.ht-hist-title-filters { color: var(--ht-color-text-muted); font-size: 11px; flex-shrink: 0; }
+.ht-hist-title-filter { color: var(--ht-color-text-dim); }
+.ht-hist-title-filter.active { color: var(--ht-color-accent); font-weight: 600; }
+.ht-hist-title-count { color: var(--ht-color-text-muted); font-size: 11px; margin-left: auto; flex-shrink: 0; }
 
 /* Filter pills */
 .ht-hist-filter-pills {
@@ -137,9 +137,9 @@
 }
 .ht-hist-filter-pill {
   display: inline-flex; align-items: center; gap: 3px;
-  background: rgba(10,132,255,0.15); color: #0a84ff;
+  background: var(--ht-color-accent-active); color: var(--ht-color-accent);
   font-size: 10px; font-weight: 600; padding: 2px 8px;
-  border-radius: 10px; user-select: none;
+  border-radius: var(--ht-radius); user-select: none;
 }
 .ht-hist-filter-pill-x {
   cursor: pointer; opacity: 0.6; font-size: 11px;
@@ -148,9 +148,9 @@
 
 /* Tree visualization in detail pane */
 .ht-hist-tree {
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid var(--ht-color-border-soft);
   border-radius: 6px;
-  background: #252525;
+  background: var(--ht-color-bg-elevated);
   padding: 6px 0;
   margin-bottom: 14px;
   max-height: 160px;
@@ -160,48 +160,48 @@
 }
 .ht-hist-tree-node {
   padding: 1px 10px;
-  color: #a0a0a0;
+  color: var(--ht-color-text-title);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 600;
 }
 .ht-hist-tree-node.active {
-  color: #0a84ff;
-  background: rgba(10,132,255,0.1);
+  color: var(--ht-color-accent);
+  background: var(--ht-color-accent-soft);
 }
 .ht-hist-tree-entry {
   padding: 1px 10px 1px 28px;
-  color: #808080;
+  color: var(--ht-color-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 10px;
 }
 .ht-hist-tree-entry.active {
-  color: #0a84ff;
-  background: rgba(10,132,255,0.08);
+  color: var(--ht-color-accent);
+  background: var(--ht-color-accent-soft-faint);
   font-weight: 600;
 }
 .ht-hist-tree-domain {
-  color: #555;
+  color: var(--ht-color-text-faint);
   margin-left: 4px;
 }
 .ht-hist-tree-node.tree-cursor,
 .ht-hist-tree-entry.tree-cursor {
-  background: rgba(78,201,112,0.15);
-  color: #4ec970;
+  background: var(--ht-color-tree-cursor-bg);
+  color: var(--ht-color-tree-cursor);
 }
 .ht-hist-tree-node.active.tree-cursor {
-  background: rgba(78,201,112,0.20);
-  color: #4ec970;
+  background: var(--ht-color-tree-cursor-bg-strong);
+  color: var(--ht-color-tree-cursor);
 }
 .ht-hist-tree-entry.active.tree-cursor {
-  background: rgba(78,201,112,0.18);
-  color: #4ec970;
+  background: var(--ht-color-tree-cursor-bg-soft);
+  color: var(--ht-color-tree-cursor);
 }
 .ht-hist-tree-collapse {
-  color: #555;
+  color: var(--ht-color-text-faint);
   font-size: 9px;
   margin-right: 3px;
 }
@@ -213,17 +213,17 @@
 }
 .ht-hist-confirm-icon { font-size: 28px; }
 .ht-hist-confirm-msg {
-  font-size: 13px; color: #e0e0e0; text-align: center;
+  font-size: 13px; color: var(--ht-color-text); text-align: center;
   line-height: 1.6; max-width: 280px;
 }
 .ht-hist-confirm-title {
-  color: #fff; font-weight: 600;
+  color: var(--ht-color-text-strong); font-weight: 600;
 }
 .ht-hist-confirm-path {
-  font-size: 11px; color: #808080; margin-top: 2px;
+  font-size: 11px; color: var(--ht-color-text-muted); margin-top: 2px;
 }
 .ht-hist-confirm-hint {
-  font-size: 11px; color: #555;
+  font-size: 11px; color: var(--ht-color-text-faint);
 }
 
 @media (max-width: 860px), (max-height: 620px) {
@@ -239,7 +239,7 @@
     width: 100%;
     height: 46%;
     border-right: none;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid var(--ht-color-border-soft);
   }
   .ht-hist-detail-pane {
     width: 100%;
@@ -249,7 +249,7 @@
   }
   .ht-hist-detail-pane.focused {
     border-left-color: transparent;
-    border-top-color: #0a84ff;
+    border-top-color: var(--ht-color-accent);
   }
 }
 

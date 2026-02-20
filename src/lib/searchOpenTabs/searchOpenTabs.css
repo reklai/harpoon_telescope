@@ -2,10 +2,10 @@
 
 .ht-open-tabs-container {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  width: min(92vw, 560px); max-height: min(88vh, 620px); background: #1e1e1e;
-  border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+  width: min(92vw, 560px); max-height: min(88vh, 620px); background: var(--ht-color-bg);
+  border: 1px solid var(--ht-color-border); border-radius: var(--ht-radius);
   display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  box-shadow: var(--ht-shadow-overlay);
   backface-visibility: hidden;
   will-change: transform;
   contain: layout style paint;
@@ -13,46 +13,46 @@
 }
 .ht-open-tabs-input-wrap {
   display: flex; align-items: center; padding: 8px 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.06); background: #252525;
+  border-bottom: 1px solid var(--ht-color-border-soft); background: var(--ht-color-bg-elevated);
 }
-.ht-open-tabs-prompt { color: #0a84ff; margin-right: 8px; font-weight: 600; font-size: 14px; }
+.ht-open-tabs-prompt { color: var(--ht-color-accent); margin-right: 8px; font-weight: 600; font-size: 14px; }
 .ht-open-tabs-input {
   flex: 1; background: transparent; border: none; outline: none;
-  color: #e0e0e0; font-family: inherit; font-size: 13px;
-  caret-color: #ffffff; caret-shape: block;
+  color: var(--ht-color-text); font-family: inherit; font-size: 13px;
+  caret-color: var(--ht-color-text-strong); caret-shape: block;
 }
-.ht-open-tabs-input::placeholder { color: #666; }
+.ht-open-tabs-input::placeholder { color: var(--ht-color-text-dim); }
 .ht-open-tabs-list { max-height: 380px; overflow-y: auto; }
 .ht-open-tabs-item {
   display: flex; align-items: center; padding: 8px 14px; gap: 10px;
-  cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.04);
+  cursor: pointer; border-bottom: 1px solid var(--ht-color-border-faint);
   user-select: none; outline: none;
 }
-.ht-open-tabs-item:hover { background: rgba(255,255,255,0.06); }
+.ht-open-tabs-item:hover { background: var(--ht-color-border-soft); }
 .ht-open-tabs-item.active {
-  background: rgba(10,132,255,0.15); border-left: 2px solid #0a84ff;
+  background: var(--ht-color-accent-active); border-left: 2px solid var(--ht-color-accent);
 }
 .ht-open-tabs-list.focused .ht-open-tabs-item.active {
-  background: rgba(255,255,255,0.13); border-left: 2px solid #fff;
+  background: var(--ht-color-focus-active); border-left: 2px solid var(--ht-color-text-strong);
 }
 .ht-open-tabs-score {
-  font-size: 10px; color: #808080; min-width: 36px; text-align: right;
+  font-size: 10px; color: var(--ht-color-text-muted); min-width: 36px; text-align: right;
   flex-shrink: 0;
 }
 .ht-open-tabs-info { flex: 1; overflow: hidden; }
 .ht-open-tabs-title {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font-size: 12px; color: #e0e0e0;
+  font-size: 12px; color: var(--ht-color-text);
 }
 .ht-open-tabs-title mark {
-  background: #f9d45c; color: #1e1e1e; border-radius: 2px; padding: 0 1px;
+  background: var(--ht-color-mark-bg); color: var(--ht-color-bg); border-radius: 2px; padding: 0 1px;
 }
 .ht-open-tabs-url {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font-size: 10px; color: #808080; margin-top: 2px;
+  font-size: 10px; color: var(--ht-color-text-muted); margin-top: 2px;
 }
 .ht-open-tabs-empty {
-  padding: 24px; text-align: center; color: #808080; font-size: 12px;
+  padding: 24px; text-align: center; color: var(--ht-color-text-muted); font-size: 12px;
 }
 
 @media (max-width: 520px), (max-height: 560px) {

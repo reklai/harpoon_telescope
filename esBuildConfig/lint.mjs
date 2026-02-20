@@ -36,6 +36,34 @@ const OVERLAY_CSS_FILES = [
   "src/lib/tabManager/tabManager.css",
 ];
 
+const PERF_INSTRUMENTATION_REQUIREMENTS = {
+  "src/lib/searchOpenTabs/searchOpenTabs.ts": [
+    'withPerfTrace("searchOpenTabs.applyFilter"',
+  ],
+  "src/lib/searchCurrentPage/searchCurrentPage.ts": [
+    'withPerfTrace("searchCurrentPage.renderResults"',
+    'withPerfTrace("searchCurrentPage.renderVisibleItems"',
+  ],
+  "src/lib/bookmarks/bookmarks.ts": [
+    'withPerfTrace("bookmarks.applyFilter"',
+    'withPerfTrace("bookmarks.renderVisibleItems"',
+  ],
+  "src/lib/history/history.ts": [
+    'withPerfTrace("history.applyFilter"',
+    'withPerfTrace("history.renderVisibleItems"',
+  ],
+};
+
+const REQUIRED_PERF_BUDGET_KEYS = [
+  "searchOpenTabs.applyFilter",
+  "searchCurrentPage.renderResults",
+  "searchCurrentPage.renderVisibleItems",
+  "bookmarks.applyFilter",
+  "bookmarks.renderVisibleItems",
+  "history.applyFilter",
+  "history.renderVisibleItems",
+];
+
 const errors = [];
 
 function readText(relativePath) {
@@ -123,6 +151,9 @@ function checkUiGlitchBaseline() {
     if (!css.includes("@media (max-width:")) {
       errors.push(`${file} must include a responsive @media (max-width: ...) rule.`);
     }
+    if (!css.includes("var(--ht-color-")) {
+      errors.push(`${file} must consume shared panelHost design tokens (var(--ht-color-*)).`);
+    }
   }
 
   const panelHost = readText("src/lib/shared/panelHost.ts");
@@ -134,6 +165,9 @@ function checkUiGlitchBaseline() {
   }
   if (!panelHost.includes("100dvh") || !panelHost.includes("100dvw")) {
     errors.push("src/lib/shared/panelHost.ts must use dynamic viewport units (100dvw/100dvh).");
+  }
+  if (!panelHost.includes("--ht-color-bg") || !panelHost.includes("--ht-color-accent")) {
+    errors.push("src/lib/shared/panelHost.ts must define shared color tokens.");
   }
 }
 
@@ -148,11 +182,35 @@ function checkContributorDocs() {
   }
 }
 
+function checkPerfGuardrails() {
+  const perfShared = readText("src/lib/shared/perf.ts");
+  if (!perfShared.includes("export function withPerfTrace")) {
+    errors.push("src/lib/shared/perf.ts must expose withPerfTrace().");
+  }
+
+  const perfBudgets = JSON.parse(readText("src/lib/shared/perfBudgets.json"));
+  for (const key of REQUIRED_PERF_BUDGET_KEYS) {
+    if (typeof perfBudgets[key] !== "number" || perfBudgets[key] <= 0) {
+      errors.push(`src/lib/shared/perfBudgets.json must define a positive budget for "${key}".`);
+    }
+  }
+
+  for (const [file, needles] of Object.entries(PERF_INSTRUMENTATION_REQUIREMENTS)) {
+    const source = readText(file);
+    for (const needle of needles) {
+      if (!source.includes(needle)) {
+        errors.push(`${file} must include perf instrumentation: ${needle}`);
+      }
+    }
+  }
+}
+
 checkPackageDependencies();
 checkSourceImports();
 checkOverlayContracts();
 checkUiGlitchBaseline();
 checkContributorDocs();
+checkPerfGuardrails();
 
 if (errors.length > 0) {
   console.error("[lint] FAILED");

@@ -9,8 +9,8 @@ This repository is intentionally browser-primitive and framework-free, with a Gh
 ## High-Level Runtime Model
 
 - `src/entrypoints/background/background.ts`
-  - Owns persistent extension state and browser API orchestration.
-  - Handles commands and runtime messages.
+  - Thin orchestration layer for background startup.
+  - Registers domain handlers from `src/lib/background/*`.
 - `src/entrypoints/content-script/content-script.ts`
   - Bootstraps in-page overlays and message handling.
 - `src/entrypoints/options-page/*`
@@ -24,6 +24,8 @@ All feature modules live in `src/lib/*` and are imported by entrypoints.
 
 - `src/lib/shared/*`
   - Cross-feature contracts and primitives (`keybindings`, `runtimeMessages`, `panelHost`, `helpers`).
+- `src/lib/background/*`
+  - Background-only domains and routers (`tabManagerDomain`, `bookmarkDomain`, `runtimeRouter`, `commandRouter`, etc.).
 - `src/lib/<feature>/*`
   - Feature-local logic and UI.
   - Current features: `tabManager`, `searchCurrentPage`, `searchOpenTabs`, `bookmarks`, `history`, `addBookmark`, `help`.
@@ -46,6 +48,7 @@ This keeps privileged state centralized and UI logic decoupled.
 - Single active overlay host (`createPanelHost` + `registerPanelCleanup`).
 - Virtualized result lists for heavy panes.
 - `requestAnimationFrame` throttling for preview/detail/scroll-driven updates.
+- `withPerfTrace` markers + `perfBudgets.json` thresholds for filter/render hotspots.
 - Responsive panel layout with media queries and compositor-friendly containers.
 
 ## Store-Readiness Guardrails
@@ -54,8 +57,10 @@ This keeps privileged state centralized and UI logic decoupled.
   - Manifest permissions and command constraints.
   - MV2 Gecko metadata checks for AMO.
   - Core command and asset sanity checks.
+- `npm run verify:store`
+  - Store listing + privacy + manifest consistency checks.
 - `npm run ci`
-  - `lint` + `test` + `typecheck` + `verify:compat` + Firefox/Chrome builds.
+  - `lint` + `test` + `typecheck` + `verify:compat` + `verify:store` + Firefox/Chrome builds.
 
 ## Contributor Path (Recommended)
 
@@ -67,6 +72,6 @@ This keeps privileged state centralized and UI logic decoupled.
 
 ## Future Refactor Directions
 
-- Extract domain-specific message handlers in background (tab manager, bookmarks, history) into separate modules while keeping `background.ts` as the router.
-- Introduce shared design tokens in `panelHost` CSS variables to centralize visual tuning.
-- Add lightweight performance marks (`performance.now`) around filter/render hotspots for regression tracking.
+- Add per-feature perf dashboards in options/dev mode using `globalThis.__HT_PERF_STATS__`.
+- Expand responsive smoke tests from CSS assertions to browser-level viewport tests.
+- Continue splitting large feature overlays into smaller UI state modules where complexity grows.

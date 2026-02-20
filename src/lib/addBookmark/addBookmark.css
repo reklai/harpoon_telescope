@@ -2,10 +2,10 @@
 
 .ht-addbm-container {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  width: min(92vw, 420px); max-height: min(86vh, 520px); background: #1e1e1e;
-  border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+  width: min(92vw, 420px); max-height: min(86vh, 520px); background: var(--ht-color-bg);
+  border: 1px solid var(--ht-color-border); border-radius: var(--ht-radius);
   display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  box-shadow: var(--ht-shadow-overlay);
   backface-visibility: hidden;
   will-change: transform;
   contain: layout style paint;
@@ -14,41 +14,41 @@
 .ht-addbm-list { flex: 1; overflow-y: auto; padding: 4px 0; max-height: 340px; }
 .ht-addbm-item {
   padding: 8px 14px; cursor: pointer; font-size: 12px;
-  color: #e0e0e0; display: flex; align-items: center; gap: 8px;
+  color: var(--ht-color-text); display: flex; align-items: center; gap: 8px;
   outline: none; user-select: none;
 }
-.ht-addbm-item:hover { background: rgba(255,255,255,0.06); }
+.ht-addbm-item:hover { background: var(--ht-color-border-soft); }
 .ht-addbm-item.active {
-  background: rgba(10,132,255,0.15);
-  border-left: 2px solid #0a84ff;
+  background: var(--ht-color-accent-active);
+  border-left: 2px solid var(--ht-color-accent);
 }
 .ht-addbm-icon { flex-shrink: 0; font-size: 14px; }
 .ht-addbm-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ht-addbm-desc { font-size: 10px; color: #808080; }
+.ht-addbm-desc { font-size: 10px; color: var(--ht-color-text-muted); }
 .ht-addbm-none {
   padding: 8px 14px; cursor: pointer; font-size: 12px;
-  color: #808080; display: flex; align-items: center; gap: 8px;
+  color: var(--ht-color-text-muted); display: flex; align-items: center; gap: 8px;
   outline: none; user-select: none; font-style: italic;
 }
-.ht-addbm-none:hover { background: rgba(255,255,255,0.06); }
+.ht-addbm-none:hover { background: var(--ht-color-border-soft); }
 .ht-addbm-none.active {
-  background: rgba(10,132,255,0.15);
-  border-left: 2px solid #0a84ff;
+  background: var(--ht-color-accent-active);
+  border-left: 2px solid var(--ht-color-accent);
 }
 .ht-addbm-input-wrap {
   display: flex; align-items: center; padding: 8px 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.06); background: #252525;
+  border-bottom: 1px solid var(--ht-color-border-soft); background: var(--ht-color-bg-elevated);
 }
 .ht-addbm-prompt {
-  color: #0a84ff; margin-right: 8px; font-weight: 600; font-size: 13px;
+  color: var(--ht-color-accent); margin-right: 8px; font-weight: 600; font-size: 13px;
 }
 .ht-addbm-input {
   flex: 1; background: transparent; border: none; outline: none;
-  color: #e0e0e0; font-family: inherit; font-size: 13px; caret-color: #0a84ff;
+  color: var(--ht-color-text); font-family: inherit; font-size: 13px; caret-color: var(--ht-color-accent);
 }
-.ht-addbm-input::placeholder { color: #666; }
+.ht-addbm-input::placeholder { color: var(--ht-color-text-dim); }
 .ht-addbm-error {
-  padding: 4px 14px; font-size: 10px; color: #ff5f57; display: none;
+  padding: 4px 14px; font-size: 10px; color: var(--ht-color-danger); display: none;
 }
 
 @media (max-width: 520px), (max-height: 560px) {

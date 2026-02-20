@@ -12,6 +12,7 @@ import { createPanelHost, removePanelHost, registerPanelCleanup, getBaseStyles, 
 import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../shared/helpers";
 import { parseSlashFilterQuery } from "../shared/filterInput";
 import { showFeedback } from "../shared/feedback";
+import { withPerfTrace } from "../shared/perf";
 import historyStyles from "./history.css";
 
 // Virtual scrolling constants
@@ -292,36 +293,38 @@ export async function openHistoryOverlay(
     }
 
     function renderVisibleItems(): void {
-      const scrollTop = resultsPane.scrollTop;
-      const viewHeight = resultsPane.clientHeight;
+      withPerfTrace("history.renderVisibleItems", () => {
+        const scrollTop = resultsPane.scrollTop;
+        const viewHeight = resultsPane.clientHeight;
 
-      const newStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - POOL_BUFFER);
-      const newEnd = Math.min(filtered.length,
-        Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER);
+        const newStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - POOL_BUFFER);
+        const newEnd = Math.min(filtered.length,
+          Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER);
 
-      if (newStart === vsStart && newEnd === vsEnd) return;
-      vsStart = newStart;
-      vsEnd = newEnd;
+        if (newStart === vsStart && newEnd === vsEnd) return;
+        vsStart = newStart;
+        vsEnd = newEnd;
 
-      resultsList.style.top = `${vsStart * ITEM_HEIGHT}px`;
+        resultsList.style.top = `${vsStart * ITEM_HEIGHT}px`;
 
-      const count = vsEnd - vsStart;
-      while (resultsList.children.length > count) {
-        resultsList.removeChild(resultsList.lastChild!);
-      }
-
-      activeItemEl = null;
-      for (let i = 0; i < count; i++) {
-        const item = getPoolItem(i);
-        bindPoolItem(item, vsStart + i);
-        if (i < resultsList.children.length) {
-          if (resultsList.children[i] !== item) {
-            resultsList.replaceChild(item, resultsList.children[i]);
-          }
-        } else {
-          resultsList.appendChild(item);
+        const count = vsEnd - vsStart;
+        while (resultsList.children.length > count) {
+          resultsList.removeChild(resultsList.lastChild!);
         }
-      }
+
+        activeItemEl = null;
+        for (let i = 0; i < count; i++) {
+          const item = getPoolItem(i);
+          bindPoolItem(item, vsStart + i);
+          if (i < resultsList.children.length) {
+            if (resultsList.children[i] !== item) {
+              resultsList.replaceChild(item, resultsList.children[i]);
+            }
+          } else {
+            resultsList.appendChild(item);
+          }
+        }
+      });
     }
 
     function renderResults(): void {
@@ -434,73 +437,75 @@ export async function openHistoryOverlay(
     }
 
     function applyFilter(): void {
-      let results = allEntries;
+      withPerfTrace("history.applyFilter", () => {
+        let results = allEntries;
 
-      // Apply time-based filters first
-      if (activeFilters.length > 0) {
-        const now = Date.now();
-        let maxRange = 0;
-        for (const filter of activeFilters) {
-          maxRange = Math.max(maxRange, FILTER_RANGES[filter]);
-        }
-        const cutoff = now - maxRange;
-        results = results.filter((entry) => entry.lastVisitTime >= cutoff);
-      }
-
-      // Apply text query with ranked scoring
-      const trimmedQuery = currentQuery.trim();
-      if (trimmedQuery) {
-        const re = buildFuzzyPattern(trimmedQuery);
-        const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
-        if (re) {
-          const lowerQuery = trimmedQuery.toLowerCase();
-          const ranked: Array<{
-            entry: HistoryEntry;
-            titleScore: number;
-            titleHit: boolean;
-            titleLen: number;
-            urlScore: number;
-            urlHit: boolean;
-          }> = [];
-
-          for (const entry of results) {
-            const title = entry.title || "";
-            const url = entry.url || "";
-            if (!(substringRe.test(title) || substringRe.test(url) || re.test(title) || re.test(url))) {
-              continue;
-            }
-
-            const titleScore = scoreMatch(title.toLowerCase(), title, lowerQuery, re);
-            const urlScore = scoreMatch(url.toLowerCase(), url, lowerQuery, re);
-            ranked.push({
-              entry,
-              titleScore,
-              titleHit: titleScore >= 0,
-              titleLen: title.length,
-              urlScore,
-              urlHit: urlScore >= 0,
-            });
+        // Apply time-based filters first
+        if (activeFilters.length > 0) {
+          const now = Date.now();
+          let maxRange = 0;
+          for (const filter of activeFilters) {
+            maxRange = Math.max(maxRange, FILTER_RANGES[filter]);
           }
-
-          // Rank by: title score > title length (shorter = tighter) > url score
-          ranked.sort((a, b) => {
-            // Title matches always beat non-title matches
-            if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
-            if (a.titleHit && b.titleHit) {
-              if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
-              return a.titleLen - b.titleLen;
-            }
-            // Neither hit title — compare url
-            if (a.urlHit !== b.urlHit) return a.urlHit ? -1 : 1;
-            if (a.urlHit && b.urlHit) return a.urlScore - b.urlScore;
-            return 0;
-          });
-          results = ranked.map((r) => r.entry);
+          const cutoff = now - maxRange;
+          results = results.filter((entry) => entry.lastVisitTime >= cutoff);
         }
-      }
 
-      filtered = results;
-      activeIndex = 0;
+        // Apply text query with ranked scoring
+        const trimmedQuery = currentQuery.trim();
+        if (trimmedQuery) {
+          const re = buildFuzzyPattern(trimmedQuery);
+          const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
+          if (re) {
+            const lowerQuery = trimmedQuery.toLowerCase();
+            const ranked: Array<{
+              entry: HistoryEntry;
+              titleScore: number;
+              titleHit: boolean;
+              titleLen: number;
+              urlScore: number;
+              urlHit: boolean;
+            }> = [];
+
+            for (const entry of results) {
+              const title = entry.title || "";
+              const url = entry.url || "";
+              if (!(substringRe.test(title) || substringRe.test(url) || re.test(title) || re.test(url))) {
+                continue;
+              }
+
+              const titleScore = scoreMatch(title.toLowerCase(), title, lowerQuery, re);
+              const urlScore = scoreMatch(url.toLowerCase(), url, lowerQuery, re);
+              ranked.push({
+                entry,
+                titleScore,
+                titleHit: titleScore >= 0,
+                titleLen: title.length,
+                urlScore,
+                urlHit: urlScore >= 0,
+              });
+            }
+
+            // Rank by: title score > title length (shorter = tighter) > url score
+            ranked.sort((a, b) => {
+              // Title matches always beat non-title matches
+              if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
+              if (a.titleHit && b.titleHit) {
+                if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
+                return a.titleLen - b.titleLen;
+              }
+              // Neither hit title — compare url
+              if (a.urlHit !== b.urlHit) return a.urlHit ? -1 : 1;
+              if (a.urlHit && b.urlHit) return a.urlScore - b.urlScore;
+              return 0;
+            });
+            results = ranked.map((r) => r.entry);
+          }
+        }
+
+        filtered = results;
+        activeIndex = 0;
+      });
     }
 
     // --- Actions ---

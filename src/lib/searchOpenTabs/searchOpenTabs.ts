@@ -5,6 +5,7 @@ import browser from "webextension-polyfill";
 import { matchesAction, keyToDisplay } from "../shared/keybindings";
 import { createPanelHost, removePanelHost, registerPanelCleanup, getBaseStyles, vimBadgeHtml } from "../shared/panelHost";
 import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../shared/helpers";
+import { withPerfTrace } from "../shared/perf";
 import searchOpenTabsStyles from "./searchOpenTabs.css";
 
 export async function openSearchOpenTabs(
@@ -222,67 +223,68 @@ export async function openSearchOpenTabs(
     }
 
     function applyFilter(): void {
-      const trimmedQuery = query.trim();
-      if (!trimmedQuery) {
-        filtered = [...allEntries];
-        activeIndex = 0;
-        return;
-      }
-
-      const re = buildFuzzyPattern(trimmedQuery);
-      const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
-
-      if (!re) {
-        filtered = [...allEntries];
-        activeIndex = 0;
-        return;
-      }
-
-      const queryLower = trimmedQuery.toLowerCase();
-      const ranked: Array<{
-        entry: FrecencyEntry;
-        titleScore: number;
-        titleHit: boolean;
-        titleLen: number;
-        urlScore: number;
-        urlHit: boolean;
-      }> = [];
-
-      // Two-pass: substring first, fuzzy as fallback
-      for (const entry of allEntries) {
-        const title = entry.title || "";
-        const url = entry.url || "";
-        if (!(substringRe.test(title) || substringRe.test(url) || re.test(title) || re.test(url))) {
-          continue;
+      withPerfTrace("searchOpenTabs.applyFilter", () => {
+        const trimmedQuery = query.trim();
+        if (!trimmedQuery) {
+          filtered = [...allEntries];
+          activeIndex = 0;
+          return;
         }
 
-        const titleScore = scoreMatch(title.toLowerCase(), title, queryLower, re);
-        const urlScore = scoreMatch(url.toLowerCase(), url, queryLower, re);
-        ranked.push({
-          entry,
-          titleScore,
-          titleHit: titleScore >= 0,
-          titleLen: title.length,
-          urlScore,
-          urlHit: urlScore >= 0,
+        const re = buildFuzzyPattern(trimmedQuery);
+        const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
+
+        if (!re) {
+          filtered = [...allEntries];
+          activeIndex = 0;
+          return;
+        }
+
+        const queryLower = trimmedQuery.toLowerCase();
+        const ranked: Array<{
+          entry: FrecencyEntry;
+          titleScore: number;
+          titleHit: boolean;
+          titleLen: number;
+          urlScore: number;
+          urlHit: boolean;
+        }> = [];
+
+        // Two-pass: substring first, fuzzy as fallback
+        for (const entry of allEntries) {
+          const title = entry.title || "";
+          const url = entry.url || "";
+          if (!(substringRe.test(title) || substringRe.test(url) || re.test(title) || re.test(url))) {
+            continue;
+          }
+
+          const titleScore = scoreMatch(title.toLowerCase(), title, queryLower, re);
+          const urlScore = scoreMatch(url.toLowerCase(), url, queryLower, re);
+          ranked.push({
+            entry,
+            titleScore,
+            titleHit: titleScore >= 0,
+            titleLen: title.length,
+            urlScore,
+            urlHit: urlScore >= 0,
+          });
+        }
+
+        // Rank by: title score > title length (shorter = tighter) > url score
+        ranked.sort((a, b) => {
+          if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
+          if (a.titleHit && b.titleHit) {
+            if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
+            return a.titleLen - b.titleLen;
+          }
+          if (a.urlHit !== b.urlHit) return a.urlHit ? -1 : 1;
+          if (a.urlHit && b.urlHit) return a.urlScore - b.urlScore;
+          return 0;
         });
-      }
 
-      // Rank by: title score > title length (shorter = tighter) > url score
-      ranked.sort((a, b) => {
-        if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
-        if (a.titleHit && b.titleHit) {
-          if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
-          return a.titleLen - b.titleLen;
-        }
-        if (a.urlHit !== b.urlHit) return a.urlHit ? -1 : 1;
-        if (a.urlHit && b.urlHit) return a.urlScore - b.urlScore;
-        return 0;
+        filtered = ranked.map((r) => r.entry);
+        activeIndex = 0;
       });
-
-      filtered = ranked.map((r) => r.entry);
-
-      activeIndex = 0;
     }
 
     async function jumpToTab(entry: FrecencyEntry): Promise<void> {

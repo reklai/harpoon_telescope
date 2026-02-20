@@ -91,9 +91,51 @@ export function getBaseStyles(): string {
 
     :host {
       all: initial;
-      font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      --ht-font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      --ht-color-bg: #1e1e1e;
+      --ht-color-bg-elevated: #252525;
+      --ht-color-bg-soft: #3a3a3c;
+      --ht-color-bg-detail-focus: #1a2230;
+      --ht-color-bg-detail-focus-header: #1e2a3a;
+      --ht-color-bg-code: #1a1a1a;
+      --ht-color-text: #e0e0e0;
+      --ht-color-text-soft: #c0c0c0;
+      --ht-color-text-muted: #808080;
+      --ht-color-text-title: #a0a0a0;
+      --ht-color-text-detail-focus: #a0c0e0;
+      --ht-color-text-dim: #666;
+      --ht-color-text-faint: #555;
+      --ht-color-text-strong: #fff;
+      --ht-color-accent: #0a84ff;
+      --ht-color-accent-soft: rgba(10,132,255,0.1);
+      --ht-color-accent-active: rgba(10,132,255,0.15);
+      --ht-color-accent-soft-strong: rgba(10,132,255,0.12);
+      --ht-color-accent-soft-faint: rgba(10,132,255,0.08);
+      --ht-color-accent-alt: #af82ff;
+      --ht-color-accent-alt-soft: rgba(175,130,255,0.15);
+      --ht-color-success: #32d74b;
+      --ht-color-tree-cursor: #4ec970;
+      --ht-color-tree-cursor-bg: rgba(78,201,112,0.15);
+      --ht-color-tree-cursor-bg-soft: rgba(78,201,112,0.18);
+      --ht-color-tree-cursor-bg-strong: rgba(78,201,112,0.20);
+      --ht-color-danger: #ff5f57;
+      --ht-color-warning: #febc2e;
+      --ht-color-mark-bg: #f9d45c;
+      --ht-color-mark-fg: #1e1e1e;
+      --ht-color-border: rgba(255,255,255,0.1);
+      --ht-color-border-soft: rgba(255,255,255,0.06);
+      --ht-color-border-faint: rgba(255,255,255,0.04);
+      --ht-color-border-ultra-faint: rgba(255,255,255,0.03);
+      --ht-color-hover: rgba(255,255,255,0.06);
+      --ht-color-focus-active: rgba(255,255,255,0.13);
+      --ht-color-surface: rgba(255,255,255,0.08);
+      --ht-color-surface-dim: rgba(255,255,255,0.04);
+      --ht-color-surface-strong: rgba(255,255,255,0.15);
+      --ht-shadow-overlay: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+      --ht-radius: 10px;
+      font-family: var(--ht-font-mono);
       font-size: 13px;
-      color: #e0e0e0;
+      color: var(--ht-color-text);
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
     }
@@ -107,9 +149,9 @@ export function getBaseStyles(): string {
     .ht-titlebar {
       display: flex; align-items: center;
       padding: 10px 14px;
-      background: #3a3a3c;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      border-radius: 10px 10px 0 0;
+      background: var(--ht-color-bg-soft);
+      border-bottom: 1px solid var(--ht-color-border-soft);
+      border-radius: var(--ht-radius) var(--ht-radius) 0 0;
       user-select: none;
     }
     .ht-traffic-lights {
@@ -121,10 +163,10 @@ export function getBaseStyles(): string {
       transition: filter 0.15s;
     }
     .ht-dot:hover { filter: brightness(1.2); }
-    .ht-dot-close { background: #ff5f57; }
+    .ht-dot-close { background: var(--ht-color-danger); }
     .ht-titlebar-text {
       flex: 1; text-align: center; font-size: 12px;
-      color: #a0a0a0; font-weight: 500;
+      color: var(--ht-color-text-title); font-weight: 500;
     }
 
     .ht-vim-badge {
@@ -134,17 +176,17 @@ export function getBaseStyles(): string {
       line-height: 1; margin-left: 8px;
     }
     .ht-vim-badge.on {
-      background: #32d74b; color: #1a1a1a;
+      background: var(--ht-color-success); color: #1a1a1a;
     }
     .ht-vim-badge.off {
-      background: rgba(255,255,255,0.08); color: #666;
+      background: var(--ht-color-surface); color: var(--ht-color-text-dim);
     }
 
     .ht-footer {
       display: flex; gap: 16px; padding: 8px 14px;
-      background: #252525; border-top: 1px solid rgba(255,255,255,0.06);
-      font-size: 11px; color: #808080; flex-wrap: wrap;
-      border-radius: 0 0 10px 10px; justify-content: center;
+      background: var(--ht-color-bg-elevated); border-top: 1px solid var(--ht-color-border-soft);
+      font-size: 11px; color: var(--ht-color-text-muted); flex-wrap: wrap;
+      border-radius: 0 0 var(--ht-radius) var(--ht-radius); justify-content: center;
     }
     .ht-footer-row {
       display: flex; gap: 16px; justify-content: center; width: 100%; flex-wrap: wrap;

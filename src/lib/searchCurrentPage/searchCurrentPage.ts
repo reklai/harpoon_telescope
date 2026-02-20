@@ -17,6 +17,7 @@ import { parseSlashFilterQuery } from "../shared/filterInput";
 import { grepPage, enrichResult, initLineCache, destroyLineCache } from "./grep";
 import { scrollToText } from "../shared/scroll";
 import { showFeedback } from "../shared/feedback";
+import { withPerfTrace } from "../shared/perf";
 import searchCurrentPageStyles from "./searchCurrentPage.css";
 
 // Page size limits — only block truly massive pages
@@ -298,73 +299,77 @@ export async function openSearchCurrentPage(
 
     /** Render only the visible window of results into the DOM */
     function renderVisibleItems(): void {
-      const scrollTop = resultsPane.scrollTop;
-      const viewHeight = resultsPane.clientHeight;
+      withPerfTrace("searchCurrentPage.renderVisibleItems", () => {
+        const scrollTop = resultsPane.scrollTop;
+        const viewHeight = resultsPane.clientHeight;
 
-      const newStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - POOL_BUFFER);
-      const newEnd = Math.min(results.length,
-        Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER);
+        const newStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - POOL_BUFFER);
+        const newEnd = Math.min(results.length,
+          Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER);
 
-      // Skip if range hasn't changed
-      if (newStart === vsStart && newEnd === vsEnd) return;
-      vsStart = newStart;
-      vsEnd = newEnd;
+        // Skip if range hasn't changed
+        if (newStart === vsStart && newEnd === vsEnd) return;
+        vsStart = newStart;
+        vsEnd = newEnd;
 
-      // Position the results list at the correct offset
-      resultsList.style.top = `${vsStart * ITEM_HEIGHT}px`;
+        // Position the results list at the correct offset
+        resultsList.style.top = `${vsStart * ITEM_HEIGHT}px`;
 
-      // Ensure we have enough pool items
-      const count = vsEnd - vsStart;
+        // Ensure we have enough pool items
+        const count = vsEnd - vsStart;
 
-      // Detach excess items
-      while (resultsList.children.length > count) {
-        resultsList.removeChild(resultsList.lastChild!);
-      }
-
-      // Bind and attach items
-      activeItemEl = null;
-      for (let i = 0; i < count; i++) {
-        const item = getPoolItem(i);
-        bindPoolItem(item, vsStart + i);
-        if (i < resultsList.children.length) {
-          // Item already in DOM at this slot — just re-bind (already done above)
-          if (resultsList.children[i] !== item) {
-            resultsList.replaceChild(item, resultsList.children[i]);
-          }
-        } else {
-          resultsList.appendChild(item);
+        // Detach excess items
+        while (resultsList.children.length > count) {
+          resultsList.removeChild(resultsList.lastChild!);
         }
-      }
+
+        // Bind and attach items
+        activeItemEl = null;
+        for (let i = 0; i < count; i++) {
+          const item = getPoolItem(i);
+          bindPoolItem(item, vsStart + i);
+          if (i < resultsList.children.length) {
+            // Item already in DOM at this slot — just re-bind (already done above)
+            if (resultsList.children[i] !== item) {
+              resultsList.replaceChild(item, resultsList.children[i]);
+            }
+          } else {
+            resultsList.appendChild(item);
+          }
+        }
+      });
     }
 
     /** Full re-render after results change */
     function renderResults(): void {
-      buildHighlightRegex();
+      withPerfTrace("searchCurrentPage.renderResults", () => {
+        buildHighlightRegex();
 
-      if (results.length === 0) {
-        resultsSentinel.style.height = "0px";
-        resultsList.style.top = "0px";
-        resultsList.textContent = "";
-        resultsList.innerHTML = input.value
-          ? '<div class="ht-no-results">No matches found</div>'
-          : '<div class="ht-no-results">Type to search...</div>';
-        previewHeader.textContent = "Preview";
-        showPreviewPlaceholder(true);
-        activeItemEl = null;
+        if (results.length === 0) {
+          resultsSentinel.style.height = "0px";
+          resultsList.style.top = "0px";
+          resultsList.textContent = "";
+          resultsList.innerHTML = input.value
+            ? '<div class="ht-no-results">No matches found</div>'
+            : '<div class="ht-no-results">Type to search...</div>';
+          previewHeader.textContent = "Preview";
+          showPreviewPlaceholder(true);
+          activeItemEl = null;
+          vsStart = 0;
+          vsEnd = 0;
+          return;
+        }
+
+        // Set sentinel height for correct scrollbar
+        resultsSentinel.style.height = `${results.length * ITEM_HEIGHT}px`;
+
+        // Reset scroll and render visible window
+        resultsPane.scrollTop = 0;
         vsStart = 0;
         vsEnd = 0;
-        return;
-      }
-
-      // Set sentinel height for correct scrollbar
-      resultsSentinel.style.height = `${results.length * ITEM_HEIGHT}px`;
-
-      // Reset scroll and render visible window
-      resultsPane.scrollTop = 0;
-      vsStart = 0;
-      vsEnd = 0;
-      resultsList.textContent = "";
-      renderVisibleItems();
+        resultsList.textContent = "";
+        renderVisibleItems();
+      });
     }
 
     function scheduleVisibleRender(): void {

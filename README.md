@@ -226,9 +226,11 @@ harpoon_telescope/
 ## Contributing
 
 See `CONTRIBUTING.md` for naming conventions, module boundaries, and PR checklist.
+Architecture walkthrough for contributors: `docs/ARCHITECTURE.md`.
 
 ## Engineering Promise
 
+- **Ghostty-inspired UX** — terminal-like, low-distraction visual language with platform-native font rendering and minimal chrome.
 - **Native browser primitives first** — DOM + Shadow DOM overlays, WebExtension APIs, and plain TypeScript (no UI framework runtime).
 - **Fast by default** — rAF-throttled rendering, virtualized result panes, capped datasets, and lazy work on demand.
 - **Minimal UI glitching** — one active panel host, isolated styles, explicit focus reclaim, and compositor-friendly overlay containers.

@@ -114,6 +114,15 @@ function checkUiGlitchBaseline() {
     if (!css.includes("will-change: transform")) {
       errors.push(`${file} must set will-change: transform on its panel container.`);
     }
+    if (!css.includes("contain: layout style paint")) {
+      errors.push(`${file} must set contain: layout style paint on its panel container.`);
+    }
+    if (!css.includes("overscroll-behavior: contain")) {
+      errors.push(`${file} must set overscroll-behavior: contain on its panel container.`);
+    }
+    if (!css.includes("@media (max-width:")) {
+      errors.push(`${file} must include a responsive @media (max-width: ...) rule.`);
+    }
   }
 
   const panelHost = readText("src/lib/shared/panelHost.ts");
@@ -123,12 +132,27 @@ function checkUiGlitchBaseline() {
   if (!panelHost.includes("activePanelCleanup")) {
     errors.push("src/lib/shared/panelHost.ts must keep single-panel cleanup state.");
   }
+  if (!panelHost.includes("100dvh") || !panelHost.includes("100dvw")) {
+    errors.push("src/lib/shared/panelHost.ts must use dynamic viewport units (100dvw/100dvh).");
+  }
+}
+
+function checkContributorDocs() {
+  const readme = readText("README.md");
+  const contributing = readText("CONTRIBUTING.md");
+  if (!readme.includes("docs/ARCHITECTURE.md")) {
+    errors.push("README.md must reference docs/ARCHITECTURE.md for contributor onboarding.");
+  }
+  if (!contributing.includes("docs/ARCHITECTURE.md")) {
+    errors.push("CONTRIBUTING.md must reference docs/ARCHITECTURE.md.");
+  }
 }
 
 checkPackageDependencies();
 checkSourceImports();
 checkOverlayContracts();
 checkUiGlitchBaseline();
+checkContributorDocs();
 
 if (errors.length > 0) {
   console.error("[lint] FAILED");

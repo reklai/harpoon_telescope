@@ -172,6 +172,7 @@ export async function openHistoryOverlay(
 
     // rAF throttle for detail updates
     let detailRafId: number | null = null;
+    let scrollRafId: number | null = null;
 
     // Detail pane mode: tree (passive, always visible), treeNav (focused with cursor), confirmDelete
     let detailMode: "tree" | "treeNav" | "confirmDelete" = "tree";
@@ -188,6 +189,7 @@ export async function openHistoryOverlay(
       panelOpen = false;
       document.removeEventListener("keydown", keyHandler, true);
       if (detailRafId !== null) cancelAnimationFrame(detailRafId);
+      if (scrollRafId !== null) cancelAnimationFrame(scrollRafId);
       removePanelHost();
     }
 
@@ -348,10 +350,16 @@ export async function openHistoryOverlay(
       scheduleDetailUpdate();
     }
 
+    function scheduleVisibleRender(): void {
+      if (scrollRafId !== null) return;
+      scrollRafId = requestAnimationFrame(() => {
+        scrollRafId = null;
+        if (filtered.length > 0) renderVisibleItems();
+      });
+    }
+
     // Scroll listener for virtual scrolling
-    resultsPane.addEventListener("scroll", () => {
-      if (filtered.length > 0) renderVisibleItems();
-    }, { passive: true });
+    resultsPane.addEventListener("scroll", scheduleVisibleRender, { passive: true });
 
     function setActiveIndex(newIndex: number): void {
       if (newIndex < 0 || newIndex >= filtered.length) return;

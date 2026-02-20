@@ -2,12 +2,14 @@
 
 .ht-addbm-container {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  width: 380px; max-width: 90vw; max-height: 460px; background: #1e1e1e;
+  width: min(92vw, 420px); max-height: min(86vh, 520px); background: #1e1e1e;
   border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
   display: flex; flex-direction: column; overflow: hidden;
   box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
   backface-visibility: hidden;
   will-change: transform;
+  contain: layout style paint;
+  overscroll-behavior: contain;
 }
 .ht-addbm-list { flex: 1; overflow-y: auto; padding: 4px 0; max-height: 340px; }
 .ht-addbm-item {
@@ -47,4 +49,10 @@
 .ht-addbm-input::placeholder { color: #666; }
 .ht-addbm-error {
   padding: 4px 14px; font-size: 10px; color: #ff5f57; display: none;
+}
+
+@media (max-width: 520px), (max-height: 560px) {
+  .ht-addbm-container { border-radius: 8px; }
+  .ht-addbm-list { max-height: min(56vh, 300px); }
+  .ht-addbm-input-wrap { padding: 8px 10px; }
 }

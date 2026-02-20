@@ -1,11 +1,16 @@
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = resolve(__dirname, "..");
 
 function loadJson(file) {
   return JSON.parse(readFileSync(resolve(__dirname, file), "utf8"));
+}
+
+function fileExists(pathFromRoot) {
+  return existsSync(resolve(root, pathFromRoot));
 }
 
 function hasAll(actual, required) {
@@ -20,6 +25,23 @@ const manifestV2 = loadJson("manifest_v2.json");
 const manifestV3 = loadJson("manifest_v3.json");
 
 const errors = [];
+const SEMVER_RE = /^\d+\.\d+\.\d+$/;
+
+if (!SEMVER_RE.test(String(manifestV2.version || "")) || !SEMVER_RE.test(String(manifestV3.version || ""))) {
+  errors.push("Both manifests must use a semver version string (x.y.z).");
+}
+
+for (const [name, manifest] of [
+  ["MV2", manifestV2],
+  ["MV3", manifestV3],
+]) {
+  if (!manifest.name || typeof manifest.name !== "string") {
+    errors.push(`${name} must declare a non-empty "name".`);
+  }
+  if (!manifest.description || typeof manifest.description !== "string") {
+    errors.push(`${name} must declare a non-empty "description".`);
+  }
+}
 
 const requiredV2Permissions = ["tabs", "activeTab", "storage", "bookmarks", "history", "<all_urls>"];
 if (!hasAll(manifestV2.permissions || [], requiredV2Permissions)) {
@@ -57,6 +79,57 @@ const v2AddShortcut = manifestV2.commands?.["tab-manager-add"]?.suggested_key?.d
 const v3AddShortcut = manifestV3.commands?.["tab-manager-add"]?.suggested_key?.default;
 if (v2AddShortcut !== expectedAddShortcut || v3AddShortcut !== expectedAddShortcut) {
   errors.push(`tab-manager-add suggested shortcut must be ${expectedAddShortcut} in MV2 and MV3.`);
+}
+
+for (const commandName of ["open-tab-manager", "tab-manager-add", "open-search-current"]) {
+  if (!manifestV2.commands?.[commandName]) {
+    errors.push(`MV2 is missing required command "${commandName}".`);
+  }
+  if (!manifestV3.commands?.[commandName]) {
+    errors.push(`MV3 is missing required command "${commandName}".`);
+  }
+}
+
+if (manifestV2.options_ui?.page !== "options-page/options-page.html") {
+  errors.push('MV2 options_ui.page must be "options-page/options-page.html".');
+}
+if (manifestV3.options_ui?.page !== "options-page/options-page.html") {
+  errors.push('MV3 options_ui.page must be "options-page/options-page.html".');
+}
+
+const v2Popup = manifestV2.browser_action?.default_popup;
+const v3Popup = manifestV3.action?.default_popup;
+if (v2Popup !== "toolbar-popup/toolbar-popup.html" || v3Popup !== "toolbar-popup/toolbar-popup.html") {
+  errors.push('Both manifests must use "toolbar-popup/toolbar-popup.html" as default popup.');
+}
+
+for (const [name, manifest] of [
+  ["MV2", manifestV2],
+  ["MV3", manifestV3],
+]) {
+  const icons = manifest.icons || {};
+  for (const size of ["48", "96", "128"]) {
+    if (!icons[size]) {
+      errors.push(`${name} icons must include size ${size}.`);
+    }
+  }
+}
+
+const requiredSourceFiles = [
+  "src/entrypoints/content-script/content-script.ts",
+  "src/entrypoints/background/background.ts",
+  "src/entrypoints/options-page/options-page.html",
+  "src/entrypoints/options-page/options-page.css",
+  "src/entrypoints/toolbar-popup/toolbar-popup.html",
+  "src/entrypoints/toolbar-popup/toolbar-popup.css",
+  "src/icons/icon-48.png",
+  "src/icons/icon-96.png",
+  "src/icons/icon-128.png",
+];
+for (const requiredFile of requiredSourceFiles) {
+  if (!fileExists(requiredFile)) {
+    errors.push(`Missing required source asset: ${requiredFile}`);
+  }
 }
 
 if (errors.length > 0) {

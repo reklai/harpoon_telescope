@@ -31,7 +31,7 @@ export function createPanelHost(): PanelHost {
   host.id = "ht-panel-host";
   host.tabIndex = -1;
   host.style.cssText =
-    "position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2147483647;pointer-events:auto;contain:layout style paint;";
+    "position:fixed;top:0;left:0;width:100vw;height:100vh;width:100dvw;height:100dvh;z-index:2147483647;pointer-events:auto;contain:layout style paint;overscroll-behavior:contain;isolation:isolate;";
   const shadow = host.attachShadow({ mode: "open" });
   document.body.appendChild(host);
 
@@ -100,6 +100,7 @@ export function getBaseStyles(): string {
 
     .ht-backdrop {
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      width: 100dvw; height: 100dvh;
       background: rgba(0, 0, 0, 0.55);
     }
 

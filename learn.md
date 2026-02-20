@@ -19,6 +19,8 @@ How I use this guide:
 5. Ask: why this approach, what tradeoff, what failure mode?
 6. Capture one reusable engineering pattern in my own words.
 
+Companion reference for contributors: `docs/ARCHITECTURE.md`
+
 ---
 
 ## Table of Contents
@@ -56,7 +58,7 @@ Harpoon Telescope is a keyboard-first browser extension inspired by Neovim plugi
 - Bookmarks + History: two-pane browsers with tree views and confirmations.
 
 Everything runs in plain TypeScript with no UI framework. Overlays are Shadow DOM panels injected into the active page.
-Engineering promise: stay browser-primitive (DOM/Shadow DOM/WebExtension APIs), keep UI latency low, minimize visual glitching, and preserve Firefox/Chrome parity.
+Engineering promise: stay Ghostty-inspired and browser-primitive (DOM/Shadow DOM/WebExtension APIs), keep UI latency low, minimize visual glitching, and preserve Firefox/Chrome parity.
 
 ---
 
@@ -533,6 +535,7 @@ Prevents conflicts. `Alt+F` opens the panel; once open, pressing `Alt+F` should 
 - **rAF throttled updates:** Rendering is scheduled via `requestAnimationFrame` to batch DOM writes.
 - **Cached DOM grep + mutation invalidation:** Walk the DOM once, cache lines, invalidate on changes.
 - **Lazy computation:** Expensive fields (domContext, ancestorHeading) are computed on-demand, not upfront.
+- **Responsive pane switching:** two-pane overlays collapse to stacked panes on smaller viewports.
 
 ---
 

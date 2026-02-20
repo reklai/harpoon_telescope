@@ -9,6 +9,8 @@
 5. `npm run verify:compat`
 6. `npm run build:firefox` or `npm run build:chrome`
 
+Architecture reference: `docs/ARCHITECTURE.md`
+
 ## Naming Conventions
 
 ### Files and Folders
@@ -43,6 +45,7 @@
 - `src/entrypoints/*`: thin startup/adaptor layers only.
 - `src/lib/shared/*`: cross-feature utilities and shared state helpers.
 - Feature modules should depend on `shared`, not on other feature internals unless necessary.
+- Runtime message contract changes must go through `src/lib/shared/runtimeMessages.ts`.
 
 ## Engineering Promise Guardrails
 

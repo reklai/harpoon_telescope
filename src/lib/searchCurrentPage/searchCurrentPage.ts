@@ -169,6 +169,7 @@ export async function openSearchCurrentPage(
 
     // rAF throttle for preview updates
     let previewRafId: number | null = null;
+    let scrollRafId: number | null = null;
 
     // Virtual scrolling state
     let vsStart = 0;  // first visible result index
@@ -180,6 +181,7 @@ export async function openSearchCurrentPage(
       lastSearchState = { query: input.value };
       document.removeEventListener("keydown", keyHandler, true);
       if (previewRafId !== null) cancelAnimationFrame(previewRafId);
+      if (scrollRafId !== null) cancelAnimationFrame(scrollRafId);
       destroyLineCache();
       removePanelHost();
     }
@@ -365,10 +367,16 @@ export async function openSearchCurrentPage(
       renderVisibleItems();
     }
 
+    function scheduleVisibleRender(): void {
+      if (scrollRafId !== null) return;
+      scrollRafId = requestAnimationFrame(() => {
+        scrollRafId = null;
+        if (results.length > 0) renderVisibleItems();
+      });
+    }
+
     // Scroll listener for virtual scrolling (passive for perf)
-    resultsPane.addEventListener("scroll", () => {
-      if (results.length > 0) renderVisibleItems();
-    }, { passive: true });
+    resultsPane.addEventListener("scroll", scheduleVisibleRender, { passive: true });
 
     function setActiveIndex(newIndex: number): void {
       if (newIndex < 0 || newIndex >= results.length) return;

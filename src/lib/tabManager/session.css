@@ -1,11 +1,14 @@
 .ht-session-restore-container {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  width: 380px; background: #1e1e1e; border: 1px solid rgba(255,255,255,0.1);
+  width: min(92vw, 420px); max-height: min(84vh, 520px);
+  background: #1e1e1e; border: 1px solid rgba(255,255,255,0.1);
   border-radius: 10px; overflow: hidden;
   box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
   display: flex; flex-direction: column;
   backface-visibility: hidden;
   will-change: transform;
+  contain: layout style paint;
+  overscroll-behavior: contain;
 }
 .ht-session-restore-list { max-height: 260px; overflow-y: auto; }
 .ht-session-restore-item {
@@ -26,4 +29,9 @@
 }
 .ht-session-restore-empty {
   padding: 24px; text-align: center; color: #808080; font-size: 12px;
+}
+
+@media (max-width: 520px), (max-height: 560px) {
+  .ht-session-restore-container { border-radius: 8px; }
+  .ht-session-restore-item { padding: 8px 10px; }
 }

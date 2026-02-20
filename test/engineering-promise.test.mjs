@@ -23,6 +23,7 @@ const OVERLAY_CSS_FILES = [
 test("README documents engineering promise", () => {
   const readme = readText("README.md");
   assert.match(readme, /## Engineering Promise/);
+  assert.match(readme, /Ghostty-inspired UX/);
   assert.match(readme, /Native browser primitives first/);
   assert.match(readme, /Cross-platform parity/);
   assert.match(readme, /Minimal UI glitching/);
@@ -31,6 +32,7 @@ test("README documents engineering promise", () => {
 test("learn guide references engineering promise", () => {
   const learn = readText("learn.md");
   assert.match(learn, /Engineering promise:/);
+  assert.match(learn, /Ghostty-inspired/);
   assert.match(learn, /browser-primitive/);
   assert.match(learn, /minimize visual glitching/);
 });

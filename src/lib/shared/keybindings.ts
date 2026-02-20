@@ -183,6 +183,47 @@ const KEY_NAME_MAP: Record<string, string> = {
 };
 
 const MODIFIER_KEYS = new Set(["Control", "Alt", "Shift", "Meta"]);
+interface ParsedKeyCombo {
+  key: string;
+  ctrl: boolean;
+  alt: boolean;
+  shift: boolean;
+  meta: boolean;
+}
+const KEY_COMBO_CACHE = new Map<string, ParsedKeyCombo>();
+
+function normalizeKeyName(keyName: string): string {
+  if (KEY_NAME_MAP[keyName]) return KEY_NAME_MAP[keyName];
+  if (keyName.length === 1) return keyName.toUpperCase();
+  return keyName;
+}
+
+function parseKeyCombo(keyString: string): ParsedKeyCombo | null {
+  if (!keyString) return null;
+  const cached = KEY_COMBO_CACHE.get(keyString);
+  if (cached) return cached;
+
+  const parts = keyString.split("+");
+  if (parts.length === 0) return null;
+
+  const parsed: ParsedKeyCombo = {
+    key: normalizeKeyName(parts[parts.length - 1]),
+    ctrl: false,
+    alt: false,
+    shift: false,
+    meta: false,
+  };
+
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (parts[i] === "Ctrl") parsed.ctrl = true;
+    else if (parts[i] === "Alt") parsed.alt = true;
+    else if (parts[i] === "Shift") parsed.shift = true;
+    else if (parts[i] === "Meta") parsed.meta = true;
+  }
+
+  KEY_COMBO_CACHE.set(keyString, parsed);
+  return parsed;
+}
 
 /** Convert a KeyboardEvent into a normalized string like "Alt+F" or "Ctrl+Shift+K" */
 export function keyEventToString(e: KeyboardEvent): string | null {
@@ -192,12 +233,7 @@ export function keyEventToString(e: KeyboardEvent): string | null {
   if (e.shiftKey) parts.push("Shift");
   if (e.metaKey) parts.push("Meta");
 
-  let keyName = e.key;
-  if (KEY_NAME_MAP[keyName]) {
-    keyName = KEY_NAME_MAP[keyName];
-  } else if (keyName.length === 1) {
-    keyName = keyName.toUpperCase();
-  }
+  const keyName = normalizeKeyName(e.key);
 
   // Modifier-only presses aren't complete combos
   if (MODIFIER_KEYS.has(keyName)) return null;
@@ -210,20 +246,15 @@ export function keyEventToString(e: KeyboardEvent): string | null {
 
 /** Check if a KeyboardEvent matches a key string like "Alt+H" or "ArrowDown" */
 export function matchesKey(e: KeyboardEvent, keyString: string): boolean {
-  if (!keyString) return false;
-  const parts = keyString.split("+");
-  const key = parts[parts.length - 1];
+  const parsed = parseKeyCombo(keyString);
+  if (!parsed) return false;
 
-  if (e.ctrlKey !== parts.includes("Ctrl")) return false;
-  if (e.altKey !== parts.includes("Alt")) return false;
-  if (e.shiftKey !== parts.includes("Shift")) return false;
-  if (e.metaKey !== parts.includes("Meta")) return false;
+  if (e.ctrlKey !== parsed.ctrl) return false;
+  if (e.altKey !== parsed.alt) return false;
+  if (e.shiftKey !== parsed.shift) return false;
+  if (e.metaKey !== parsed.meta) return false;
 
-  let eventKey = e.key;
-  if (eventKey.length === 1) eventKey = eventKey.toUpperCase();
-  if (eventKey === " ") eventKey = "Space";
-
-  return eventKey === key;
+  return normalizeKeyName(e.key) === parsed.key;
 }
 
 /** Get all keys that trigger an action, including vim aliases when vim mode is on */
@@ -247,8 +278,19 @@ export function matchesAction(
   scope: string,
   action: string,
 ): boolean {
-  const keys = getKeysForAction(config, scope, action);
-  return keys.some((k) => matchesKey(e, k));
+  const scopeBindings = config.bindings[scope as keyof KeybindingsConfig["bindings"]];
+  const binding = scopeBindings?.[action];
+  if (!binding) return false;
+
+  if (matchesKey(e, binding.key)) return true;
+
+  if (config.navigationMode !== "vim") return false;
+  const vimAliases = VIM_ENHANCED_ALIASES[scope]?.[action];
+  if (!vimAliases) return false;
+  for (const alias of vimAliases) {
+    if (matchesKey(e, alias)) return true;
+  }
+  return false;
 }
 
 // -- Display Helpers --

@@ -5,8 +5,11 @@ import browser, { Tabs } from "webextension-polyfill";
 
 // In-memory frecency map keyed by tabId, persisted to storage
 const MAX_FRECENCY_ENTRIES = 50;
+const FRECENCY_SAVE_DEBOUNCE_MS = 250;
 let frecencyMap: Map<number, FrecencyEntry> = new Map();
 let frecencyLoaded = false;
+let pendingSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let saveInFlight: Promise<void> | null = null;
 
 export async function ensureFrecencyLoaded(): Promise<void> {
   if (!frecencyLoaded) {
@@ -21,6 +24,40 @@ async function saveFrecency(): Promise<void> {
   await browser.storage.local.set({
     frecencyData: Array.from(frecencyMap.values()),
   });
+}
+
+function scheduleFrecencySave(): void {
+  if (pendingSaveTimer) clearTimeout(pendingSaveTimer);
+  pendingSaveTimer = setTimeout(() => {
+    pendingSaveTimer = null;
+    const pending = saveFrecency();
+    saveInFlight = pending;
+    pending.finally(() => {
+      if (saveInFlight === pending) {
+        saveInFlight = null;
+      }
+    }).catch(() => {});
+  }, FRECENCY_SAVE_DEBOUNCE_MS);
+}
+
+async function flushFrecencySave(): Promise<void> {
+  if (pendingSaveTimer) {
+    clearTimeout(pendingSaveTimer);
+    pendingSaveTimer = null;
+    const pending = saveFrecency();
+    saveInFlight = pending;
+    try {
+      await pending;
+    } finally {
+      if (saveInFlight === pending) {
+        saveInFlight = null;
+      }
+    }
+    return;
+  }
+  if (saveInFlight) {
+    await saveInFlight;
+  }
 }
 
 /** Mozilla-style frecency score: visitCount * recencyWeight.
@@ -78,7 +115,7 @@ export async function recordFrecencyVisit(tab: Tabs.Tab): Promise<void> {
       if (lowestId !== null) frecencyMap.delete(lowestId);
     }
   }
-  await saveFrecency();
+  scheduleFrecencySave();
 }
 
 /** Build a frecency-scored list of all open tabs, sorted by score descending */
@@ -119,5 +156,8 @@ export async function getFrecencyList(): Promise<FrecencyEntry[]> {
 /** Remove a tab from the frecency map (call on tab close) */
 export async function removeFrecencyEntry(tabId: number): Promise<void> {
   await ensureFrecencyLoaded();
-  if (frecencyMap.delete(tabId)) await saveFrecency();
+  if (frecencyMap.delete(tabId)) {
+    scheduleFrecencySave();
+    await flushFrecencySave();
+  }
 }

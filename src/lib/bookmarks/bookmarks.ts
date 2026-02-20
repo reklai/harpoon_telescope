@@ -442,59 +442,87 @@ export async function openBookmarkOverlay(
     // With /folder active: fuzzy-match query against parentTitle only
     // Score a match: lower = better. Combines match type with tightness.
     // Returns -1 for no match.
-    function scoreMatch(text: string, query: string, fuzzyRe: RegExp): number {
-      const lower = text.toLowerCase();
-      const q = query.toLowerCase();
-      if (lower === q) return 0;           // exact match
-      if (lower.startsWith(q)) return 1;   // starts-with
-      if (lower.includes(q)) return 2;     // substring
-      if (fuzzyRe.test(text)) return 3;    // fuzzy only
-      return -1;                           // no match
+    function scoreMatch(
+      lowerText: string,
+      rawText: string,
+      lowerQuery: string,
+      fuzzyRe: RegExp,
+    ): number {
+      if (lowerText === lowerQuery) return 0;             // exact match
+      if (lowerText.startsWith(lowerQuery)) return 1;     // starts-with
+      if (lowerText.includes(lowerQuery)) return 2;       // substring
+      if (fuzzyRe.test(rawText)) return 3;                // fuzzy only
+      return -1;                                          // no match
     }
 
     function applyFilter(): void {
-      let results = [...allEntries];
+      let results = allEntries;
+      const trimmedQuery = currentQuery.trim();
 
-      if (currentQuery.trim()) {
-        const re = buildFuzzyPattern(currentQuery);
-        const substringRe = new RegExp(escapeRegex(currentQuery), "i");
+      if (trimmedQuery) {
+        const re = buildFuzzyPattern(trimmedQuery);
+        const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
         if (re) {
           if (activeFilters.length === 0) {
+            const lowerQuery = trimmedQuery.toLowerCase();
+            const ranked: Array<{
+              entry: BookmarkEntry;
+              titleScore: number;
+              titleHit: boolean;
+              titleLen: number;
+              folderScore: number;
+              folderHit: boolean;
+            }> = [];
+
             // No filters — match against all fields using substring first, fuzzy as fallback
-            results = results.filter(
-              (e) => substringRe.test(e.title) || substringRe.test(e.url) || (e.folderPath && substringRe.test(e.folderPath))
-                || re.test(e.title) || re.test(e.url) || (e.folderPath && re.test(e.folderPath)),
-            );
+            for (const entry of results) {
+              const title = entry.title || "";
+              const url = entry.url || "";
+              const folder = entry.folderPath || "";
+              if (!(substringRe.test(title)
+                || substringRe.test(url)
+                || (folder !== "" && substringRe.test(folder))
+                || re.test(title)
+                || re.test(url)
+                || (folder !== "" && re.test(folder)))) {
+                continue;
+              }
+
+              const titleScore = scoreMatch(title.toLowerCase(), title, lowerQuery, re);
+              const folderScore = folder !== ""
+                ? scoreMatch(folder.toLowerCase(), folder, lowerQuery, re)
+                : -1;
+              ranked.push({
+                entry,
+                titleScore,
+                titleHit: titleScore >= 0,
+                titleLen: title.length,
+                folderScore,
+                folderHit: folderScore >= 0,
+              });
+            }
+
             // Rank by: title score → title length (shorter = tighter) → folder score → url score
-            const q = currentQuery;
-            results.sort((a, b) => {
-              const aTitle = scoreMatch(a.title, q, re);
-              const bTitle = scoreMatch(b.title, q, re);
-              const aTitleHit = aTitle >= 0;
-              const bTitleHit = bTitle >= 0;
+            ranked.sort((a, b) => {
               // Title matches always beat non-title matches
-              if (aTitleHit !== bTitleHit) return aTitleHit ? -1 : 1;
-              if (aTitleHit && bTitleHit) {
+              if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
+              if (a.titleHit && b.titleHit) {
                 // Tighter title match wins
-                if (aTitle !== bTitle) return aTitle - bTitle;
+                if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
                 // Same match type — shorter title = more relevant
-                return a.title.length - b.title.length;
+                return a.titleLen - b.titleLen;
               }
               // Neither hit title — compare folder
-              const aFolder = a.folderPath ? scoreMatch(a.folderPath, q, re) : -1;
-              const bFolder = b.folderPath ? scoreMatch(b.folderPath, q, re) : -1;
-              const aFolderHit = aFolder >= 0;
-              const bFolderHit = bFolder >= 0;
-              if (aFolderHit !== bFolderHit) return aFolderHit ? -1 : 1;
-              if (aFolderHit && bFolderHit) return aFolder - bFolder;
+              if (a.folderHit !== b.folderHit) return a.folderHit ? -1 : 1;
+              if (a.folderHit && b.folderHit) return a.folderScore - b.folderScore;
               return 0;
             });
+            results = ranked.map((r) => r.entry);
           } else {
             // Filter-scoped matching: /folder — match against parentTitle only
-            results = results.filter((e) => {
-              if (e.folderPath && (substringRe.test(e.folderPath) || re.test(e.folderPath))) return true;
-              return false;
-            });
+            results = results.filter((e) => (
+              !!e.folderPath && (substringRe.test(e.folderPath) || re.test(e.folderPath))
+            ));
           }
         }
       } else if (activeFilters.length > 0) {

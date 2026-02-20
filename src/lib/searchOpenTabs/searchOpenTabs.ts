@@ -79,26 +79,34 @@ export async function openSearchOpenTabs(
     let activeIndex = 0;
     let query = "";
     let activeItemEl: HTMLElement | null = null;
+    let highlightRegex: RegExp | null = null;
 
     function close(): void {
       document.removeEventListener("keydown", keyHandler, true);
       removePanelHost();
     }
 
-    /** Highlight fuzzy query matches in text */
-    function highlightMatch(text: string): string {
-      const escaped = escapeHtml(text);
-      if (!query) return escaped;
+    function buildHighlightRegex(): void {
       const terms = query.trim().split(/\s+/).filter(Boolean);
-      if (terms.length === 0) return escaped;
+      if (terms.length === 0) {
+        highlightRegex = null;
+        return;
+      }
       const pattern = terms
         .map((t) => `(${escapeRegex(escapeHtml(t))})`)
         .join("|");
       try {
-        return escaped.replace(new RegExp(pattern, "gi"), "<mark>$1</mark>");
+        highlightRegex = new RegExp(pattern, "gi");
       } catch (_) {
-        return escaped;
+        highlightRegex = null;
       }
+    }
+
+    /** Highlight fuzzy query matches in text */
+    function highlightMatch(text: string): string {
+      const escaped = escapeHtml(text);
+      if (!highlightRegex) return escaped;
+      return escaped.replace(highlightRegex, "<mark>$1</mark>");
     }
 
     let renderRafId = 0;
@@ -144,7 +152,7 @@ export async function openSearchOpenTabs(
     function commitList(frag: DocumentFragment): void {
       listEl.textContent = "";
       listEl.appendChild(frag);
-      activeItemEl = listEl.querySelector(".ht-open-tabs-item.active") as HTMLElement;
+      activeItemEl = listEl.children[activeIndex] as HTMLElement | null;
       if (activeItemEl) activeItemEl.scrollIntoView({ block: "nearest" });
     }
 
@@ -183,8 +191,7 @@ export async function openSearchOpenTabs(
       if (activeItemEl) activeItemEl.classList.remove("active");
       activeIndex = newIndex;
       // Apply new highlight
-      const items = listEl.querySelectorAll(".ht-open-tabs-item");
-      activeItemEl = (items[activeIndex] as HTMLElement) || null;
+      activeItemEl = (listEl.children[activeIndex] as HTMLElement) || null;
       if (activeItemEl) {
         activeItemEl.classList.add("active");
         activeItemEl.scrollIntoView({ block: "nearest" });
@@ -201,25 +208,29 @@ export async function openSearchOpenTabs(
     // --- Filtering ---
     // 4-tier match scoring: exact (0) > starts-with (1) > substring (2) > fuzzy (3)
     // Returns -1 for no match.
-    function scoreMatch(text: string, q: string, fuzzyRe: RegExp): number {
-      const lower = text.toLowerCase();
-      const ql = q.toLowerCase();
-      if (lower === ql) return 0;           // exact match
-      if (lower.startsWith(ql)) return 1;   // starts-with
-      if (lower.includes(ql)) return 2;     // substring
-      if (fuzzyRe.test(text)) return 3;     // fuzzy only
-      return -1;                            // no match
+    function scoreMatch(
+      lowerText: string,
+      rawText: string,
+      queryLower: string,
+      fuzzyRe: RegExp,
+    ): number {
+      if (lowerText === queryLower) return 0;            // exact match
+      if (lowerText.startsWith(queryLower)) return 1;    // starts-with
+      if (lowerText.includes(queryLower)) return 2;      // substring
+      if (fuzzyRe.test(rawText)) return 3;               // fuzzy only
+      return -1;                                         // no match
     }
 
     function applyFilter(): void {
-      if (!query.trim()) {
+      const trimmedQuery = query.trim();
+      if (!trimmedQuery) {
         filtered = [...allEntries];
         activeIndex = 0;
         return;
       }
 
-      const re = buildFuzzyPattern(query);
-      const substringRe = new RegExp(escapeRegex(query), "i");
+      const re = buildFuzzyPattern(trimmedQuery);
+      const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
 
       if (!re) {
         filtered = [...allEntries];
@@ -227,33 +238,49 @@ export async function openSearchOpenTabs(
         return;
       }
 
+      const queryLower = trimmedQuery.toLowerCase();
+      const ranked: Array<{
+        entry: FrecencyEntry;
+        titleScore: number;
+        titleHit: boolean;
+        titleLen: number;
+        urlScore: number;
+        urlHit: boolean;
+      }> = [];
+
       // Two-pass: substring first, fuzzy as fallback
-      filtered = allEntries.filter(
-        (e) => substringRe.test(e.title) || substringRe.test(e.url)
-          || re.test(e.title) || re.test(e.url),
-      );
+      for (const entry of allEntries) {
+        const title = entry.title || "";
+        const url = entry.url || "";
+        if (!(substringRe.test(title) || substringRe.test(url) || re.test(title) || re.test(url))) {
+          continue;
+        }
+
+        const titleScore = scoreMatch(title.toLowerCase(), title, queryLower, re);
+        const urlScore = scoreMatch(url.toLowerCase(), url, queryLower, re);
+        ranked.push({
+          entry,
+          titleScore,
+          titleHit: titleScore >= 0,
+          titleLen: title.length,
+          urlScore,
+          urlHit: urlScore >= 0,
+        });
+      }
 
       // Rank by: title score > title length (shorter = tighter) > url score
-      const q = query;
-      filtered.sort((a, b) => {
-        const aTitle = scoreMatch(a.title, q, re);
-        const bTitle = scoreMatch(b.title, q, re);
-        const aTitleHit = aTitle >= 0;
-        const bTitleHit = bTitle >= 0;
-        if (aTitleHit !== bTitleHit) return aTitleHit ? -1 : 1;
-        if (aTitleHit && bTitleHit) {
-          if (aTitle !== bTitle) return aTitle - bTitle;
-          return a.title.length - b.title.length;
+      ranked.sort((a, b) => {
+        if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
+        if (a.titleHit && b.titleHit) {
+          if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
+          return a.titleLen - b.titleLen;
         }
-        // Neither hit title — compare url
-        const aUrl = scoreMatch(a.url, q, re);
-        const bUrl = scoreMatch(b.url, q, re);
-        const aUrlHit = aUrl >= 0;
-        const bUrlHit = bUrl >= 0;
-        if (aUrlHit !== bUrlHit) return aUrlHit ? -1 : 1;
-        if (aUrlHit && bUrlHit) return aUrl - bUrl;
+        if (a.urlHit !== b.urlHit) return a.urlHit ? -1 : 1;
+        if (a.urlHit && b.urlHit) return a.urlScore - b.urlScore;
         return 0;
       });
+
+      filtered = ranked.map((r) => r.entry);
 
       activeIndex = 0;
     }
@@ -310,6 +337,7 @@ export async function openSearchOpenTabs(
         e.stopPropagation();
         input.value = "";
         query = "";
+        buildHighlightRegex();
         applyFilter();
         renderList();
         return;
@@ -374,6 +402,7 @@ export async function openSearchOpenTabs(
 
     input.addEventListener("input", () => {
       query = input.value;
+      buildHighlightRegex();
       applyFilter();
       renderList();
     });

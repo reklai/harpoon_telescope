@@ -428,18 +428,21 @@ export async function openHistoryOverlay(
 
     // --- Filtering ---
     // 4-tier match scoring: exact (0) > starts-with (1) > substring (2) > fuzzy (3)
-    function scoreMatch(text: string, query: string, fuzzyRe: RegExp): number {
-      const lower = text.toLowerCase();
-      const q = query.toLowerCase();
-      if (lower === q) return 0;           // exact match
-      if (lower.startsWith(q)) return 1;   // starts-with
-      if (lower.includes(q)) return 2;     // substring
-      if (fuzzyRe.test(text)) return 3;    // fuzzy only
-      return -1;                           // no match
+    function scoreMatch(
+      lowerText: string,
+      rawText: string,
+      lowerQuery: string,
+      fuzzyRe: RegExp,
+    ): number {
+      if (lowerText === lowerQuery) return 0;             // exact match
+      if (lowerText.startsWith(lowerQuery)) return 1;     // starts-with
+      if (lowerText.includes(lowerQuery)) return 2;       // substring
+      if (fuzzyRe.test(rawText)) return 3;                // fuzzy only
+      return -1;                                          // no match
     }
 
     function applyFilter(): void {
-      let results = [...allEntries];
+      let results = allEntries;
 
       // Apply time-based filters first
       if (activeFilters.length > 0) {
@@ -453,36 +456,54 @@ export async function openHistoryOverlay(
       }
 
       // Apply text query with ranked scoring
-      if (currentQuery.trim()) {
-        const re = buildFuzzyPattern(currentQuery);
-        const substringRe = new RegExp(escapeRegex(currentQuery), "i");
+      const trimmedQuery = currentQuery.trim();
+      if (trimmedQuery) {
+        const re = buildFuzzyPattern(trimmedQuery);
+        const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
         if (re) {
-          results = results.filter(
-            (e) => substringRe.test(e.title) || substringRe.test(e.url)
-              || re.test(e.title) || re.test(e.url),
-          );
+          const lowerQuery = trimmedQuery.toLowerCase();
+          const ranked: Array<{
+            entry: HistoryEntry;
+            titleScore: number;
+            titleHit: boolean;
+            titleLen: number;
+            urlScore: number;
+            urlHit: boolean;
+          }> = [];
+
+          for (const entry of results) {
+            const title = entry.title || "";
+            const url = entry.url || "";
+            if (!(substringRe.test(title) || substringRe.test(url) || re.test(title) || re.test(url))) {
+              continue;
+            }
+
+            const titleScore = scoreMatch(title.toLowerCase(), title, lowerQuery, re);
+            const urlScore = scoreMatch(url.toLowerCase(), url, lowerQuery, re);
+            ranked.push({
+              entry,
+              titleScore,
+              titleHit: titleScore >= 0,
+              titleLen: title.length,
+              urlScore,
+              urlHit: urlScore >= 0,
+            });
+          }
+
           // Rank by: title score > title length (shorter = tighter) > url score
-          const q = currentQuery;
-          results.sort((a, b) => {
-            const aTitle = scoreMatch(a.title, q, re);
-            const bTitle = scoreMatch(b.title, q, re);
-            const aTitleHit = aTitle >= 0;
-            const bTitleHit = bTitle >= 0;
+          ranked.sort((a, b) => {
             // Title matches always beat non-title matches
-            if (aTitleHit !== bTitleHit) return aTitleHit ? -1 : 1;
-            if (aTitleHit && bTitleHit) {
-              if (aTitle !== bTitle) return aTitle - bTitle;
-              return a.title.length - b.title.length;
+            if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
+            if (a.titleHit && b.titleHit) {
+              if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
+              return a.titleLen - b.titleLen;
             }
             // Neither hit title — compare url
-            const aUrl = scoreMatch(a.url, q, re);
-            const bUrl = scoreMatch(b.url, q, re);
-            const aUrlHit = aUrl >= 0;
-            const bUrlHit = bUrl >= 0;
-            if (aUrlHit !== bUrlHit) return aUrlHit ? -1 : 1;
-            if (aUrlHit && bUrlHit) return aUrl - bUrl;
+            if (a.urlHit !== b.urlHit) return a.urlHit ? -1 : 1;
+            if (a.urlHit && b.urlHit) return a.urlScore - b.urlScore;
             return 0;
           });
+          results = ranked.map((r) => r.entry);
         }
       }
 

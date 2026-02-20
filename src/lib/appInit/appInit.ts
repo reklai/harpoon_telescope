@@ -1,5 +1,5 @@
 // App init — wires up keybindings, message routing, and panel lifecycle.
-// Imported by contentScript.ts as the single bootstrap for all content-side logic.
+// Imported by content-script.ts as the single bootstrap for all content-side logic.
 
 import browser from "webextension-polyfill";
 import { matchesAction, saveKeybindings } from "../shared/keybindings";
@@ -34,7 +34,7 @@ export function initApp(): void {
   let cachedConfig: KeybindingsConfig | null = null;
 
   browser.runtime.sendMessage({ type: "GET_KEYBINDINGS" })
-    .then((c) => { cachedConfig = c as KeybindingsConfig; })
+    .then((loadedConfig) => { cachedConfig = loadedConfig as KeybindingsConfig; })
     .catch(() => {});
 
   // Keep config for the message handler (async callers)
@@ -49,7 +49,7 @@ export function initApp(): void {
   browser.storage.onChanged.addListener((changes) => {
     if (changes.keybindings) {
       browser.runtime.sendMessage({ type: "GET_KEYBINDINGS" })
-        .then((c) => { cachedConfig = c as KeybindingsConfig; })
+        .then((loadedConfig) => { cachedConfig = loadedConfig as KeybindingsConfig; })
         .catch(() => {});
     }
   });
@@ -164,19 +164,24 @@ export function initApp(): void {
   document.addEventListener("keydown", globalKeyHandler, true);
 
   // -- Message Router --
-  function messageHandler(msg: unknown): Promise<unknown> | undefined {
-    const m = msg as Record<string, unknown>;
-    switch (m.type) {
+  function messageHandler(message: unknown): Promise<unknown> | undefined {
+    const receivedMessage = message as Record<string, unknown>;
+    switch (receivedMessage.type) {
       case "GET_SCROLL":
         return Promise.resolve({
           scrollX: window.scrollX,
           scrollY: window.scrollY,
         });
       case "SET_SCROLL":
-        window.scrollTo(m.scrollX as number, m.scrollY as number);
+        window.scrollTo(receivedMessage.scrollX as number, receivedMessage.scrollY as number);
         return Promise.resolve({ ok: true });
       case "GREP":
-        return Promise.resolve(grepPage(m.query as string, (m.filters as SearchFilter[]) || []));
+        return Promise.resolve(
+          grepPage(
+            receivedMessage.query as string,
+            (receivedMessage.filters as SearchFilter[]) || [],
+          ),
+        );
       case "GET_CONTENT":
         return Promise.resolve(getPageContent());
       case "OPEN_SEARCH_CURRENT_PAGE":
@@ -209,17 +214,17 @@ export function initApp(): void {
           openSessionRestoreOverlay();
         return Promise.resolve({ ok: true });
       case "SCROLL_TO_TEXT":
-        scrollToText(m.text as string);
+        scrollToText(receivedMessage.text as string);
         return Promise.resolve({ ok: true });
       case "TAB_MANAGER_ADDED_FEEDBACK":
         showFeedback(
-          m.alreadyAdded
-            ? `Already in Tab Manager [${m.slot}]`
-            : `Added to Tab Manager [${m.slot}]`,
+          receivedMessage.alreadyAdded
+            ? `Already in Tab Manager [${receivedMessage.slot}]`
+            : `Added to Tab Manager [${receivedMessage.slot}]`,
         );
         return Promise.resolve({ ok: true });
       case "TAB_MANAGER_FULL_FEEDBACK":
-        showFeedback(`Tab Manager is full (${m.max}/${m.max})`);
+        showFeedback(`Tab Manager is full (${receivedMessage.max}/${receivedMessage.max})`);
         return Promise.resolve({ ok: true });
     }
   }

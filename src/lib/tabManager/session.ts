@@ -10,10 +10,10 @@ import { showFeedback } from "../shared/feedback";
 import restoreStyles from "./session.css";
 
 // Rename mode — when true, the active session item shows an inline input
-let renamingSession = false;
+let isRenameModeActive = false;
 
 // Overwrite confirmation — when true, titlebar shows y/n prompt
-let confirmingOverwrite = false;
+let isOverwriteConfirmationActive = false;
 
 /** Shared context passed from the tab manager overlay to session views */
 export interface SessionContext {
@@ -87,7 +87,7 @@ export async function renderSaveSession(ctx: SessionContext): Promise<void> {
 export function renderSessionList(ctx: SessionContext): void {
   const { shadow, container, config, sessions, sessionIndex } = ctx;
 
-  const titleText = confirmingOverwrite && sessions[sessionIndex]
+  const titleText = isOverwriteConfirmationActive && sessions[sessionIndex]
     ? `Overwrite "${escapeHtml(sessions[sessionIndex].name)}"? y / n`
     : "Sessions";
 
@@ -108,7 +108,7 @@ export function renderSessionList(ctx: SessionContext): void {
       const s = sessions[i];
       const cls = i === sessionIndex ? "ht-session-item active" : "ht-session-item";
       const date = new Date(s.savedAt).toLocaleDateString();
-      const nameContent = renamingSession && i === sessionIndex
+      const nameContent = isRenameModeActive && i === sessionIndex
         ? `<input type="text" class="ht-session-rename-input" value="${escapeHtml(s.name)}" maxlength="30" />`
         : `<div class="ht-session-name">${escapeHtml(s.name)}</div>`;
       html += `<div class="${cls}" data-index="${i}">
@@ -409,11 +409,11 @@ export function handleSaveSessionKey(ctx: SessionContext, e: KeyboardEvent): boo
 /** Handle keydown events in sessionList view. Returns true if handled. */
 export function handleSessionListKey(ctx: SessionContext, e: KeyboardEvent): boolean {
   // During rename mode, only handle Enter/Escape — let all other keys through to the input
-  if (renamingSession) {
+  if (isRenameModeActive) {
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
-      renamingSession = false;
+      isRenameModeActive = false;
       ctx.render();
       return true;
     }
@@ -430,7 +430,7 @@ export function handleSessionListKey(ctx: SessionContext, e: KeyboardEvent): boo
             oldName,
             newName,
           })) as { ok: boolean; reason?: string };
-          renamingSession = false;
+          isRenameModeActive = false;
           if (result.ok) {
             showFeedback(`Renamed to "${newName}"`);
             const sessions = (await browser.runtime.sendMessage({
@@ -451,12 +451,12 @@ export function handleSessionListKey(ctx: SessionContext, e: KeyboardEvent): boo
   }
 
   // During overwrite confirmation, only accept y/n/Escape
-  if (confirmingOverwrite) {
+  if (isOverwriteConfirmationActive) {
     e.preventDefault();
     e.stopPropagation();
     if (e.key.toLowerCase() === "y") {
       const session = ctx.sessions[ctx.sessionIndex];
-      confirmingOverwrite = false;
+      isOverwriteConfirmationActive = false;
       (async () => {
         const result = (await browser.runtime.sendMessage({
           type: "SESSION_UPDATE",
@@ -475,7 +475,7 @@ export function handleSessionListKey(ctx: SessionContext, e: KeyboardEvent): boo
       })();
     } else {
       // n, Escape, or any other key cancels
-      confirmingOverwrite = false;
+      isOverwriteConfirmationActive = false;
       ctx.render();
     }
     return true;
@@ -484,8 +484,8 @@ export function handleSessionListKey(ctx: SessionContext, e: KeyboardEvent): boo
   if (matchesAction(e, ctx.config, "tabManager", "close") || e.key === "Escape") {
     e.preventDefault();
     e.stopPropagation();
-    renamingSession = false;
-    confirmingOverwrite = false;
+    isRenameModeActive = false;
+    isOverwriteConfirmationActive = false;
     ctx.setViewMode("tabManager");
     ctx.render();
     return true;
@@ -526,7 +526,7 @@ export function handleSessionListKey(ctx: SessionContext, e: KeyboardEvent): boo
     e.preventDefault();
     e.stopPropagation();
     if (ctx.sessions.length === 0) return true;
-    renamingSession = true;
+    isRenameModeActive = true;
     // Re-render to show inline input, then focus it
     ctx.render();
     const input = ctx.shadow.querySelector(".ht-session-rename-input") as HTMLInputElement;
@@ -539,7 +539,7 @@ export function handleSessionListKey(ctx: SessionContext, e: KeyboardEvent): boo
     e.preventDefault();
     e.stopPropagation();
     if (ctx.sessions.length === 0) return true;
-    confirmingOverwrite = true;
+    isOverwriteConfirmationActive = true;
     ctx.render();
     return true;
   }

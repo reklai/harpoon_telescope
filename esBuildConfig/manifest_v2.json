@@ -12,13 +12,13 @@
     "<all_urls>"
   ],
   "background": {
-    "scripts": ["browserBackgroundProcess.js"],
+    "scripts": ["background.js"],
     "persistent": false
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["contentScript.js"],
+      "js": ["content-script.js"],
       "run_at": "document_idle"
     }
   ],
@@ -53,7 +53,7 @@
     }
   },
   "options_ui": {
-    "page": "extensionSettingsPage/extensionSettingsPage.html",
+    "page": "options-page/options-page.html",
     "open_in_tab": true
   },
   "browser_action": {
@@ -61,7 +61,7 @@
       "48": "icons/icon-48.png",
       "96": "icons/icon-96.png"
     },
-    "default_popup": "toolBarPopUp/toolBarPopUp.html",
+    "default_popup": "toolbar-popup/toolbar-popup.html",
     "default_title": "Harpoon Telescope"
   },
   "icons": {

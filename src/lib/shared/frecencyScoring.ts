@@ -14,8 +14,8 @@ let saveInFlight: Promise<void> | null = null;
 export async function ensureFrecencyLoaded(): Promise<void> {
   if (!frecencyLoaded) {
     const data = await browser.storage.local.get("frecencyData");
-    const arr = (data.frecencyData as FrecencyEntry[]) || [];
-    frecencyMap = new Map(arr.map((e) => [e.tabId, e]));
+    const persistedEntries = (data.frecencyData as FrecencyEntry[]) || [];
+    frecencyMap = new Map(persistedEntries.map((entry) => [entry.tabId, entry]));
     frecencyLoaded = true;
   }
 }
@@ -106,10 +106,10 @@ export async function recordFrecencyVisit(tab: Tabs.Tab): Promise<void> {
     if (frecencyMap.size > MAX_FRECENCY_ENTRIES) {
       let lowestId: number | null = null;
       let lowestScore = Infinity;
-      for (const [id, e] of frecencyMap) {
-        if (e.frecencyScore < lowestScore) {
-          lowestScore = e.frecencyScore;
-          lowestId = id;
+      for (const [entryId, entry] of frecencyMap) {
+        if (entry.frecencyScore < lowestScore) {
+          lowestScore = entry.frecencyScore;
+          lowestId = entryId;
         }
       }
       if (lowestId !== null) frecencyMap.delete(lowestId);
@@ -130,19 +130,19 @@ export async function getFrecencyList(): Promise<FrecencyEntry[]> {
   }
 
   // Build entries for all open tabs, adding untracked tabs with score 0
-  const entries: FrecencyEntry[] = tabs.map((t) => {
-    const existing = frecencyMap.get(t.id!);
+  const entries: FrecencyEntry[] = tabs.map((tab) => {
+    const existing = frecencyMap.get(tab.id!);
     if (existing) {
       // Refresh title/url and recompute score
-      existing.url = t.url || existing.url;
-      existing.title = t.title || existing.title;
+      existing.url = tab.url || existing.url;
+      existing.title = tab.title || existing.title;
       existing.frecencyScore = computeFrecencyScore(existing);
       return { ...existing };
     }
     return {
-      tabId: t.id!,
-      url: t.url || "",
-      title: t.title || "",
+      tabId: tab.id!,
+      url: tab.url || "",
+      title: tab.title || "",
       visitCount: 0,
       lastVisit: 0,
       frecencyScore: 0,

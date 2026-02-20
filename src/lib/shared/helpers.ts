@@ -5,14 +5,14 @@ const HTML_ESCAPE: Record<string, string> = {
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 };
 const HTML_ESCAPE_RE = /[&<>"']/;
-export function escapeHtml(str: string): string {
-  if (!HTML_ESCAPE_RE.test(str)) return str;
-  return str.replace(/[&<>"']/g, (c) => HTML_ESCAPE[c]);
+export function escapeHtml(text: string): string {
+  if (!HTML_ESCAPE_RE.test(text)) return text;
+  return text.replace(/[&<>"']/g, (character) => HTML_ESCAPE[character]);
 }
 
 /** Escape special regex characters so user input can be used in RegExp safely */
-export function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Build a case-insensitive fuzzy regex from a space-separated query string */
@@ -20,10 +20,10 @@ export function buildFuzzyPattern(query: string): RegExp | null {
   const terms = query.trim().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return null;
   const pattern = terms
-    .map((t) =>
-      t
+    .map((term) =>
+      term
         .split("")
-        .map((c) => escapeRegex(c))
+        .map((character) => escapeRegex(character))
         .join("[^]*?"),
     )
     .join("[^]*?");

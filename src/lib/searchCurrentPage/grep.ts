@@ -275,12 +275,12 @@ function fuzzyMatch(query: string, candidate: string): number | null {
   const terms = query.split(" ");
   let totalScore = 0;
 
-  for (let t = 0; t < terms.length; t++) {
-    const term = terms[t];
+  for (let termIndex = 0; termIndex < terms.length; termIndex++) {
+    const term = terms[termIndex];
     if (term.length === 0) continue;
-    const s = scoreTerm(term, candidate);
-    if (s === null) return null;
-    totalScore += s;
+    const termScore = scoreTerm(term, candidate);
+    if (termScore === null) return null;
+    totalScore += termScore;
   }
 
   return totalScore;
@@ -568,11 +568,11 @@ export function grepPage(query: string, filters: SearchFilter[] = []): GrepResul
 
 /** Lazily compute DOM-aware context for a single result (called on preview).
  *  Mutates the result in place to cache the computed fields. */
-export function enrichResult(r: GrepResult): void {
-  if (r.domContext) return; // already enriched
-  const node = r.nodeRef?.deref();
+export function enrichResult(result: GrepResult): void {
+  if (result.domContext) return; // already enriched
+  const node = result.nodeRef?.deref();
   if (!node) return;
-  r.domContext = getDomContext(node, r.text, r.tag || "");
-  r.ancestorHeading = findAncestorHeading(node);
-  if (!r.href && r.tag === "A") r.href = findHref(node);
+  result.domContext = getDomContext(node, result.text, result.tag || "");
+  result.ancestorHeading = findAncestorHeading(node);
+  if (!result.href && result.tag === "A") result.href = findHref(node);
 }

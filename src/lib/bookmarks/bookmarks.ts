@@ -24,9 +24,6 @@ const VALID_FILTERS: Record<string, BookmarkFilter> = {
   "/folder": "folder",
 };
 
-/** Build a fuzzy regex from a query string (each char matches with gaps) */
-
-
 // Folder tree node returned from background
 interface BookmarkFolder {
   id: string;
@@ -39,9 +36,9 @@ interface BookmarkFolder {
 function flattenFolders(folders: BookmarkFolder[]): { id: string; title: string; depth: number }[] {
   const flat: { id: string; title: string; depth: number }[] = [];
   function walk(nodes: BookmarkFolder[]): void {
-    for (const f of nodes) {
-      flat.push({ id: f.id, title: f.title, depth: f.depth });
-      if (f.children.length > 0) walk(f.children);
+    for (const folder of nodes) {
+      flat.push({ id: folder.id, title: folder.title, depth: folder.depth });
+      if (folder.children.length > 0) walk(folder.children);
     }
   }
   walk(folders);
@@ -233,18 +230,18 @@ export async function openBookmarkOverlay(
         return;
       }
       filterPills.style.display = "flex";
-      filterPills.innerHTML = activeFilters.map((f) =>
-        `<span class="ht-bm-filter-pill" data-filter="${f}">/${f}<span class="ht-bm-filter-pill-x">\u00d7</span></span>`
+      filterPills.innerHTML = activeFilters.map((filter) =>
+        `<span class="ht-bm-filter-pill" data-filter="${filter}">/${filter}<span class="ht-bm-filter-pill-x">\u00d7</span></span>`
       ).join("");
       // Click x to remove a filter from the input
-      filterPills.querySelectorAll(".ht-bm-filter-pill-x").forEach((x) => {
-        x.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const pill = (x as HTMLElement).parentElement!;
+      filterPills.querySelectorAll(".ht-bm-filter-pill-x").forEach((removeButton) => {
+        removeButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const pill = (removeButton as HTMLElement).parentElement!;
           const filter = pill.dataset.filter!;
           // Remove this filter's slash command from the input
           const tokens = input.value.trimStart().split(/\s+/);
-          const remaining = tokens.filter((t) => t !== `/${filter}`);
+          const remaining = tokens.filter((token) => token !== `/${filter}`);
           input.value = remaining.join(" ");
           input.dispatchEvent(new Event("input"));
           input.focus();
@@ -257,7 +254,7 @@ export async function openBookmarkOverlay(
       if (!currentQuery) { highlightRegex = null; return; }
       try {
         const terms = currentQuery.split(/\s+/).filter(Boolean);
-        const pattern = terms.map((t) => `(${escapeRegex(escapeHtml(t))})`).join("|");
+        const pattern = terms.map((term) => `(${escapeRegex(escapeHtml(term))})`).join("|");
         highlightRegex = new RegExp(pattern, "gi");
       } catch (_) { highlightRegex = null; }
     }
@@ -520,14 +517,14 @@ export async function openBookmarkOverlay(
             results = ranked.map((r) => r.entry);
           } else {
             // Filter-scoped matching: /folder — match against parentTitle only
-            results = results.filter((e) => (
-              !!e.folderPath && (substringRe.test(e.folderPath) || re.test(e.folderPath))
+            results = results.filter((entry) => (
+              !!entry.folderPath && (substringRe.test(entry.folderPath) || re.test(entry.folderPath))
             ));
           }
         }
       } else if (activeFilters.length > 0) {
         // /folder active but no query — show all bookmarks that have a folder path
-        results = results.filter((e) => !!e.folderPath);
+        results = results.filter((entry) => !!entry.folderPath);
       }
 
       filtered = results;
@@ -570,11 +567,11 @@ export async function openBookmarkOverlay(
 
       let html = '<div class="ht-bm-move-list">';
       for (let i = 0; i < moveFolders.length; i++) {
-        const f = moveFolders[i];
-        const indent = (f.depth - 1) * 16;
+        const folder = moveFolders[i];
+        const indent = (folder.depth - 1) * 16;
         const isActive = moveTargetIndex === i;
         html += `<div class="ht-bm-move-item${isActive ? ' active' : ''}" data-midx="${i}" style="padding-left:${14 + indent}px">`;
-        html += `\u{1F4C1} ${escapeHtml(f.title)}`;
+        html += `\u{1F4C1} ${escapeHtml(folder.title)}`;
         html += '</div>';
       }
       html += '</div>';
@@ -583,13 +580,13 @@ export async function openBookmarkOverlay(
       // Click handler (event delegation)
       const list = detailContent.querySelector(".ht-bm-move-list");
       if (list) {
-        list.addEventListener("click", (e) => {
-          const item = (e.target as HTMLElement).closest("[data-midx]") as HTMLElement;
+        list.addEventListener("click", (event) => {
+          const item = (event.target as HTMLElement).closest("[data-midx]") as HTMLElement;
           if (!item) return;
           moveTargetIndex = parseInt(item.dataset.midx!);
-          const entry = filtered[activeIndex];
-          if (!entry) return;
-          pendingMoveEntry = entry;
+          const activeEntry = filtered[activeIndex];
+          if (!activeEntry) return;
+          pendingMoveEntry = activeEntry;
           pendingMoveParentId = moveFolders[moveTargetIndex]?.id || null;
           detailMode = "confirmMove";
           renderMoveConfirm();
@@ -660,14 +657,14 @@ export async function openBookmarkOverlay(
         // Walk up the tree: for each visible folder, mark all ancestors visible too
         // flatFolderList is pre-order, so walk backwards to find ancestors by depth
         const ancestorIds = new Set<string>();
-        for (const fId of visibleFolderIds) {
+        for (const folderId of visibleFolderIds) {
           // Find this folder's index in flatFolderList
-          const fIdx = flatFolderList.findIndex((x) => x.id === fId);
-          if (fIdx < 0) continue;
-          const fDepth = flatFolderList[fIdx].depth;
+          const folderIndex = flatFolderList.findIndex((folder) => folder.id === folderId);
+          if (folderIndex < 0) continue;
+          const folderDepth = flatFolderList[folderIndex].depth;
           // Walk backwards to find ancestors at each decreasing depth
-          let targetDepth = fDepth - 1;
-          for (let i = fIdx - 1; i >= 0 && targetDepth > 0; i--) {
+          let targetDepth = folderDepth - 1;
+          for (let i = folderIndex - 1; i >= 0 && targetDepth > 0; i--) {
             if (flatFolderList[i].depth === targetDepth) {
               ancestorIds.add(flatFolderList[i].id);
               targetDepth--;
@@ -682,25 +679,25 @@ export async function openBookmarkOverlay(
       let idx = 0;
       const showCursor = detailMode === "treeNav";
       let html = '<div class="ht-bm-tree" style="max-height:none; border:none; border-radius:0; margin:0; padding:8px 0;">';
-      for (const f of flatFolderList) {
-        if (f.depth === 0) continue; // skip invisible root
+      for (const folder of flatFolderList) {
+        if (folder.depth === 0) continue; // skip invisible root
 
         // When filtering, skip folders that don't contain (or lead to) matches
-        if (visibleFolderIds && !visibleFolderIds.has(f.id)) continue;
+        if (visibleFolderIds && !visibleFolderIds.has(folder.id)) continue;
 
-        const folderIsActive = entry && f.id === entry.parentId;
-        const indent = (f.depth - 1) * 14;
+        const folderIsActive = entry && folder.id === entry.parentId;
+        const indent = (folder.depth - 1) * 14;
         // When filtering, auto-expand all folders; otherwise use user collapsed state
-        const collapsed = isFiltering ? false : treeCollapsed.has(f.id);
-        const children = byParent.get(f.id);
+        const collapsed = isFiltering ? false : treeCollapsed.has(folder.id);
+        const children = byParent.get(folder.id);
         const count = children ? children.length : 0;
         const hasChildren = count > 0;
         const arrow = hasChildren ? (collapsed ? '\u25B6' : '\u25BC') : '\u00A0\u00A0';
         const isCursor = showCursor && idx === treeCursorIndex;
 
-        treeVisibleItems.push({ type: "folder", id: f.id });
+        treeVisibleItems.push({ type: "folder", id: folder.id });
         html += `<div class="ht-bm-tree-node${folderIsActive ? ' active' : ''}${isCursor ? ' tree-cursor' : ''}" data-tree-idx="${idx}" style="padding-left:${10 + indent}px">`;
-        html += `<span class="ht-bm-tree-collapse">${arrow}</span> \u{1F4C1} ${escapeHtml(f.title)}${count > 0 ? ` (${count})` : ''}`;
+        html += `<span class="ht-bm-tree-collapse">${arrow}</span> \u{1F4C1} ${escapeHtml(folder.title)}${count > 0 ? ` (${count})` : ''}`;
         html += '</div>';
         idx++;
 

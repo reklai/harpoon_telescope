@@ -35,9 +35,6 @@ const FILTER_RANGES: Record<HistoryFilter, number> = {
   month: 30 * 24 * 60 * 60 * 1000,       // 30 days
 };
 
-/** Build a fuzzy regex from a query string (each char matches with gaps) */
-
-
 /** Format a timestamp as a human-readable relative time string */
 function relativeTime(ts: number): string {
   if (!ts) return "";
@@ -230,17 +227,17 @@ export async function openHistoryOverlay(
         return;
       }
       filterPills.style.display = "flex";
-      filterPills.innerHTML = activeFilters.map((f) =>
-        `<span class="ht-hist-filter-pill" data-filter="${f}">/${f}<span class="ht-hist-filter-pill-x">\u00d7</span></span>`
+      filterPills.innerHTML = activeFilters.map((filter) =>
+        `<span class="ht-hist-filter-pill" data-filter="${filter}">/${filter}<span class="ht-hist-filter-pill-x">\u00d7</span></span>`
       ).join("");
       // Click x to remove a filter from the input
-      filterPills.querySelectorAll(".ht-hist-filter-pill-x").forEach((x) => {
-        x.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const pill = (x as HTMLElement).parentElement!;
+      filterPills.querySelectorAll(".ht-hist-filter-pill-x").forEach((removeButton) => {
+        removeButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const pill = (removeButton as HTMLElement).parentElement!;
           const filter = pill.dataset.filter!;
           const tokens = input.value.trimStart().split(/\s+/);
-          const remaining = tokens.filter((t) => t !== `/${filter}`);
+          const remaining = tokens.filter((token) => token !== `/${filter}`);
           input.value = remaining.join(" ");
           input.dispatchEvent(new Event("input"));
           input.focus();
@@ -253,7 +250,7 @@ export async function openHistoryOverlay(
       if (!currentQuery) { highlightRegex = null; return; }
       try {
         const terms = currentQuery.split(/\s+/).filter(Boolean);
-        const pattern = terms.map((t) => `(${escapeRegex(escapeHtml(t))})`).join("|");
+        const pattern = terms.map((term) => `(${escapeRegex(escapeHtml(term))})`).join("|");
         highlightRegex = new RegExp(pattern, "gi");
       } catch (_) { highlightRegex = null; }
     }
@@ -448,11 +445,11 @@ export async function openHistoryOverlay(
       if (activeFilters.length > 0) {
         const now = Date.now();
         let maxRange = 0;
-        for (const f of activeFilters) {
-          maxRange = Math.max(maxRange, FILTER_RANGES[f]);
+        for (const filter of activeFilters) {
+          maxRange = Math.max(maxRange, FILTER_RANGES[filter]);
         }
         const cutoff = now - maxRange;
-        results = results.filter((e) => e.lastVisitTime >= cutoff);
+        results = results.filter((entry) => entry.lastVisitTime >= cutoff);
       }
 
       // Apply text query with ranked scoring
@@ -576,14 +573,14 @@ export async function openHistoryOverlay(
         { label: "Older",     icon: "\u{1F4C2}", entries: [] },
       ];
 
-      for (const e of entries) {
-        const age = now - e.lastVisitTime;
-        if (age < DAY)          buckets[0].entries.push(e);
-        else if (age < 2 * DAY) buckets[1].entries.push(e);
-        else if (age < 7 * DAY) buckets[2].entries.push(e);
-        else if (age < 14 * DAY) buckets[3].entries.push(e);
-        else if (age < 30 * DAY) buckets[4].entries.push(e);
-        else                    buckets[5].entries.push(e);
+      for (const historyEntry of entries) {
+        const age = now - historyEntry.lastVisitTime;
+        if (age < DAY) buckets[0].entries.push(historyEntry);
+        else if (age < 2 * DAY) buckets[1].entries.push(historyEntry);
+        else if (age < 7 * DAY) buckets[2].entries.push(historyEntry);
+        else if (age < 14 * DAY) buckets[3].entries.push(historyEntry);
+        else if (age < 30 * DAY) buckets[4].entries.push(historyEntry);
+        else buckets[5].entries.push(historyEntry);
       }
       return buckets;
     }
@@ -601,25 +598,30 @@ export async function openHistoryOverlay(
       treeVisibleItems = [];
       let idx = 0;
       let html = '<div class="ht-hist-tree" style="max-height:none; border:none; border-radius:0; margin:0; padding:8px 0;">';
-      for (const b of buckets) {
-        if (b.entries.length === 0) continue;
+      for (const bucket of buckets) {
+        if (bucket.entries.length === 0) continue;
 
         // Bucket header — highlight if active entry is in this bucket
-        const bucketHasActive = entry && b.entries.some((e) => e.url === entry.url && e.lastVisitTime === entry.lastVisitTime);
+        const bucketHasActive = entry
+          && bucket.entries.some(
+            (historyEntry) =>
+              historyEntry.url === entry.url
+              && historyEntry.lastVisitTime === entry.lastVisitTime,
+          );
         // When filtering, auto-expand all buckets; otherwise use user collapsed state
-        const collapsed = isFiltering ? false : treeCollapsed.has(b.label);
+        const collapsed = isFiltering ? false : treeCollapsed.has(bucket.label);
         const arrow = collapsed ? '\u25B6' : '\u25BC';
         const isCursor = showCursor && idx === treeCursorIndex;
 
-        treeVisibleItems.push({ type: "bucket", id: b.label });
+        treeVisibleItems.push({ type: "bucket", id: bucket.label });
         html += `<div class="ht-hist-tree-node${bucketHasActive ? ' active' : ''}${isCursor ? ' tree-cursor' : ''}" data-tree-idx="${idx}">`;
-        html += `<span class="ht-hist-tree-collapse">${arrow}</span> ${b.icon} ${escapeHtml(b.label)} (${b.entries.length})`;
+        html += `<span class="ht-hist-tree-collapse">${arrow}</span> ${bucket.icon} ${escapeHtml(bucket.label)} (${bucket.entries.length})`;
         html += '</div>';
         idx++;
 
         // Child entries under this bucket (hidden if collapsed)
         if (!collapsed) {
-          for (const child of b.entries) {
+          for (const child of bucket.entries) {
             const isActive = entry && child.url === entry.url && child.lastVisitTime === entry.lastVisitTime;
             const domain = extractDomain(child.url);
             const title = child.title || "Untitled";

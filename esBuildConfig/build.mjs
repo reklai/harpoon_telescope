@@ -31,19 +31,19 @@ const shared = {
 
 // Each entry point produces one JS file in dist/ (paths relative to project root)
 const entryPoints = [
-  { in: resolve(root, "src/esBuildBundle/browserBackgroundProcess/browserBackgroundProcess.ts"), out: "browserBackgroundProcess" },
-  { in: resolve(root, "src/esBuildBundle/contentScript/contentScript.ts"), out: "contentScript" },
-  { in: resolve(root, "src/esBuildBundle/toolBarPopUp/toolBarPopUp.ts"), out: "toolBarPopUp/toolBarPopUp" },
-  { in: resolve(root, "src/esBuildBundle/extensionSettingsPage/extensionSettingsPage.ts"), out: "extensionSettingsPage/extensionSettingsPage" },
+  { in: resolve(root, "src/entrypoints/background/background.ts"), out: "background" },
+  { in: resolve(root, "src/entrypoints/content-script/content-script.ts"), out: "content-script" },
+  { in: resolve(root, "src/entrypoints/toolbar-popup/toolbar-popup.ts"), out: "toolbar-popup/toolbar-popup" },
+  { in: resolve(root, "src/entrypoints/options-page/options-page.ts"), out: "options-page/options-page" },
 ];
 
 // Static assets to copy into dist/ (manifests live in build/, sources in src/)
 const staticFiles = [
   [resolve(__dirname, manifestFile), "manifest.json"],
-  [resolve(root, "src/esBuildBundle/toolBarPopUp/toolBarPopUp.html"), "toolBarPopUp/toolBarPopUp.html"],
-  [resolve(root, "src/esBuildBundle/toolBarPopUp/toolBarPopUp.css"), "toolBarPopUp/toolBarPopUp.css"],
-  [resolve(root, "src/esBuildBundle/extensionSettingsPage/extensionSettingsPage.html"), "extensionSettingsPage/extensionSettingsPage.html"],
-  [resolve(root, "src/esBuildBundle/extensionSettingsPage/extensionSettingsPage.css"), "extensionSettingsPage/extensionSettingsPage.css"],
+  [resolve(root, "src/entrypoints/toolbar-popup/toolbar-popup.html"), "toolbar-popup/toolbar-popup.html"],
+  [resolve(root, "src/entrypoints/toolbar-popup/toolbar-popup.css"), "toolbar-popup/toolbar-popup.css"],
+  [resolve(root, "src/entrypoints/options-page/options-page.html"), "options-page/options-page.html"],
+  [resolve(root, "src/entrypoints/options-page/options-page.css"), "options-page/options-page.css"],
   [resolve(root, "src/icons/icon-48.png"), "icons/icon-48.png"],
   [resolve(root, "src/icons/icon-96.png"), "icons/icon-96.png"],
   [resolve(root, "src/icons/icon-128.png"), "icons/icon-128.png"],

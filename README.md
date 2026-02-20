@@ -140,101 +140,87 @@ Chrome MV3 only allows 4 registered `commands`. The primary shortcuts (open harp
 
 ## Project Structure
 
-```
+``` 
 harpoon_telescope/
-├── esBuildConfig/
-│   ├── build.mjs                   # esbuild bundler (--target firefox|chrome)
-│   ├── manifest_v2.json            # Firefox/Zen manifest (MV2)
-│   └── manifest_v3.json            # Chrome manifest (MV3, 4-command limit)
 ├── src/
-│   ├── types.d.ts                  # Shared type declarations
-│   ├── esBuildBundle/
-│   │   ├── browserBackgroundProcess/
-│   │   │   └── browserBackgroundProcess.ts   # Background script entry
-│   │   ├── contentScript/
-│   │   │   └── contentScript.ts              # Content script entry
-│   │   ├── toolBarPopUp/
-│   │   │   ├── toolBarPopUp.ts               # Toolbar popup script
-│   │   │   ├── toolBarPopUp.html
-│   │   │   └── toolBarPopUp.css
-│   │   └── extensionSettingsPage/
-│   │       ├── extensionSettingsPage.ts      # Options page script
-│   │       ├── extensionSettingsPage.html
-│   │       └── extensionSettingsPage.css
-│   ├── lib/
-│   │   ├── shared/                   # helpers, keybindings, sessions, scroll, feedback
-│   │   ├── tabManager/               # Tab Manager panel + sessions UI
-│   │   ├── searchCurrentPage/        # Telescope search (current page)
-│   │   ├── searchOpenTabs/           # Frecency open tabs list
-│   │   ├── bookmarks/                # Bookmarks browser
-│   │   ├── history/                  # History browser
-│   │   ├── addBookmark/              # Add bookmark wizard
-│   │   ├── help/                     # Help overlay
-│   │   └── appInit/                  # Overlay bootstrap
-│   └── icons/
-│       ├── icon-48.png
-│       ├── icon-96.png
-│       └── icon-128.png
+│   ├── entrypoints/                        # Browser-executed entry bundles
+│   │   ├── background/background.ts        # Background state + message router
+│   │   ├── content-script/content-script.ts
+│   │   ├── options-page/
+│   │   │   ├── options-page.ts
+│   │   │   ├── options-page.html
+│   │   │   └── options-page.css
+│   │   └── toolbar-popup/
+│   │       ├── toolbar-popup.ts
+│   │       ├── toolbar-popup.html
+│   │       └── toolbar-popup.css
+│   ├── lib/                                # Feature modules + shared utilities
+│   │   ├── appInit/
+│   │   ├── addBookmark/
+│   │   ├── bookmarks/
+│   │   ├── help/
+│   │   ├── history/
+│   │   ├── searchCurrentPage/
+│   │   ├── searchOpenTabs/
+│   │   ├── tabManager/
+│   │   └── shared/
+│   ├── icons/
+│   └── types.d.ts
+├── esBuildConfig/                          # Build script + MV2/MV3 manifests
 ├── package.json
-├── tsconfig.json                    # ES2022 target
-└── dist/                            # Build output (loaded by browser)
+├── tsconfig.json
+└── dist/                                   # Build output loaded by browser
 ```
-
-Total: ~8,600 lines of TypeScript across 18 source files.
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│              browserBackgroundProcess.ts              │
-│  ┌──────────────┐  ┌───────────────────────────────┐ │
-│  │ Harpoon Mgr  │  │ Message Router                │ │
-│  │ - 4 slots    │  │ - routes to content            │ │
-│  │ - scroll mem │  │   script handlers              │ │
-│  │ - sessions   │  │ - serves keybindings           │ │
-│  │ - frecency   │  │ - bookmark CRUD                │ │
-│  │              │  │ - history list                  │ │
-│  │              │  │ - frecency list                 │ │
-│  └──────────────┘  └───────────────────────────────┘ │
-└────────┬──────────────────────┬───────────────────────┘
-         │ messages              │ messages
-  ┌──────▼──────────┐    ┌──────▼───────────────┐
-  │ contentScript   │    │ options page          │
-  │ - grep page     │    │ - keybinding editor   │
-  │ - scroll r/w    │    │ - nav mode toggle     │
-  │ - harpoon UI    │    │ - collision detection  │
-  │   (Shadow DOM)  │    └──────────────────────┘
-  │ - telescope UI  │
-  │   (Shadow DOM)  │
-  │ - bookmark UI   │
-  │   (Shadow DOM)  │
-  │ - history UI    │
-  │   (Shadow DOM)  │
-  │ - frecency UI   │
-  │   (Shadow DOM)  │
-  └─────────────────┘
+│                background.js                          │
+│   tab manager + sessions + frecency + bookmarks      │
+│   + history + message routing                         │
+└───────────────┬──────────────────────┬────────────────┘
+                │                      │
+      runtime messages          runtime messages
+                │                      │
+   ┌────────────▼──────────┐   ┌──────▼───────────────┐
+   │ content-script.js     │   │ options-page.js      │
+   │ overlay UI + keybinds │   │ keybinding editor    │
+   │ + page grep + preview │   │ + nav mode settings  │
+   └────────────┬──────────┘   └──────────────────────┘
+                │
+        opens/jumps tabs
+                │
+       ┌────────▼─────────┐
+       │ toolbar-popup.js │
+       │ quick tab actions│
+       └──────────────────┘
 ```
 
 ### Key Design Decisions
 - **Shadow DOM** — overlays are injected as Shadow DOM elements to prevent style leakage from host pages
 - **webextension-polyfill** — unified `browser.*` API across Chrome and Firefox
 - **Dual manifests** — MV2 for Firefox/Zen, MV3 for Chrome (service worker, 4-command limit)
-- **ensureHarpoonLoaded()** — lazy-load guard for Chrome service workers that can terminate
+- **`ensureTabManagerLoaded()` guards** — state is lazily reloaded when background context is cold-started
 - **Configurable keybindings** — all bindings in `browser.storage.local` with per-scope collision detection
 - **Navigation modes** — vim mode adds aliases on top of basic keys (never replaces)
 - **rAF-throttled rendering** — frecency, telescope, bookmark, and history defer DOM updates to animation frames
 - **Virtual scrolling** — telescope, bookmark, and history results render only ~25 visible items from a pool
-- **Tree views** — bookmark and history overlays provide full hierarchical tree navigation with collapse/expand, cursor movement, and open confirmation dialogs
-- **Click/dblclick DOM preservation** — single click on tree entries swaps CSS classes without re-render, so dblclick can fire on the same DOM element
+- **Tree views** — bookmark and history overlays provide hierarchical navigation with collapse/expand and confirmation flows
 
 ## Storage Keys
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `harpoonList` | `HarpoonEntry[]` | Active harpoon slots (with `closed` flag) |
-| `harpoonSessions` | `HarpoonSession[]` | Saved sessions (max 4) |
+| `tabManagerList` | `TabManagerEntry[]` | Active tab manager slots (`closed` entries preserved) |
+| `tabManagerSessions` | `TabManagerSession[]` | Saved sessions (max 4) |
 | `frecencyData` | `FrecencyEntry[]` | Frecency visit history (max 50) |
+| `bookmarkUsage` | `Record<string, BookmarkUsage>` | Per-URL bookmark usage counts and recency |
 | `keybindings` | `KeybindingsConfig` | User keybindings + navigation mode |
+
+## Contributing
+
+See `CONTRIBUTING.md` for naming conventions, module boundaries, and PR checklist.
 
 ## Theme
 

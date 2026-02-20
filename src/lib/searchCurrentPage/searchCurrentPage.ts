@@ -201,19 +201,19 @@ export async function openSearchCurrentPage(
         return;
       }
       filterPills.style.display = "flex";
-      filterPills.innerHTML = activeFilters.map((f) =>
-        `<span class="ht-filter-pill" data-filter="${f}">/${f}<span class="ht-filter-pill-x">\u00d7</span></span>`
+      filterPills.innerHTML = activeFilters.map((filter) =>
+        `<span class="ht-filter-pill" data-filter="${filter}">/${filter}<span class="ht-filter-pill-x">\u00d7</span></span>`
       ).join("");
       // Click × to remove a filter from the input
-      filterPills.querySelectorAll(".ht-filter-pill-x").forEach((x) => {
-        x.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const pill = (x as HTMLElement).parentElement!;
+      filterPills.querySelectorAll(".ht-filter-pill-x").forEach((removeButton) => {
+        removeButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const pill = (removeButton as HTMLElement).parentElement!;
           const filter = pill.dataset.filter!;
           // Remove this filter's slash command from the input
           const tokens = input.value.trimStart().split(/\s+/);
-          const filtered = tokens.filter((t) => t !== `/${filter}`);
-          input.value = filtered.join(" ");
+          const remainingTokens = tokens.filter((token) => token !== `/${filter}`);
+          input.value = remainingTokens.join(" ");
           input.dispatchEvent(new Event("input"));
           input.focus();
         });
@@ -246,7 +246,7 @@ export async function openSearchCurrentPage(
       if (!currentQuery) { highlightRegex = null; return; }
       try {
         const terms = currentQuery.split(/\s+/).filter(Boolean);
-        const pattern = terms.map((t) => `(${escapeRegex(escapeHtml(t))})`).join("|");
+        const pattern = terms.map((term) => `(${escapeRegex(escapeHtml(term))})`).join("|");
         highlightRegex = new RegExp(pattern, "gi");
       } catch (_) { highlightRegex = null; }
     }
@@ -279,16 +279,16 @@ export async function openSearchCurrentPage(
 
     /** Populate a pool item with data for a specific result index */
     function bindPoolItem(item: HTMLElement, resultIdx: number): void {
-      const r = results[resultIdx];
+      const result = results[resultIdx];
       item.dataset.index = String(resultIdx);
 
       // Update badge
       const badge = item.firstElementChild as HTMLElement;
-      if (r.tag) {
-        const colors = TAG_COLORS[r.tag] || DEFAULT_TAG_COLOR;
+      if (result.tag) {
+        const colors = TAG_COLORS[result.tag] || DEFAULT_TAG_COLOR;
         badge.style.background = colors.bg;
         badge.style.color = colors.fg;
-        badge.textContent = r.tag;
+        badge.textContent = result.tag;
         badge.style.display = "";
       } else {
         badge.style.display = "none";
@@ -296,7 +296,7 @@ export async function openSearchCurrentPage(
 
       // Update text
       const span = item.lastElementChild as HTMLElement;
-      span.innerHTML = highlightMatch(r.text);
+      span.innerHTML = highlightMatch(result.text);
 
       // Active state
       if (resultIdx === activeIndex) {
@@ -449,36 +449,42 @@ export async function openSearchCurrentPage(
         return;
       }
 
-      const r = results[activeIndex];
-      enrichResult(r); // lazy: compute domContext/ancestorHeading/href on demand
-      const tag = r.tag || "";
-      previewHeader.textContent = `Preview \u2014 L${r.lineNumber}`;
+      const activeResult = results[activeIndex];
+      enrichResult(activeResult); // lazy: compute domContext/ancestorHeading/href on demand
+      const tag = activeResult.tag || "";
+      previewHeader.textContent = `Preview \u2014 L${activeResult.lineNumber}`;
       showPreviewPlaceholder(false);
 
       // Breadcrumb: [TAG] Section heading · href
-      let bcHtml = "";
-      if (tag) bcHtml += `<span class="ht-bc-tag">${escapeHtml(tag)}</span>`;
-      if (r.ancestorHeading) bcHtml += `<span class="ht-bc-heading">${escapeHtml(r.ancestorHeading)}</span>`;
-      if (r.href) {
-        // Show shortened href
-        let displayHref = r.href;
-        try { displayHref = new URL(r.href).pathname + new URL(r.href).hash; } catch (_) { /* noop */ }
-        if (displayHref.length > 60) displayHref = displayHref.slice(0, 57) + "...";
-        bcHtml += `<span class="ht-bc-href">\u2192 ${escapeHtml(displayHref)}</span>`;
+      let breadcrumbHtml = "";
+      if (tag) breadcrumbHtml += `<span class="ht-bc-tag">${escapeHtml(tag)}</span>`;
+      if (activeResult.ancestorHeading) {
+        breadcrumbHtml += `<span class="ht-bc-heading">${escapeHtml(activeResult.ancestorHeading)}</span>`;
       }
-      if (bcHtml) {
-        previewBreadcrumb.innerHTML = bcHtml;
+      if (activeResult.href) {
+        // Show shortened href
+        let displayHref = activeResult.href;
+        try {
+          displayHref = new URL(activeResult.href).pathname + new URL(activeResult.href).hash;
+        } catch (_) {
+          // Ignore URL parsing failures and keep raw href
+        }
+        if (displayHref.length > 60) displayHref = displayHref.slice(0, 57) + "...";
+        breadcrumbHtml += `<span class="ht-bc-href">\u2192 ${escapeHtml(displayHref)}</span>`;
+      }
+      if (breadcrumbHtml) {
+        previewBreadcrumb.innerHTML = breadcrumbHtml;
         previewBreadcrumb.style.display = "";
       } else {
         previewBreadcrumb.style.display = "none";
       }
 
       // Use DOM-aware context if available, fall back to flat context
-      const contextLines = r.domContext && r.domContext.length > 0
-        ? r.domContext
-        : r.context && r.context.length > 0
-          ? r.context
-          : [r.text];
+      const contextLines = activeResult.domContext && activeResult.domContext.length > 0
+        ? activeResult.domContext
+        : activeResult.context && activeResult.context.length > 0
+          ? activeResult.context
+          : [activeResult.text];
 
       const isCode = tag === "PRE" || tag === "CODE";
       let html = "";
@@ -489,7 +495,10 @@ export async function openSearchCurrentPage(
         for (let i = 0; i < contextLines.length; i++) {
           const line = contextLines[i];
           const trimmed = line.replace(/\s+/g, " ").trim();
-          const isMatch = trimmed === r.text || line.replace(/\s+/g, " ").trim() === r.text;
+          const isMatch = (
+            trimmed === activeResult.text
+            || line.replace(/\s+/g, " ").trim() === activeResult.text
+          );
           const cls = isMatch ? "ht-preview-line match" : "ht-preview-line";
           const lineContent = isMatch ? highlightMatch(line) : escapeHtml(line);
           html += `<span class="${cls}"><span class="ht-line-num">${i + 1}</span>${lineContent}</span>`;
@@ -500,7 +509,10 @@ export async function openSearchCurrentPage(
         html += '<div class="ht-preview-prose-ctx">';
         for (let i = 0; i < contextLines.length; i++) {
           const line = contextLines[i];
-          const isMatch = line === r.text || line.replace(/\s+/g, " ").trim() === r.text;
+          const isMatch = (
+            line === activeResult.text
+            || line.replace(/\s+/g, " ").trim() === activeResult.text
+          );
           const cls = isMatch ? "ht-preview-line match" : "ht-preview-line";
           const lineContent = isMatch ? highlightMatch(line) : escapeHtml(line);
           html += `<span class="${cls}">${lineContent}</span>`;
@@ -515,23 +527,23 @@ export async function openSearchCurrentPage(
 
     // -- Event delegation on results list --
 
-    resultsList.addEventListener("click", (e) => {
-      const item = (e.target as HTMLElement).closest(".ht-result-item") as HTMLElement | null;
+    resultsList.addEventListener("click", (event) => {
+      const item = (event.target as HTMLElement).closest(".ht-result-item") as HTMLElement | null;
       if (!item || !item.dataset.index) return;
       setActiveIndex(Number(item.dataset.index));
     });
 
-    resultsList.addEventListener("dblclick", (e) => {
-      const item = (e.target as HTMLElement).closest(".ht-result-item") as HTMLElement | null;
+    resultsList.addEventListener("dblclick", (event) => {
+      const item = (event.target as HTMLElement).closest(".ht-result-item") as HTMLElement | null;
       if (!item || !item.dataset.index) return;
-      const idx = Number(item.dataset.index);
-      activeIndex = idx;
-      if (results[idx]) jumpToResult(results[idx]);
+      const selectedIndex = Number(item.dataset.index);
+      activeIndex = selectedIndex;
+      if (results[selectedIndex]) jumpToResult(results[selectedIndex]);
     });
 
     closeBtn.addEventListener("click", close);
     backdrop.addEventListener("click", close);
-    backdrop.addEventListener("mousedown", (e) => e.preventDefault());
+    backdrop.addEventListener("mousedown", (event) => event.preventDefault());
 
     // Sync focusedPane on mouse clicks
     input.addEventListener("focus", () => { setFocusedPane("input"); });
@@ -577,26 +589,29 @@ export async function openSearchCurrentPage(
 
     // -- Keyboard handler --
 
-    function keyHandler(e: KeyboardEvent): void {
+    function keyHandler(event: KeyboardEvent): void {
       if (!panelOpen) {
         document.removeEventListener("keydown", keyHandler, true);
         return;
       }
 
-      if (matchesAction(e, config, "search", "close")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "search", "close")) {
+        event.preventDefault();
+        event.stopPropagation();
         close();
         return;
       }
 
       // Backspace on empty input removes the last active filter pill
-      if (e.key === "Backspace" && focusedPane === "input"
+      if (event.key === "Backspace" && focusedPane === "input"
           && input.value === "" && activeFilters.length > 0) {
-        e.preventDefault();
+        event.preventDefault();
         activeFilters.pop();
         // Rebuild input text from remaining filters
-        input.value = activeFilters.map((f) => `/${f}`).join(" ") + (activeFilters.length ? " " : "");
+        input.value = activeFilters
+          .map((filter) => `/${filter}`)
+          .join(" ")
+          + (activeFilters.length ? " " : "");
         updateTitle();
         updateFilterPills();
         // Re-trigger search with no query
@@ -607,9 +622,9 @@ export async function openSearchCurrentPage(
         return;
       }
 
-      if (matchesAction(e, config, "search", "switchPane")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "search", "switchPane")) {
+        event.preventDefault();
+        event.stopPropagation();
         if (focusedPane === "input") {
           if (activeItemEl) {
             activeItemEl.focus();
@@ -626,10 +641,10 @@ export async function openSearchCurrentPage(
       }
 
       // Clear search: c/C (case-insensitive, only when results pane is focused)
-      if (e.key.toLowerCase() === "c" && !e.ctrlKey && !e.altKey && !e.metaKey
+      if (event.key.toLowerCase() === "c" && !event.ctrlKey && !event.altKey && !event.metaKey
           && focusedPane === "results") {
-        e.preventDefault();
-        e.stopPropagation();
+        event.preventDefault();
+        event.stopPropagation();
         input.value = "";
         activeFilters = [];
         currentQuery = "";
@@ -644,46 +659,46 @@ export async function openSearchCurrentPage(
         return;
       }
 
-      if (matchesAction(e, config, "search", "accept")) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "search", "accept")) {
+        event.preventDefault();
+        event.stopPropagation();
         if (results[activeIndex]) jumpToResult(results[activeIndex]);
         return;
       }
 
-      if (matchesAction(e, config, "search", "moveDown")) {
-        const lk = e.key.toLowerCase();
-        if ((lk === "j" || lk === "k") && focusedPane === "input") return;
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "search", "moveDown")) {
+        const lowerKey = event.key.toLowerCase();
+        if ((lowerKey === "j" || lowerKey === "k") && focusedPane === "input") return;
+        event.preventDefault();
+        event.stopPropagation();
         if (results.length > 0) {
           setActiveIndex(Math.min(activeIndex + 1, results.length - 1));
         }
         return;
       }
-      if (matchesAction(e, config, "search", "moveUp")) {
-        const lk = e.key.toLowerCase();
-        if ((lk === "j" || lk === "k") && focusedPane === "input") return;
-        e.preventDefault();
-        e.stopPropagation();
+      if (matchesAction(event, config, "search", "moveUp")) {
+        const lowerKey = event.key.toLowerCase();
+        if ((lowerKey === "j" || lowerKey === "k") && focusedPane === "input") return;
+        event.preventDefault();
+        event.stopPropagation();
         if (results.length > 0) {
           setActiveIndex(Math.max(activeIndex - 1, 0));
         }
         return;
       }
 
-      e.stopPropagation();
+      event.stopPropagation();
     }
 
     document.addEventListener("keydown", keyHandler, true);
     registerPanelCleanup(close);
 
     // Mouse wheel on results pane: navigate items, block page scroll
-    resultsPane.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    resultsPane.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       if (results.length === 0) return;
-      if (e.deltaY > 0) {
+      if (event.deltaY > 0) {
         setActiveIndex(Math.min(activeIndex + 1, results.length - 1));
       } else {
         setActiveIndex(Math.max(activeIndex - 1, 0));

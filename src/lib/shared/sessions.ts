@@ -22,11 +22,11 @@ export async function sessionSave(
   if (state.getList().length === 0) {
     return { ok: false, reason: "Cannot save empty tab manager list" };
   }
-  const sessionEntries: TabManagerSessionEntry[] = state.getList().map((e) => ({
-    url: e.url,
-    title: e.title,
-    scrollX: e.scrollX,
-    scrollY: e.scrollY,
+  const sessionEntries: TabManagerSessionEntry[] = state.getList().map((entry) => ({
+    url: entry.url,
+    title: entry.title,
+    scrollX: entry.scrollX,
+    scrollY: entry.scrollY,
   }));
   const session: TabManagerSession = {
     name,
@@ -36,7 +36,9 @@ export async function sessionSave(
   const stored = await browser.storage.local.get("tabManagerSessions");
   const sessions = (stored.tabManagerSessions as TabManagerSession[]) || [];
   // Reject duplicate names (case-insensitive)
-  const nameTaken = sessions.some((s) => s.name.toLowerCase() === name.toLowerCase());
+  const nameTaken = sessions.some(
+    (existingSession) => existingSession.name.toLowerCase() === name.toLowerCase(),
+  );
   if (nameTaken) {
     return { ok: false, reason: `"${name}" already exists` };
   }
@@ -59,7 +61,7 @@ export async function sessionLoad(
 ): Promise<{ ok: boolean; reason?: string; count?: number }> {
   const stored = await browser.storage.local.get("tabManagerSessions");
   const sessions = (stored.tabManagerSessions as TabManagerSession[]) || [];
-  const session = sessions.find((s) => s.name === name);
+  const session = sessions.find((savedSession) => savedSession.name === name);
   if (!session) return { ok: false, reason: "Session not found" };
 
   // Clear current tab manager list
@@ -106,11 +108,13 @@ export async function sessionRename(
   if (!trimmed) return { ok: false, reason: "Name cannot be empty" };
   const stored = await browser.storage.local.get("tabManagerSessions");
   const sessions = (stored.tabManagerSessions as TabManagerSession[]) || [];
-  const session = sessions.find((s) => s.name === oldName);
+  const session = sessions.find((savedSession) => savedSession.name === oldName);
   if (!session) return { ok: false, reason: "Session not found" };
   // Reject duplicate names (case-insensitive), excluding the session being renamed
   const nameTaken = sessions.some(
-    (s) => s.name !== oldName && s.name.toLowerCase() === trimmed.toLowerCase(),
+    (savedSession) =>
+      savedSession.name !== oldName
+      && savedSession.name.toLowerCase() === trimmed.toLowerCase(),
   );
   if (nameTaken) return { ok: false, reason: `"${trimmed}" already exists` };
   session.name = trimmed;
@@ -128,13 +132,13 @@ export async function sessionUpdate(
   }
   const stored = await browser.storage.local.get("tabManagerSessions");
   const sessions = (stored.tabManagerSessions as TabManagerSession[]) || [];
-  const session = sessions.find((s) => s.name === name);
+  const session = sessions.find((savedSession) => savedSession.name === name);
   if (!session) return { ok: false, reason: "Session not found" };
-  session.entries = state.getList().map((e) => ({
-    url: e.url,
-    title: e.title,
-    scrollX: e.scrollX,
-    scrollY: e.scrollY,
+  session.entries = state.getList().map((entry) => ({
+    url: entry.url,
+    title: entry.title,
+    scrollX: entry.scrollX,
+    scrollY: entry.scrollY,
   }));
   session.savedAt = Date.now();
   await browser.storage.local.set({ tabManagerSessions: sessions });
@@ -144,7 +148,7 @@ export async function sessionUpdate(
 export async function sessionDelete(name: string): Promise<{ ok: boolean }> {
   const stored = await browser.storage.local.get("tabManagerSessions");
   const sessions = (stored.tabManagerSessions as TabManagerSession[]) || [];
-  const filtered = sessions.filter((s) => s.name !== name);
+  const filtered = sessions.filter((savedSession) => savedSession.name !== name);
   await browser.storage.local.set({ tabManagerSessions: filtered });
   return { ok: true };
 }

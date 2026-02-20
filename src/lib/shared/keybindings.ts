@@ -151,11 +151,11 @@ export function checkCollision(
   key: string,
 ): CollisionResult | null {
   const scopeBindings = config.bindings[scope];
-  for (const [act, binding] of Object.entries(scopeBindings)) {
-    if (act === action) continue;
+  for (const [existingAction, binding] of Object.entries(scopeBindings)) {
+    if (existingAction === action) continue;
     if (binding.key === key) {
-      const label = ACTION_LABELS[scope]?.[act] || act;
-      return { action: act, label };
+      const label = ACTION_LABELS[scope]?.[existingAction] || existingAction;
+      return { action: existingAction, label };
     }
   }
   return null;
@@ -226,14 +226,14 @@ function parseKeyCombo(keyString: string): ParsedKeyCombo | null {
 }
 
 /** Convert a KeyboardEvent into a normalized string like "Alt+F" or "Ctrl+Shift+K" */
-export function keyEventToString(e: KeyboardEvent): string | null {
+export function keyEventToString(event: KeyboardEvent): string | null {
   const parts: string[] = [];
-  if (e.ctrlKey) parts.push("Ctrl");
-  if (e.altKey) parts.push("Alt");
-  if (e.shiftKey) parts.push("Shift");
-  if (e.metaKey) parts.push("Meta");
+  if (event.ctrlKey) parts.push("Ctrl");
+  if (event.altKey) parts.push("Alt");
+  if (event.shiftKey) parts.push("Shift");
+  if (event.metaKey) parts.push("Meta");
 
-  const keyName = normalizeKeyName(e.key);
+  const keyName = normalizeKeyName(event.key);
 
   // Modifier-only presses aren't complete combos
   if (MODIFIER_KEYS.has(keyName)) return null;
@@ -245,16 +245,16 @@ export function keyEventToString(e: KeyboardEvent): string | null {
 // -- Key Matching --
 
 /** Check if a KeyboardEvent matches a key string like "Alt+H" or "ArrowDown" */
-export function matchesKey(e: KeyboardEvent, keyString: string): boolean {
+export function matchesKey(event: KeyboardEvent, keyString: string): boolean {
   const parsed = parseKeyCombo(keyString);
   if (!parsed) return false;
 
-  if (e.ctrlKey !== parsed.ctrl) return false;
-  if (e.altKey !== parsed.alt) return false;
-  if (e.shiftKey !== parsed.shift) return false;
-  if (e.metaKey !== parsed.meta) return false;
+  if (event.ctrlKey !== parsed.ctrl) return false;
+  if (event.altKey !== parsed.alt) return false;
+  if (event.shiftKey !== parsed.shift) return false;
+  if (event.metaKey !== parsed.meta) return false;
 
-  return normalizeKeyName(e.key) === parsed.key;
+  return normalizeKeyName(event.key) === parsed.key;
 }
 
 /** Get all keys that trigger an action, including vim aliases when vim mode is on */
@@ -273,7 +273,7 @@ export function getKeysForAction(
 
 /** Check if a KeyboardEvent matches any key for an action (primary + vim aliases) */
 export function matchesAction(
-  e: KeyboardEvent,
+  event: KeyboardEvent,
   config: KeybindingsConfig,
   scope: string,
   action: string,
@@ -282,13 +282,13 @@ export function matchesAction(
   const binding = scopeBindings?.[action];
   if (!binding) return false;
 
-  if (matchesKey(e, binding.key)) return true;
+  if (matchesKey(event, binding.key)) return true;
 
   if (config.navigationMode !== "vim") return false;
   const vimAliases = VIM_ENHANCED_ALIASES[scope]?.[action];
   if (!vimAliases) return false;
   for (const alias of vimAliases) {
-    if (matchesKey(e, alias)) return true;
+    if (matchesKey(event, alias)) return true;
   }
   return false;
 }

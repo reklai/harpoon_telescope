@@ -158,6 +158,7 @@ export async function openBookmarkOverlay(
     }
     let activeFilters: BookmarkFilter[] = [];
     let currentQuery = "";
+    let initialLoadPending = true;
 
     // Virtual scrolling state
     let vsStart = 0;
@@ -170,6 +171,8 @@ export async function openBookmarkOverlay(
     // rAF throttle for detail updates
     let detailRafId: number | null = null;
     let scrollRafId: number | null = null;
+    let inputRafId: number | null = null;
+    let pendingInputValue = "";
 
     // Folder tree for tree visualization and move feature
     let folderTree: BookmarkFolder[] = [];
@@ -194,12 +197,130 @@ export async function openBookmarkOverlay(
       document.removeEventListener("keydown", keyHandler, true);
       if (detailRafId !== null) cancelAnimationFrame(detailRafId);
       if (scrollRafId !== null) cancelAnimationFrame(scrollRafId);
+      if (inputRafId !== null) cancelAnimationFrame(inputRafId);
+      inputRafId = null;
       removePanelHost();
+    }
+
+    function failClose(context: string, error: unknown): void {
+      console.error(`[Harpoon Telescope] ${context}; dismissing panel.`, error);
+      close();
     }
 
     // --- Input parsing (mirrors search overlay pattern) ---
     function parseInput(raw: string): { filters: BookmarkFilter[]; query: string } {
       return parseSlashFilterQuery(raw, VALID_FILTERS);
+    }
+
+    function normalizeBookmarkEntry(entry: unknown): BookmarkEntry | null {
+      if (!entry || typeof entry !== "object") return null;
+      const candidate = entry as Partial<BookmarkEntry>;
+      const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+      const url = typeof candidate.url === "string" ? candidate.url.trim() : "";
+      if (!id || !url) return null;
+
+      return {
+        id,
+        url,
+        title: typeof candidate.title === "string" ? candidate.title : "",
+        dateAdded:
+          typeof candidate.dateAdded === "number" && Number.isFinite(candidate.dateAdded)
+            ? candidate.dateAdded
+            : undefined,
+        parentId: typeof candidate.parentId === "string" ? candidate.parentId : undefined,
+        parentTitle: typeof candidate.parentTitle === "string" ? candidate.parentTitle : undefined,
+        folderPath: typeof candidate.folderPath === "string" ? candidate.folderPath : undefined,
+        usageScore:
+          typeof candidate.usageScore === "number" && Number.isFinite(candidate.usageScore)
+            ? candidate.usageScore
+            : 0,
+      };
+    }
+
+    function normalizeBookmarkList(rawEntries: unknown): BookmarkEntry[] {
+      const source = Array.isArray(rawEntries)
+        ? rawEntries
+        : (
+            rawEntries
+            && typeof rawEntries === "object"
+            && Array.isArray((rawEntries as { entries?: unknown }).entries)
+          )
+          ? (rawEntries as { entries: unknown[] }).entries
+          : [];
+      return source
+        .map((entry) => normalizeBookmarkEntry(entry))
+        .filter((entry): entry is BookmarkEntry => entry !== null);
+    }
+
+    function normalizeBookmarkFolder(
+      folder: unknown,
+      fallbackDepth: number = 0,
+    ): BookmarkFolder | null {
+      if (!folder || typeof folder !== "object") return null;
+      const candidate = folder as Partial<BookmarkFolder>;
+      const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+      if (!id) return null;
+
+      const depth = typeof candidate.depth === "number" && Number.isFinite(candidate.depth)
+        ? candidate.depth
+        : fallbackDepth;
+      const childrenRaw = Array.isArray(candidate.children) ? candidate.children : [];
+      const children = childrenRaw
+        .map((child) => normalizeBookmarkFolder(child, depth + 1))
+        .filter((child): child is BookmarkFolder => child !== null);
+
+      return {
+        id,
+        title: typeof candidate.title === "string" && candidate.title.length > 0 ? candidate.title : "(unnamed)",
+        depth,
+        children,
+      };
+    }
+
+    function normalizeBookmarkFolders(rawFolders: unknown): BookmarkFolder[] {
+      const source = Array.isArray(rawFolders)
+        ? rawFolders
+        : (
+            rawFolders
+            && typeof rawFolders === "object"
+            && Array.isArray((rawFolders as { folders?: unknown }).folders)
+          )
+          ? (rawFolders as { folders: unknown[] }).folders
+          : [];
+      return source
+        .map((folder) => normalizeBookmarkFolder(folder, 0))
+        .filter((folder): folder is BookmarkFolder => folder !== null);
+    }
+
+    async function fetchBookmarkEntries(): Promise<BookmarkEntry[]> {
+      const rawEntries = await browser.runtime.sendMessage({ type: "BOOKMARK_LIST" });
+      return normalizeBookmarkList(rawEntries);
+    }
+
+    async function fetchBookmarkFolders(): Promise<BookmarkFolder[]> {
+      const rawFolders = await browser.runtime.sendMessage({ type: "BOOKMARK_FOLDERS" });
+      return normalizeBookmarkFolders(rawFolders);
+    }
+
+    async function fetchBookmarkDataWithRetry(): Promise<{ entries: BookmarkEntry[]; folders: BookmarkFolder[] }> {
+      const retryDelaysMs = [100, 180, 320];
+      let latest: { entries: BookmarkEntry[]; folders: BookmarkFolder[] } = { entries: [], folders: [] };
+
+      for (let attempt = 0; attempt <= retryDelaysMs.length; attempt++) {
+        try {
+          const [entries, folders] = await Promise.all([fetchBookmarkEntries(), fetchBookmarkFolders()]);
+          latest = { entries, folders };
+          if (entries.length > 0 || attempt === retryDelaysMs.length) return latest;
+        } catch (error) {
+          if (attempt === retryDelaysMs.length) throw error;
+        }
+
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, retryDelaysMs[attempt]);
+        });
+      }
+
+      return latest;
     }
 
     // --- Title bar updates ---
@@ -278,6 +399,10 @@ export async function openBookmarkOverlay(
 
     function bindPoolItem(item: HTMLElement, resultIdx: number): void {
       const entry = filtered[resultIdx];
+      if (!entry) {
+        item.classList.remove("active");
+        return;
+      }
       item.dataset.index = String(resultIdx);
 
       // Info
@@ -303,64 +428,90 @@ export async function openBookmarkOverlay(
     }
 
     function renderVisibleItems(): void {
-      withPerfTrace("bookmarks.renderVisibleItems", () => {
-        const scrollTop = resultsPane.scrollTop;
-        const viewHeight = resultsPane.clientHeight;
+      try {
+        withPerfTrace("bookmarks.renderVisibleItems", () => {
+          const scrollTop = resultsPane.scrollTop;
+          const viewHeight = resultsPane.clientHeight;
 
-        const newStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - POOL_BUFFER);
-        const newEnd = Math.min(filtered.length,
-          Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER);
+          const maxStart = Math.max(0, filtered.length - 1);
+          const unclampedStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - POOL_BUFFER);
+          const newStart = Math.min(unclampedStart, maxStart);
+          const newEnd = Math.max(
+            newStart,
+            Math.min(filtered.length, Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER),
+          );
 
-        if (newStart === vsStart && newEnd === vsEnd) return;
-        vsStart = newStart;
-        vsEnd = newEnd;
+          if (newStart === vsStart && newEnd === vsEnd) return;
+          vsStart = newStart;
+          vsEnd = newEnd;
 
-        resultsList.style.top = `${vsStart * ITEM_HEIGHT}px`;
+          resultsList.style.top = `${vsStart * ITEM_HEIGHT}px`;
 
-        const count = vsEnd - vsStart;
-        while (resultsList.children.length > count) {
-          resultsList.removeChild(resultsList.lastChild!);
-        }
-
-        activeItemEl = null;
-        for (let i = 0; i < count; i++) {
-          const item = getPoolItem(i);
-          bindPoolItem(item, vsStart + i);
-          if (i < resultsList.children.length) {
-            if (resultsList.children[i] !== item) {
-              resultsList.replaceChild(item, resultsList.children[i]);
-            }
-          } else {
-            resultsList.appendChild(item);
+          const count = Math.max(0, vsEnd - vsStart);
+          while (resultsList.children.length > count) {
+            const last = resultsList.lastChild;
+            if (!last) break;
+            resultsList.removeChild(last);
           }
-        }
-      });
+
+          activeItemEl = null;
+          for (let i = 0; i < count; i++) {
+            const item = getPoolItem(i);
+            bindPoolItem(item, vsStart + i);
+            if (i < resultsList.children.length) {
+              if (resultsList.children[i] !== item) {
+                resultsList.replaceChild(item, resultsList.children[i]);
+              }
+            } else {
+              resultsList.appendChild(item);
+            }
+          }
+        });
+      } catch (error) {
+        failClose("Bookmarks virtual render failed", error);
+      }
     }
 
     function renderResults(): void {
-      buildHighlightRegex();
-      updateTitle();
+      try {
+        buildHighlightRegex();
+        updateTitle();
 
-      if (filtered.length === 0) {
-        resultsSentinel.style.height = "0px";
-        resultsList.style.top = "0px";
-        resultsList.textContent = "";
-        resultsList.innerHTML = `<div class="ht-bm-no-results">${
-          currentQuery || activeFilters.length > 0 ? "No matching bookmarks" : "No bookmarks found"
-        }</div>`;
-        activeItemEl = null;
-        vsStart = 0;
-        vsEnd = 0;
-        showDetailPlaceholder(true);
-        return;
+        if (initialLoadPending) {
+          resultsSentinel.style.height = "0px";
+          resultsList.style.top = "0px";
+          resultsList.textContent = "";
+          resultsList.innerHTML = `<div class="ht-bm-no-results">Loading bookmarks...</div>`;
+          activeItemEl = null;
+          vsStart = 0;
+          vsEnd = 0;
+          showDetailPlaceholder(true);
+          return;
+        }
+
+        if (filtered.length === 0) {
+          resultsSentinel.style.height = "0px";
+          resultsList.style.top = "0px";
+          resultsList.textContent = "";
+          resultsList.innerHTML = `<div class="ht-bm-no-results">${
+            currentQuery || activeFilters.length > 0 ? "No matching bookmarks" : "No bookmarks found"
+          }</div>`;
+          activeItemEl = null;
+          vsStart = 0;
+          vsEnd = 0;
+          showDetailPlaceholder(true);
+          return;
+        }
+
+        resultsSentinel.style.height = `${filtered.length * ITEM_HEIGHT}px`;
+        resultsPane.scrollTop = 0;
+        vsStart = -1;
+        vsEnd = -1;
+        renderVisibleItems();
+        scheduleDetailUpdate();
+      } catch (error) {
+        failClose("Bookmarks render failed", error);
       }
-
-      resultsSentinel.style.height = `${filtered.length * ITEM_HEIGHT}px`;
-      resultsPane.scrollTop = 0;
-      vsStart = -1;
-      vsEnd = -1;
-      renderVisibleItems();
-      scheduleDetailUpdate();
     }
 
     function scheduleVisibleRender(): void {
@@ -432,6 +583,31 @@ export async function openBookmarkOverlay(
       renderTreeView();
     }
 
+    function processInputValue(rawValue: string): void {
+      const { filters, query } = parseInput(rawValue);
+      activeFilters = filters;
+      currentQuery = query;
+      updateTitle();
+      updateFilterPills();
+      applyFilter();
+      renderResults();
+    }
+
+    function scheduleInputProcessing(rawValue: string): void {
+      pendingInputValue = rawValue;
+      if (inputRafId !== null) return;
+      inputRafId = requestAnimationFrame(() => {
+        inputRafId = null;
+        if (!panelOpen) return;
+        try {
+          processInputValue(pendingInputValue);
+        } catch (error) {
+          console.error("[Harpoon Telescope] Bookmark input processing failed; dismissing panel.", error);
+          close();
+        }
+      });
+    }
+
     // --- Filtering ---
     // With no filters active: fuzzy-match query against title + url + parentTitle
     // With /folder active: fuzzy-match query against parentTitle only
@@ -451,84 +627,88 @@ export async function openBookmarkOverlay(
     }
 
     function applyFilter(): void {
-      withPerfTrace("bookmarks.applyFilter", () => {
-        let results = allEntries;
-        const trimmedQuery = currentQuery.trim();
+      try {
+        withPerfTrace("bookmarks.applyFilter", () => {
+          let results = allEntries;
+          const trimmedQuery = currentQuery.trim();
 
-        if (trimmedQuery) {
-          const re = buildFuzzyPattern(trimmedQuery);
-          const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
-          if (re) {
-            if (activeFilters.length === 0) {
-              const lowerQuery = trimmedQuery.toLowerCase();
-              const ranked: Array<{
-                entry: BookmarkEntry;
-                titleScore: number;
-                titleHit: boolean;
-                titleLen: number;
-                folderScore: number;
-                folderHit: boolean;
-              }> = [];
+          if (trimmedQuery) {
+            const re = buildFuzzyPattern(trimmedQuery);
+            const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
+            if (re) {
+              if (activeFilters.length === 0) {
+                const lowerQuery = trimmedQuery.toLowerCase();
+                const ranked: Array<{
+                  entry: BookmarkEntry;
+                  titleScore: number;
+                  titleHit: boolean;
+                  titleLen: number;
+                  folderScore: number;
+                  folderHit: boolean;
+                }> = [];
 
-              // No filters — match against all fields using substring first, fuzzy as fallback
-              for (const entry of results) {
-                const title = entry.title || "";
-                const url = entry.url || "";
-                const folder = entry.folderPath || "";
-                if (!(substringRe.test(title)
-                  || substringRe.test(url)
-                  || (folder !== "" && substringRe.test(folder))
-                  || re.test(title)
-                  || re.test(url)
-                  || (folder !== "" && re.test(folder)))) {
-                  continue;
+                // No filters — match against all fields using substring first, fuzzy as fallback
+                for (const entry of results) {
+                  const title = entry.title || "";
+                  const url = entry.url || "";
+                  const folder = entry.folderPath || "";
+                  if (!(substringRe.test(title)
+                    || substringRe.test(url)
+                    || (folder !== "" && substringRe.test(folder))
+                    || re.test(title)
+                    || re.test(url)
+                    || (folder !== "" && re.test(folder)))) {
+                    continue;
+                  }
+
+                  const titleScore = scoreMatch(title.toLowerCase(), title, lowerQuery, re);
+                  const folderScore = folder !== ""
+                    ? scoreMatch(folder.toLowerCase(), folder, lowerQuery, re)
+                    : -1;
+                  ranked.push({
+                    entry,
+                    titleScore,
+                    titleHit: titleScore >= 0,
+                    titleLen: title.length,
+                    folderScore,
+                    folderHit: folderScore >= 0,
+                  });
                 }
 
-                const titleScore = scoreMatch(title.toLowerCase(), title, lowerQuery, re);
-                const folderScore = folder !== ""
-                  ? scoreMatch(folder.toLowerCase(), folder, lowerQuery, re)
-                  : -1;
-                ranked.push({
-                  entry,
-                  titleScore,
-                  titleHit: titleScore >= 0,
-                  titleLen: title.length,
-                  folderScore,
-                  folderHit: folderScore >= 0,
+                // Rank by: title score → title length (shorter = tighter) → folder score → url score
+                ranked.sort((a, b) => {
+                  // Title matches always beat non-title matches
+                  if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
+                  if (a.titleHit && b.titleHit) {
+                    // Tighter title match wins
+                    if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
+                    // Same match type — shorter title = more relevant
+                    return a.titleLen - b.titleLen;
+                  }
+                  // Neither hit title — compare folder
+                  if (a.folderHit !== b.folderHit) return a.folderHit ? -1 : 1;
+                  if (a.folderHit && b.folderHit) return a.folderScore - b.folderScore;
+                  return 0;
                 });
+                results = ranked.map((r) => r.entry);
+              } else {
+                // Filter-scoped matching: /folder — match against parentTitle only
+                results = results.filter((entry) => (
+                  !!entry.folderPath && (substringRe.test(entry.folderPath) || re.test(entry.folderPath))
+                ));
               }
-
-              // Rank by: title score → title length (shorter = tighter) → folder score → url score
-              ranked.sort((a, b) => {
-                // Title matches always beat non-title matches
-                if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
-                if (a.titleHit && b.titleHit) {
-                  // Tighter title match wins
-                  if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
-                  // Same match type — shorter title = more relevant
-                  return a.titleLen - b.titleLen;
-                }
-                // Neither hit title — compare folder
-                if (a.folderHit !== b.folderHit) return a.folderHit ? -1 : 1;
-                if (a.folderHit && b.folderHit) return a.folderScore - b.folderScore;
-                return 0;
-              });
-              results = ranked.map((r) => r.entry);
-            } else {
-              // Filter-scoped matching: /folder — match against parentTitle only
-              results = results.filter((entry) => (
-                !!entry.folderPath && (substringRe.test(entry.folderPath) || re.test(entry.folderPath))
-              ));
             }
+          } else if (activeFilters.length > 0) {
+            // /folder active but no query — show all bookmarks that have a folder path
+            results = results.filter((entry) => !!entry.folderPath);
           }
-        } else if (activeFilters.length > 0) {
-          // /folder active but no query — show all bookmarks that have a folder path
-          results = results.filter((entry) => !!entry.folderPath);
-        }
 
-        filtered = results;
-        activeIndex = 0;
-      });
+          filtered = results;
+          activeIndex = 0;
+        });
+      } catch (error) {
+        failClose("Bookmarks filtering failed", error);
+      }
     }
 
     // --- Actions ---
@@ -615,9 +795,7 @@ export async function openBookmarkOverlay(
         const destLabel = moveFolders[moveTargetIndex]?.title || "folder";
         showFeedback(`Moved to: ${destLabel}`);
         // Refresh bookmark list to reflect new folder path
-        allEntries = (await browser.runtime.sendMessage({
-          type: "BOOKMARK_LIST",
-        })) as BookmarkEntry[];
+        allEntries = await fetchBookmarkEntries();
         applyFilter();
         renderResults();
       } else {
@@ -866,7 +1044,7 @@ export async function openBookmarkOverlay(
         showFeedback(`Removed folder: ${folder.title}`);
         allEntries = allEntries.filter((e) => !e.parentId || !descendantIds.has(e.parentId));
         // Re-fetch folder structure
-        const folders = (await browser.runtime.sendMessage({ type: "BOOKMARK_FOLDERS" })) as BookmarkFolder[];
+        const folders = await fetchBookmarkFolders();
         folderTree = folders;
         flatFolderList = flattenFolders(folders);
         applyFilter();
@@ -1464,29 +1642,35 @@ export async function openBookmarkOverlay(
     });
 
     input.addEventListener("input", () => {
-      const { filters, query } = parseInput(input.value);
-      activeFilters = filters;
-      currentQuery = query;
-      updateTitle();
-      updateFilterPills();
-      applyFilter();
-      renderResults();
+      scheduleInputProcessing(input.value);
     });
 
     // --- Initial load ---
-    const [bookmarks, folders] = await Promise.all([
-      browser.runtime.sendMessage({ type: "BOOKMARK_LIST" }) as Promise<BookmarkEntry[]>,
-      browser.runtime.sendMessage({ type: "BOOKMARK_FOLDERS" }) as Promise<BookmarkFolder[]>,
-    ]);
-    allEntries = bookmarks;
-    folderTree = folders;
-    flatFolderList = flattenFolders(folders);
-    filtered = [...allEntries];
-
     document.addEventListener("keydown", keyHandler, true);
     registerPanelCleanup(close);
     renderResults();
     input.focus();
+    // Let the shell/backdrop paint before we start async bookmark fetch work.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (!panelOpen) return;
+
+    try {
+      const data = await fetchBookmarkDataWithRetry();
+      if (!panelOpen) return;
+      allEntries = data.entries;
+      folderTree = data.folders;
+      flatFolderList = flattenFolders(data.folders);
+    } catch (error) {
+      console.error("[Harpoon Telescope] Bookmark load failed after retries.", error);
+      allEntries = [];
+      folderTree = [];
+      flatFolderList = [];
+    }
+
+    if (!panelOpen) return;
+    initialLoadPending = false;
+    applyFilter();
+    renderResults();
   } catch (err) {
     console.error("[Harpoon Telescope] Failed to open bookmark overlay:", err);
   }

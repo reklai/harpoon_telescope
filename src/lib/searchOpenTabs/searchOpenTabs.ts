@@ -13,6 +13,7 @@ export async function openSearchOpenTabs(
 ): Promise<void> {
   try {
     const { host, shadow } = createPanelHost();
+    let panelOpen = true;
 
     // --- Keybind display strings ---
     const upKey = keyToDisplay(config.bindings.search.moveUp.key);
@@ -81,10 +82,20 @@ export async function openSearchOpenTabs(
     let query = "";
     let activeItemEl: HTMLElement | null = null;
     let highlightRegex: RegExp | null = null;
+    let inputRafId: number | null = null;
+    let pendingInputValue = "";
 
     function close(): void {
+      panelOpen = false;
       document.removeEventListener("keydown", keyHandler, true);
+      if (inputRafId !== null) cancelAnimationFrame(inputRafId);
+      cancelAnimationFrame(renderRafId);
       removePanelHost();
+    }
+
+    function failClose(context: string, error: unknown): void {
+      console.error(`[Harpoon Telescope] ${context}; dismissing panel.`, error);
+      close();
     }
 
     function buildHighlightRegex(): void {
@@ -112,6 +123,28 @@ export async function openSearchOpenTabs(
 
     let renderRafId = 0;
     let firstRender = true;
+
+    function processInputValue(rawValue: string): void {
+      query = rawValue;
+      buildHighlightRegex();
+      applyFilter();
+      renderList();
+    }
+
+    function scheduleInputProcessing(rawValue: string): void {
+      pendingInputValue = rawValue;
+      if (inputRafId !== null) return;
+      inputRafId = requestAnimationFrame(() => {
+        inputRafId = null;
+        if (!panelOpen) return;
+        try {
+          processInputValue(pendingInputValue);
+        } catch (error) {
+          console.error("[Harpoon Telescope] Open-tabs input processing failed; dismissing panel.", error);
+          close();
+        }
+      });
+    }
 
     /** Build list items into a DocumentFragment */
     function buildListFragment(): DocumentFragment {
@@ -159,30 +192,39 @@ export async function openSearchOpenTabs(
 
     /** Full rebuild of the results list (called when filtered data changes) */
     function renderList(): void {
-      titleText.textContent = query
-        ? `Search Open Tabs (${filtered.length})`
-        : "Search Open Tabs";
+      try {
+        titleText.textContent = query
+          ? `Search Open Tabs (${filtered.length})`
+          : "Search Open Tabs";
 
-      if (filtered.length === 0) {
+        if (filtered.length === 0) {
+          cancelAnimationFrame(renderRafId);
+          listEl.innerHTML = `<div class="ht-open-tabs-empty">${
+            query ? "No matching tabs" : "No open tabs"
+          }</div>`;
+          activeItemEl = null;
+          return;
+        }
+
+        if (firstRender) {
+          firstRender = false;
+          commitList(buildListFragment());
+          return;
+        }
+
+        // Debounce subsequent renders to one paint via rAF
         cancelAnimationFrame(renderRafId);
-        listEl.innerHTML = `<div class="ht-open-tabs-empty">${
-          query ? "No matching tabs" : "No open tabs"
-        }</div>`;
-        activeItemEl = null;
-        return;
+        renderRafId = requestAnimationFrame(() => {
+          if (!panelOpen) return;
+          try {
+            commitList(buildListFragment());
+          } catch (error) {
+            failClose("Open-tabs render commit failed", error);
+          }
+        });
+      } catch (error) {
+        failClose("Open-tabs render failed", error);
       }
-
-      if (firstRender) {
-        firstRender = false;
-        commitList(buildListFragment());
-        return;
-      }
-
-      // Debounce subsequent renders to one paint via rAF
-      cancelAnimationFrame(renderRafId);
-      renderRafId = requestAnimationFrame(() => {
-        commitList(buildListFragment());
-      });
     }
 
     /** Move active highlight without rebuilding DOM */
@@ -223,68 +265,72 @@ export async function openSearchOpenTabs(
     }
 
     function applyFilter(): void {
-      withPerfTrace("searchOpenTabs.applyFilter", () => {
-        const trimmedQuery = query.trim();
-        if (!trimmedQuery) {
-          filtered = [...allEntries];
-          activeIndex = 0;
-          return;
-        }
-
-        const re = buildFuzzyPattern(trimmedQuery);
-        const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
-
-        if (!re) {
-          filtered = [...allEntries];
-          activeIndex = 0;
-          return;
-        }
-
-        const queryLower = trimmedQuery.toLowerCase();
-        const ranked: Array<{
-          entry: FrecencyEntry;
-          titleScore: number;
-          titleHit: boolean;
-          titleLen: number;
-          urlScore: number;
-          urlHit: boolean;
-        }> = [];
-
-        // Two-pass: substring first, fuzzy as fallback
-        for (const entry of allEntries) {
-          const title = entry.title || "";
-          const url = entry.url || "";
-          if (!(substringRe.test(title) || substringRe.test(url) || re.test(title) || re.test(url))) {
-            continue;
+      try {
+        withPerfTrace("searchOpenTabs.applyFilter", () => {
+          const trimmedQuery = query.trim();
+          if (!trimmedQuery) {
+            filtered = [...allEntries];
+            activeIndex = 0;
+            return;
           }
 
-          const titleScore = scoreMatch(title.toLowerCase(), title, queryLower, re);
-          const urlScore = scoreMatch(url.toLowerCase(), url, queryLower, re);
-          ranked.push({
-            entry,
-            titleScore,
-            titleHit: titleScore >= 0,
-            titleLen: title.length,
-            urlScore,
-            urlHit: urlScore >= 0,
+          const re = buildFuzzyPattern(trimmedQuery);
+          const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
+
+          if (!re) {
+            filtered = [...allEntries];
+            activeIndex = 0;
+            return;
+          }
+
+          const queryLower = trimmedQuery.toLowerCase();
+          const ranked: Array<{
+            entry: FrecencyEntry;
+            titleScore: number;
+            titleHit: boolean;
+            titleLen: number;
+            urlScore: number;
+            urlHit: boolean;
+          }> = [];
+
+          // Two-pass: substring first, fuzzy as fallback
+          for (const entry of allEntries) {
+            const title = entry.title || "";
+            const url = entry.url || "";
+            if (!(substringRe.test(title) || substringRe.test(url) || re.test(title) || re.test(url))) {
+              continue;
+            }
+
+            const titleScore = scoreMatch(title.toLowerCase(), title, queryLower, re);
+            const urlScore = scoreMatch(url.toLowerCase(), url, queryLower, re);
+            ranked.push({
+              entry,
+              titleScore,
+              titleHit: titleScore >= 0,
+              titleLen: title.length,
+              urlScore,
+              urlHit: urlScore >= 0,
+            });
+          }
+
+          // Rank by: title score > title length (shorter = tighter) > url score
+          ranked.sort((a, b) => {
+            if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
+            if (a.titleHit && b.titleHit) {
+              if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
+              return a.titleLen - b.titleLen;
+            }
+            if (a.urlHit !== b.urlHit) return a.urlHit ? -1 : 1;
+            if (a.urlHit && b.urlHit) return a.urlScore - b.urlScore;
+            return 0;
           });
-        }
 
-        // Rank by: title score > title length (shorter = tighter) > url score
-        ranked.sort((a, b) => {
-          if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
-          if (a.titleHit && b.titleHit) {
-            if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
-            return a.titleLen - b.titleLen;
-          }
-          if (a.urlHit !== b.urlHit) return a.urlHit ? -1 : 1;
-          if (a.urlHit && b.urlHit) return a.urlScore - b.urlScore;
-          return 0;
+          filtered = ranked.map((r) => r.entry);
+          activeIndex = 0;
         });
-
-        filtered = ranked.map((r) => r.entry);
-        activeIndex = 0;
-      });
+      } catch (error) {
+        failClose("Open-tabs filtering failed", error);
+      }
     }
 
     async function jumpToTab(entry: FrecencyEntry): Promise<void> {
@@ -297,7 +343,7 @@ export async function openSearchOpenTabs(
     }
 
     function keyHandler(event: KeyboardEvent): void {
-      if (!document.getElementById("ht-panel-host")) {
+      if (!panelOpen || !document.getElementById("ht-panel-host")) {
         document.removeEventListener("keydown", keyHandler, true);
         return;
       }
@@ -403,10 +449,7 @@ export async function openSearchOpenTabs(
     listEl.addEventListener("focus", () => { listEl.classList.add("focused"); }, true);
 
     input.addEventListener("input", () => {
-      query = input.value;
-      buildHighlightRegex();
-      applyFilter();
-      renderList();
+      scheduleInputProcessing(input.value);
     });
 
     // Fetch frecency list and render

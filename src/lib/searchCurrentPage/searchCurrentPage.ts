@@ -171,6 +171,8 @@ export async function openSearchCurrentPage(
     // rAF throttle for preview updates
     let previewRafId: number | null = null;
     let scrollRafId: number | null = null;
+    let inputRafId: number | null = null;
+    let pendingInputValue = "";
 
     // Virtual scrolling state
     let vsStart = 0;  // first visible result index
@@ -183,8 +185,17 @@ export async function openSearchCurrentPage(
       document.removeEventListener("keydown", keyHandler, true);
       if (previewRafId !== null) cancelAnimationFrame(previewRafId);
       if (scrollRafId !== null) cancelAnimationFrame(scrollRafId);
+      if (inputRafId !== null) cancelAnimationFrame(inputRafId);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      inputRafId = null;
+      debounceTimer = null;
       destroyLineCache();
       removePanelHost();
+    }
+
+    function failClose(context: string, error: unknown): void {
+      console.error(`[Harpoon Telescope] ${context}; dismissing panel.`, error);
+      close();
     }
 
     function updateTitle(): void {
@@ -270,6 +281,10 @@ export async function openSearchCurrentPage(
     /** Populate a pool item with data for a specific result index */
     function bindPoolItem(item: HTMLElement, resultIdx: number): void {
       const result = results[resultIdx];
+      if (!result) {
+        item.classList.remove("active");
+        return;
+      }
       item.dataset.index = String(resultIdx);
 
       // Update badge
@@ -299,77 +314,91 @@ export async function openSearchCurrentPage(
 
     /** Render only the visible window of results into the DOM */
     function renderVisibleItems(): void {
-      withPerfTrace("searchCurrentPage.renderVisibleItems", () => {
-        const scrollTop = resultsPane.scrollTop;
-        const viewHeight = resultsPane.clientHeight;
+      try {
+        withPerfTrace("searchCurrentPage.renderVisibleItems", () => {
+          const scrollTop = resultsPane.scrollTop;
+          const viewHeight = resultsPane.clientHeight;
 
-        const newStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - POOL_BUFFER);
-        const newEnd = Math.min(results.length,
-          Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER);
+          const maxStart = Math.max(0, results.length - 1);
+          const unclampedStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - POOL_BUFFER);
+          const newStart = Math.min(unclampedStart, maxStart);
+          const newEnd = Math.max(
+            newStart,
+            Math.min(results.length, Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER),
+          );
 
-        // Skip if range hasn't changed
-        if (newStart === vsStart && newEnd === vsEnd) return;
-        vsStart = newStart;
-        vsEnd = newEnd;
+          // Skip if range hasn't changed
+          if (newStart === vsStart && newEnd === vsEnd) return;
+          vsStart = newStart;
+          vsEnd = newEnd;
 
-        // Position the results list at the correct offset
-        resultsList.style.top = `${vsStart * ITEM_HEIGHT}px`;
+          // Position the results list at the correct offset
+          resultsList.style.top = `${vsStart * ITEM_HEIGHT}px`;
 
-        // Ensure we have enough pool items
-        const count = vsEnd - vsStart;
+          // Ensure we have enough pool items
+          const count = Math.max(0, vsEnd - vsStart);
 
-        // Detach excess items
-        while (resultsList.children.length > count) {
-          resultsList.removeChild(resultsList.lastChild!);
-        }
-
-        // Bind and attach items
-        activeItemEl = null;
-        for (let i = 0; i < count; i++) {
-          const item = getPoolItem(i);
-          bindPoolItem(item, vsStart + i);
-          if (i < resultsList.children.length) {
-            // Item already in DOM at this slot — just re-bind (already done above)
-            if (resultsList.children[i] !== item) {
-              resultsList.replaceChild(item, resultsList.children[i]);
-            }
-          } else {
-            resultsList.appendChild(item);
+          // Detach excess items
+          while (resultsList.children.length > count) {
+            const last = resultsList.lastChild;
+            if (!last) break;
+            resultsList.removeChild(last);
           }
-        }
-      });
+
+          // Bind and attach items
+          activeItemEl = null;
+          for (let i = 0; i < count; i++) {
+            const item = getPoolItem(i);
+            bindPoolItem(item, vsStart + i);
+            if (i < resultsList.children.length) {
+              // Item already in DOM at this slot — just re-bind (already done above)
+              if (resultsList.children[i] !== item) {
+                resultsList.replaceChild(item, resultsList.children[i]);
+              }
+            } else {
+              resultsList.appendChild(item);
+            }
+          }
+        });
+      } catch (error) {
+        failClose("Page-search virtual render failed", error);
+      }
     }
 
     /** Full re-render after results change */
     function renderResults(): void {
-      withPerfTrace("searchCurrentPage.renderResults", () => {
-        buildHighlightRegex();
+      try {
+        withPerfTrace("searchCurrentPage.renderResults", () => {
+          buildHighlightRegex();
 
-        if (results.length === 0) {
-          resultsSentinel.style.height = "0px";
-          resultsList.style.top = "0px";
-          resultsList.textContent = "";
-          resultsList.innerHTML = input.value
-            ? '<div class="ht-no-results">No matches found</div>'
-            : '<div class="ht-no-results">Type to search...</div>';
-          previewHeader.textContent = "Preview";
-          showPreviewPlaceholder(true);
-          activeItemEl = null;
+          if (results.length === 0) {
+            resultsSentinel.style.height = "0px";
+            resultsList.style.top = "0px";
+            resultsList.textContent = "";
+            resultsList.innerHTML = input.value
+              ? '<div class="ht-no-results">No matches found</div>'
+              : '<div class="ht-no-results">Type to search...</div>';
+            previewHeader.textContent = "Preview";
+            showPreviewPlaceholder(true);
+            activeItemEl = null;
+            vsStart = 0;
+            vsEnd = 0;
+            return;
+          }
+
+          // Set sentinel height for correct scrollbar
+          resultsSentinel.style.height = `${results.length * ITEM_HEIGHT}px`;
+
+          // Reset scroll and render visible window
+          resultsPane.scrollTop = 0;
           vsStart = 0;
           vsEnd = 0;
-          return;
-        }
-
-        // Set sentinel height for correct scrollbar
-        resultsSentinel.style.height = `${results.length * ITEM_HEIGHT}px`;
-
-        // Reset scroll and render visible window
-        resultsPane.scrollTop = 0;
-        vsStart = 0;
-        vsEnd = 0;
-        resultsList.textContent = "";
-        renderVisibleItems();
-      });
+          resultsList.textContent = "";
+          renderVisibleItems();
+        });
+      } catch (error) {
+        failClose("Page-search render failed", error);
+      }
     }
 
     function scheduleVisibleRender(): void {
@@ -442,87 +471,91 @@ export async function openSearchCurrentPage(
     }
 
     function updatePreview(): void {
-      if (results.length === 0 || !results[activeIndex]) {
-        previewHeader.textContent = "Preview";
-        previewBreadcrumb.style.display = "none";
-        showPreviewPlaceholder(true);
-        return;
-      }
-
-      const activeResult = results[activeIndex];
-      enrichResult(activeResult); // lazy: compute domContext/ancestorHeading/href on demand
-      const tag = activeResult.tag || "";
-      previewHeader.textContent = `Preview \u2014 L${activeResult.lineNumber}`;
-      showPreviewPlaceholder(false);
-
-      // Breadcrumb: [TAG] Section heading · href
-      let breadcrumbHtml = "";
-      if (tag) breadcrumbHtml += `<span class="ht-bc-tag">${escapeHtml(tag)}</span>`;
-      if (activeResult.ancestorHeading) {
-        breadcrumbHtml += `<span class="ht-bc-heading">${escapeHtml(activeResult.ancestorHeading)}</span>`;
-      }
-      if (activeResult.href) {
-        // Show shortened href
-        let displayHref = activeResult.href;
-        try {
-          displayHref = new URL(activeResult.href).pathname + new URL(activeResult.href).hash;
-        } catch (_) {
-          // Ignore URL parsing failures and keep raw href
+      try {
+        if (results.length === 0 || !results[activeIndex]) {
+          previewHeader.textContent = "Preview";
+          previewBreadcrumb.style.display = "none";
+          showPreviewPlaceholder(true);
+          return;
         }
-        if (displayHref.length > 60) displayHref = displayHref.slice(0, 57) + "...";
-        breadcrumbHtml += `<span class="ht-bc-href">\u2192 ${escapeHtml(displayHref)}</span>`;
-      }
-      if (breadcrumbHtml) {
-        previewBreadcrumb.innerHTML = breadcrumbHtml;
-        previewBreadcrumb.style.display = "";
-      } else {
-        previewBreadcrumb.style.display = "none";
-      }
 
-      // Use DOM-aware context if available, fall back to flat context
-      const contextLines = activeResult.domContext && activeResult.domContext.length > 0
-        ? activeResult.domContext
-        : activeResult.context && activeResult.context.length > 0
-          ? activeResult.context
-          : [activeResult.text];
+        const activeResult = results[activeIndex];
+        enrichResult(activeResult); // lazy: compute domContext/ancestorHeading/href on demand
+        const tag = activeResult.tag || "";
+        previewHeader.textContent = `Preview \u2014 L${activeResult.lineNumber}`;
+        showPreviewPlaceholder(false);
 
-      const isCode = tag === "PRE" || tag === "CODE";
-      let html = "";
-
-      if (isCode) {
-        // Code block: monospace container with line numbers
-        html += '<div class="ht-preview-code-ctx">';
-        for (let i = 0; i < contextLines.length; i++) {
-          const line = contextLines[i];
-          const trimmed = line.replace(/\s+/g, " ").trim();
-          const isMatch = (
-            trimmed === activeResult.text
-            || line.replace(/\s+/g, " ").trim() === activeResult.text
-          );
-          const cls = isMatch ? "ht-preview-line match" : "ht-preview-line";
-          const lineContent = isMatch ? highlightMatch(line) : escapeHtml(line);
-          html += `<span class="${cls}"><span class="ht-line-num">${i + 1}</span>${lineContent}</span>`;
+        // Breadcrumb: [TAG] Section heading · href
+        let breadcrumbHtml = "";
+        if (tag) breadcrumbHtml += `<span class="ht-bc-tag">${escapeHtml(tag)}</span>`;
+        if (activeResult.ancestorHeading) {
+          breadcrumbHtml += `<span class="ht-bc-heading">${escapeHtml(activeResult.ancestorHeading)}</span>`;
         }
-        html += '</div>';
-      } else {
-        // Prose: clean text blocks
-        html += '<div class="ht-preview-prose-ctx">';
-        for (let i = 0; i < contextLines.length; i++) {
-          const line = contextLines[i];
-          const isMatch = (
-            line === activeResult.text
-            || line.replace(/\s+/g, " ").trim() === activeResult.text
-          );
-          const cls = isMatch ? "ht-preview-line match" : "ht-preview-line";
-          const lineContent = isMatch ? highlightMatch(line) : escapeHtml(line);
-          html += `<span class="${cls}">${lineContent}</span>`;
+        if (activeResult.href) {
+          // Show shortened href
+          let displayHref = activeResult.href;
+          try {
+            displayHref = new URL(activeResult.href).pathname + new URL(activeResult.href).hash;
+          } catch (_) {
+            // Ignore URL parsing failures and keep raw href
+          }
+          if (displayHref.length > 60) displayHref = displayHref.slice(0, 57) + "...";
+          breadcrumbHtml += `<span class="ht-bc-href">\u2192 ${escapeHtml(displayHref)}</span>`;
         }
-        html += '</div>';
-      }
+        if (breadcrumbHtml) {
+          previewBreadcrumb.innerHTML = breadcrumbHtml;
+          previewBreadcrumb.style.display = "";
+        } else {
+          previewBreadcrumb.style.display = "none";
+        }
 
-      previewContent.innerHTML = html;
-      const matchLine = previewContent.querySelector(".match");
-      if (matchLine) matchLine.scrollIntoView({ block: "center" });
+        // Use DOM-aware context if available, fall back to flat context
+        const contextLines = activeResult.domContext && activeResult.domContext.length > 0
+          ? activeResult.domContext
+          : activeResult.context && activeResult.context.length > 0
+            ? activeResult.context
+            : [activeResult.text];
+
+        const isCode = tag === "PRE" || tag === "CODE";
+        let html = "";
+
+        if (isCode) {
+          // Code block: monospace container with line numbers
+          html += '<div class="ht-preview-code-ctx">';
+          for (let i = 0; i < contextLines.length; i++) {
+            const line = contextLines[i];
+            const trimmed = line.replace(/\s+/g, " ").trim();
+            const isMatch = (
+              trimmed === activeResult.text
+              || line.replace(/\s+/g, " ").trim() === activeResult.text
+            );
+            const cls = isMatch ? "ht-preview-line match" : "ht-preview-line";
+            const lineContent = isMatch ? highlightMatch(line) : escapeHtml(line);
+            html += `<span class="${cls}"><span class="ht-line-num">${i + 1}</span>${lineContent}</span>`;
+          }
+          html += '</div>';
+        } else {
+          // Prose: clean text blocks
+          html += '<div class="ht-preview-prose-ctx">';
+          for (let i = 0; i < contextLines.length; i++) {
+            const line = contextLines[i];
+            const isMatch = (
+              line === activeResult.text
+              || line.replace(/\s+/g, " ").trim() === activeResult.text
+            );
+            const cls = isMatch ? "ht-preview-line match" : "ht-preview-line";
+            const lineContent = isMatch ? highlightMatch(line) : escapeHtml(line);
+            html += `<span class="${cls}">${lineContent}</span>`;
+          }
+          html += '</div>';
+        }
+
+        previewContent.innerHTML = html;
+        const matchLine = previewContent.querySelector(".match");
+        if (matchLine) matchLine.scrollIntoView({ block: "center" });
+      } catch (error) {
+        failClose("Page-search preview render failed", error);
+      }
     }
 
     // -- Event delegation on results list --
@@ -551,9 +584,9 @@ export async function openSearchCurrentPage(
 
     // -- Search input --
 
-    input.addEventListener("input", () => {
+    function processInputValue(rawValue: string): void {
       if (debounceTimer) clearTimeout(debounceTimer);
-      const { filters, query } = parseInput(input.value);
+      const { filters, query } = parseInput(rawValue);
       activeFilters = filters;
       updateTitle();
       updateFilterPills();
@@ -565,21 +598,49 @@ export async function openSearchCurrentPage(
         schedulePreviewUpdate();
         return;
       }
-      debounceTimer = setTimeout(() => doGrep(query), 200);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        if (!panelOpen) return;
+        doGrep(query);
+      }, 200);
+    }
+
+    function scheduleInputProcessing(rawValue: string): void {
+      pendingInputValue = rawValue;
+      if (inputRafId !== null) return;
+      inputRafId = requestAnimationFrame(() => {
+        inputRafId = null;
+        if (!panelOpen) return;
+        try {
+          processInputValue(pendingInputValue);
+        } catch (error) {
+          console.error("[Harpoon Telescope] Page-search input processing failed; dismissing panel.", error);
+          close();
+        }
+      });
+    }
+
+    input.addEventListener("input", () => {
+      scheduleInputProcessing(input.value);
     });
 
     function doGrep(query: string): void {
-      if (!query || query.trim().length === 0) {
-        results = [];
+      if (!panelOpen) return;
+      try {
+        if (!query || query.trim().length === 0) {
+          results = [];
+          renderResults();
+          return;
+        }
+        currentQuery = query.trim();
+        results = grepPage(currentQuery, activeFilters);
+        activeIndex = 0;
+        updateTitle();
         renderResults();
-        return;
+        schedulePreviewUpdate();
+      } catch (error) {
+        failClose("Page-search grep failed", error);
       }
-      currentQuery = query.trim();
-      results = grepPage(currentQuery, activeFilters);
-      activeIndex = 0;
-      updateTitle();
-      renderResults();
-      schedulePreviewUpdate();
     }
 
     async function jumpToResult(result: GrepResult): Promise<void> {

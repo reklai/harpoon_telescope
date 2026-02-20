@@ -9,6 +9,19 @@ export interface PanelHost {
 // Active panel cleanup — called before opening a new panel so the previous
 // panel's keydown listener (registered on document) is properly removed.
 let activePanelCleanup: (() => void) | null = null;
+let activePanelFailSafeCleanup: (() => void) | null = null;
+
+function cleanupPanelFailSafe(): void {
+  if (!activePanelFailSafeCleanup) return;
+  activePanelFailSafeCleanup();
+  activePanelFailSafeCleanup = null;
+}
+
+function handlePanelRuntimeFault(label: string, reason: unknown): void {
+  if (!document.getElementById("ht-panel-host")) return;
+  console.error(`[Harpoon Telescope] ${label}; dismissing panel.`, reason);
+  dismissPanel();
+}
 
 /** Register a cleanup function for the currently open panel.
  *  Called by each overlay after setup so createPanelHost can tear it down. */
@@ -24,6 +37,7 @@ export function createPanelHost(): PanelHost {
     activePanelCleanup();
     activePanelCleanup = null;
   }
+  cleanupPanelFailSafe();
   const existing = document.getElementById("ht-panel-host");
   if (existing) existing.remove();
 
@@ -31,7 +45,7 @@ export function createPanelHost(): PanelHost {
   host.id = "ht-panel-host";
   host.tabIndex = -1;
   host.style.cssText =
-    "position:fixed;top:0;left:0;width:100vw;height:100vh;width:100dvw;height:100dvh;z-index:2147483647;pointer-events:auto;contain:layout style paint;overscroll-behavior:contain;isolation:isolate;";
+    "position:fixed;inset:0;z-index:2147483647;pointer-events:auto;overscroll-behavior:contain;isolation:isolate;";
   const shadow = host.attachShadow({ mode: "open" });
   document.body.appendChild(host);
 
@@ -61,12 +75,47 @@ export function createPanelHost(): PanelHost {
     }
   });
 
+  const onError = (event: ErrorEvent): void => {
+    handlePanelRuntimeFault("Panel runtime error", event.error || event.message);
+  };
+  const onUnhandledRejection = (event: PromiseRejectionEvent): void => {
+    handlePanelRuntimeFault("Panel unhandled rejection", event.reason);
+  };
+
+  // Watchdog: if UI thread stalls while panel is visible, fail closed.
+  let lastAnimationFrameAt = performance.now();
+  let frameProbeId = 0;
+  const frameProbe = (ts: number): void => {
+    lastAnimationFrameAt = ts;
+    frameProbeId = requestAnimationFrame(frameProbe);
+  };
+  frameProbeId = requestAnimationFrame(frameProbe);
+  const watchdogIntervalId = window.setInterval(() => {
+    if (!document.getElementById("ht-panel-host")) return;
+    if (document.visibilityState !== "visible") return;
+    const gapMs = performance.now() - lastAnimationFrameAt;
+    if (gapMs > 3000) {
+      handlePanelRuntimeFault("Panel watchdog detected UI stall", { gapMs });
+    }
+  }, 1000);
+
+  window.addEventListener("error", onError);
+  window.addEventListener("unhandledrejection", onUnhandledRejection);
+  activePanelFailSafeCleanup = () => {
+    window.removeEventListener("error", onError);
+    window.removeEventListener("unhandledrejection", onUnhandledRejection);
+    cancelAnimationFrame(frameProbeId);
+    window.clearInterval(watchdogIntervalId);
+  };
+
   return { host, shadow };
 }
 
 export function removePanelHost(): void {
+  cleanupPanelFailSafe();
   const host = document.getElementById("ht-panel-host");
   if (host) host.remove();
+  activePanelCleanup = null;
 }
 
 /** Fully dismiss the active panel — cleanup listeners + remove DOM. */
@@ -144,6 +193,22 @@ export function getBaseStyles(): string {
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       width: 100dvw; height: 100dvh;
       background: rgba(0, 0, 0, 0.55);
+    }
+
+    /* Keep every overlay shell truly centered, even if panel-specific
+       rules regress or are partially overridden. */
+    .ht-tab-manager-container,
+    .ht-open-tabs-container,
+    .ht-search-page-container,
+    .ht-bookmark-container,
+    .ht-history-container,
+    .ht-help-container,
+    .ht-addbm-container {
+      position: fixed !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      margin: 0 !important;
     }
 
     .ht-titlebar {

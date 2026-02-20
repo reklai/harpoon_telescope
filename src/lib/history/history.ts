@@ -162,6 +162,7 @@ export async function openHistoryOverlay(
     }
     let activeFilters: HistoryFilter[] = [];
     let currentQuery = "";
+    let initialLoadPending = true;
 
     // Virtual scrolling state
     let vsStart = 0;
@@ -174,6 +175,8 @@ export async function openHistoryOverlay(
     // rAF throttle for detail updates
     let detailRafId: number | null = null;
     let scrollRafId: number | null = null;
+    let inputRafId: number | null = null;
+    let pendingInputValue = "";
 
     // Detail pane mode: tree (passive, always visible), treeNav (focused with cursor), confirmDelete
     let detailMode: "tree" | "treeNav" | "confirmDelete" = "tree";
@@ -191,12 +194,101 @@ export async function openHistoryOverlay(
       document.removeEventListener("keydown", keyHandler, true);
       if (detailRafId !== null) cancelAnimationFrame(detailRafId);
       if (scrollRafId !== null) cancelAnimationFrame(scrollRafId);
+      if (inputRafId !== null) cancelAnimationFrame(inputRafId);
+      inputRafId = null;
       removePanelHost();
     }
 
     // --- Input parsing (mirrors bookmark overlay pattern) ---
     function parseInput(raw: string): { filters: HistoryFilter[]; query: string } {
       return parseSlashFilterQuery(raw, VALID_FILTERS);
+    }
+
+    function normalizeHistoryEntry(entry: unknown): HistoryEntry | null {
+      if (!entry || typeof entry !== "object") return null;
+      const candidate = entry as Partial<HistoryEntry>;
+      const url = typeof candidate.url === "string" ? candidate.url.trim() : "";
+      if (!url) return null;
+
+      return {
+        url,
+        title: typeof candidate.title === "string" ? candidate.title : "",
+        lastVisitTime:
+          typeof candidate.lastVisitTime === "number" && Number.isFinite(candidate.lastVisitTime)
+            ? candidate.lastVisitTime
+            : 0,
+        visitCount:
+          typeof candidate.visitCount === "number" && Number.isFinite(candidate.visitCount)
+            ? candidate.visitCount
+            : 0,
+      };
+    }
+
+    function normalizeHistoryList(rawEntries: unknown): HistoryEntry[] {
+      const source = Array.isArray(rawEntries)
+        ? rawEntries
+        : (
+            rawEntries
+            && typeof rawEntries === "object"
+            && Array.isArray((rawEntries as { entries?: unknown }).entries)
+          )
+          ? (rawEntries as { entries: unknown[] }).entries
+          : [];
+      return source
+        .map((entry) => normalizeHistoryEntry(entry))
+        .filter((entry): entry is HistoryEntry => entry !== null);
+    }
+
+    function historyEntryIdentity(entry: Pick<HistoryEntry, "url" | "title">): string {
+      return `${entry.url}\u0000${entry.title}`;
+    }
+
+    function dedupeHistoryEntries(entries: HistoryEntry[]): HistoryEntry[] {
+      const seen = new Set<string>();
+      const unique: HistoryEntry[] = [];
+      for (const entry of entries) {
+        const key = historyEntryIdentity(entry);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(entry);
+      }
+      return unique;
+    }
+
+    async function fetchHistoryEntries(maxResults: number): Promise<HistoryEntry[]> {
+      const rawEntries = await browser.runtime.sendMessage({
+        type: "HISTORY_LIST",
+        maxResults,
+      });
+      return dedupeHistoryEntries(normalizeHistoryList(rawEntries));
+    }
+
+    async function fetchHistoryEntriesWithRetry(): Promise<HistoryEntry[]> {
+      const attemptSizes = [
+        MAX_HISTORY,
+        Math.max(500, MAX_HISTORY * 3),
+        Math.max(1000, MAX_HISTORY * 5),
+        Math.max(2000, MAX_HISTORY * 10),
+      ];
+      const retryDelaysMs = [100, 180, 320];
+
+      for (let i = 0; i < attemptSizes.length; i++) {
+        try {
+          const entries = await fetchHistoryEntries(attemptSizes[i]);
+          if (entries.length > 0 || i === attemptSizes.length - 1) return entries;
+        } catch (error) {
+          if (i === attemptSizes.length - 1) throw error;
+        }
+
+        if (i < retryDelaysMs.length) {
+          // History API can occasionally return empty during startup churn.
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, retryDelaysMs[i]);
+          });
+        }
+      }
+
+      return [];
     }
 
     // --- Title bar updates ---
@@ -274,6 +366,10 @@ export async function openHistoryOverlay(
 
     function bindPoolItem(item: HTMLElement, resultIdx: number): void {
       const entry = filtered[resultIdx];
+      if (!entry) {
+        item.classList.remove("active");
+        return;
+      }
       item.dataset.index = String(resultIdx);
 
       const info = item.firstElementChild as HTMLElement;
@@ -297,9 +393,13 @@ export async function openHistoryOverlay(
         const scrollTop = resultsPane.scrollTop;
         const viewHeight = resultsPane.clientHeight;
 
-        const newStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - POOL_BUFFER);
-        const newEnd = Math.min(filtered.length,
-          Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER);
+        const maxStart = Math.max(0, filtered.length - 1);
+        const unclampedStart = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - POOL_BUFFER);
+        const newStart = Math.min(unclampedStart, maxStart);
+        const newEnd = Math.max(
+          newStart,
+          Math.min(filtered.length, Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER),
+        );
 
         if (newStart === vsStart && newEnd === vsEnd) return;
         vsStart = newStart;
@@ -307,9 +407,11 @@ export async function openHistoryOverlay(
 
         resultsList.style.top = `${vsStart * ITEM_HEIGHT}px`;
 
-        const count = vsEnd - vsStart;
+        const count = Math.max(0, vsEnd - vsStart);
         while (resultsList.children.length > count) {
-          resultsList.removeChild(resultsList.lastChild!);
+          const last = resultsList.lastChild;
+          if (!last) break;
+          resultsList.removeChild(last);
         }
 
         activeItemEl = null;
@@ -328,29 +430,46 @@ export async function openHistoryOverlay(
     }
 
     function renderResults(): void {
-      buildHighlightRegex();
-      updateTitle();
+      try {
+        buildHighlightRegex();
+        updateTitle();
 
-      if (filtered.length === 0) {
-        resultsSentinel.style.height = "0px";
-        resultsList.style.top = "0px";
-        resultsList.textContent = "";
-        resultsList.innerHTML = `<div class="ht-hist-no-results">${
-          currentQuery || activeFilters.length > 0 ? "No matching history" : "No history entries"
-        }</div>`;
-        activeItemEl = null;
-        vsStart = 0;
-        vsEnd = 0;
-        showDetailPlaceholder(true);
-        return;
+        if (initialLoadPending) {
+          resultsSentinel.style.height = "0px";
+          resultsList.style.top = "0px";
+          resultsList.textContent = "";
+          resultsList.innerHTML = `<div class="ht-hist-no-results">Loading history...</div>`;
+          activeItemEl = null;
+          vsStart = 0;
+          vsEnd = 0;
+          showDetailPlaceholder(true);
+          return;
+        }
+
+        if (filtered.length === 0) {
+          resultsSentinel.style.height = "0px";
+          resultsList.style.top = "0px";
+          resultsList.textContent = "";
+          resultsList.innerHTML = `<div class="ht-hist-no-results">${
+            currentQuery || activeFilters.length > 0 ? "No matching history" : "No history entries"
+          }</div>`;
+          activeItemEl = null;
+          vsStart = 0;
+          vsEnd = 0;
+          showDetailPlaceholder(true);
+          return;
+        }
+
+        resultsSentinel.style.height = `${filtered.length * ITEM_HEIGHT}px`;
+        resultsPane.scrollTop = 0;
+        vsStart = -1;
+        vsEnd = -1;
+        renderVisibleItems();
+        scheduleDetailUpdate();
+      } catch (error) {
+        console.error("[Harpoon Telescope] History render failed; dismissing panel.", error);
+        close();
       }
-
-      resultsSentinel.style.height = `${filtered.length * ITEM_HEIGHT}px`;
-      resultsPane.scrollTop = 0;
-      vsStart = -1;
-      vsEnd = -1;
-      renderVisibleItems();
-      scheduleDetailUpdate();
     }
 
     function scheduleVisibleRender(): void {
@@ -421,6 +540,30 @@ export async function openHistoryOverlay(
       renderTreeView();
     }
 
+    function processInputValue(rawValue: string): void {
+      const { filters, query } = parseInput(rawValue);
+      activeFilters = filters;
+      currentQuery = query;
+      updateFilterPills();
+      applyFilter();
+      renderResults();
+    }
+
+    function scheduleInputProcessing(rawValue: string): void {
+      pendingInputValue = rawValue;
+      if (inputRafId !== null) return;
+      inputRafId = requestAnimationFrame(() => {
+        inputRafId = null;
+        if (!panelOpen) return;
+        try {
+          processInputValue(pendingInputValue);
+        } catch (error) {
+          console.error("[Harpoon Telescope] History input processing failed; dismissing panel.", error);
+          close();
+        }
+      });
+    }
+
     // --- Filtering ---
     // 4-tier match scoring: exact (0) > starts-with (1) > substring (2) > fuzzy (3)
     function scoreMatch(
@@ -437,75 +580,80 @@ export async function openHistoryOverlay(
     }
 
     function applyFilter(): void {
-      withPerfTrace("history.applyFilter", () => {
-        let results = allEntries;
+      try {
+        withPerfTrace("history.applyFilter", () => {
+          let results = allEntries;
 
-        // Apply time-based filters first
-        if (activeFilters.length > 0) {
-          const now = Date.now();
-          let maxRange = 0;
-          for (const filter of activeFilters) {
-            maxRange = Math.max(maxRange, FILTER_RANGES[filter]);
-          }
-          const cutoff = now - maxRange;
-          results = results.filter((entry) => entry.lastVisitTime >= cutoff);
-        }
-
-        // Apply text query with ranked scoring
-        const trimmedQuery = currentQuery.trim();
-        if (trimmedQuery) {
-          const re = buildFuzzyPattern(trimmedQuery);
-          const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
-          if (re) {
-            const lowerQuery = trimmedQuery.toLowerCase();
-            const ranked: Array<{
-              entry: HistoryEntry;
-              titleScore: number;
-              titleHit: boolean;
-              titleLen: number;
-              urlScore: number;
-              urlHit: boolean;
-            }> = [];
-
-            for (const entry of results) {
-              const title = entry.title || "";
-              const url = entry.url || "";
-              if (!(substringRe.test(title) || substringRe.test(url) || re.test(title) || re.test(url))) {
-                continue;
-              }
-
-              const titleScore = scoreMatch(title.toLowerCase(), title, lowerQuery, re);
-              const urlScore = scoreMatch(url.toLowerCase(), url, lowerQuery, re);
-              ranked.push({
-                entry,
-                titleScore,
-                titleHit: titleScore >= 0,
-                titleLen: title.length,
-                urlScore,
-                urlHit: urlScore >= 0,
-              });
+          // Apply time-based filters first
+          if (activeFilters.length > 0) {
+            const now = Date.now();
+            let maxRange = 0;
+            for (const filter of activeFilters) {
+              maxRange = Math.max(maxRange, FILTER_RANGES[filter]);
             }
-
-            // Rank by: title score > title length (shorter = tighter) > url score
-            ranked.sort((a, b) => {
-              // Title matches always beat non-title matches
-              if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
-              if (a.titleHit && b.titleHit) {
-                if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
-                return a.titleLen - b.titleLen;
-              }
-              // Neither hit title — compare url
-              if (a.urlHit !== b.urlHit) return a.urlHit ? -1 : 1;
-              if (a.urlHit && b.urlHit) return a.urlScore - b.urlScore;
-              return 0;
-            });
-            results = ranked.map((r) => r.entry);
+            const cutoff = now - maxRange;
+            results = results.filter((entry) => entry.lastVisitTime >= cutoff);
           }
-        }
 
-        filtered = results;
-        activeIndex = 0;
-      });
+          // Apply text query with ranked scoring
+          const trimmedQuery = currentQuery.trim();
+          if (trimmedQuery) {
+            const re = buildFuzzyPattern(trimmedQuery);
+            const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
+            if (re) {
+              const lowerQuery = trimmedQuery.toLowerCase();
+              const ranked: Array<{
+                entry: HistoryEntry;
+                titleScore: number;
+                titleHit: boolean;
+                titleLen: number;
+                urlScore: number;
+                urlHit: boolean;
+              }> = [];
+
+              for (const entry of results) {
+                const title = entry.title || "";
+                const url = entry.url || "";
+                if (!(substringRe.test(title) || substringRe.test(url) || re.test(title) || re.test(url))) {
+                  continue;
+                }
+
+                const titleScore = scoreMatch(title.toLowerCase(), title, lowerQuery, re);
+                const urlScore = scoreMatch(url.toLowerCase(), url, lowerQuery, re);
+                ranked.push({
+                  entry,
+                  titleScore,
+                  titleHit: titleScore >= 0,
+                  titleLen: title.length,
+                  urlScore,
+                  urlHit: urlScore >= 0,
+                });
+              }
+
+              // Rank by: title score > title length (shorter = tighter) > url score
+              ranked.sort((a, b) => {
+                // Title matches always beat non-title matches
+                if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
+                if (a.titleHit && b.titleHit) {
+                  if (a.titleScore !== b.titleScore) return a.titleScore - b.titleScore;
+                  return a.titleLen - b.titleLen;
+                }
+                // Neither hit title — compare url
+                if (a.urlHit !== b.urlHit) return a.urlHit ? -1 : 1;
+                if (a.urlHit && b.urlHit) return a.urlScore - b.urlScore;
+                return 0;
+              });
+              results = ranked.map((r) => r.entry);
+            }
+          }
+
+          filtered = dedupeHistoryEntries(results);
+          activeIndex = 0;
+        });
+      } catch (error) {
+        console.error("[Harpoon Telescope] History filtering failed; dismissing panel.", error);
+        close();
+      }
     }
 
     // --- Actions ---
@@ -522,7 +670,11 @@ export async function openHistoryOverlay(
           await browser.tabs.create({ url: entry.url, active: true });
         }
       } catch (_) {
-        await browser.tabs.create({ url: entry.url, active: true });
+        try {
+          await browser.tabs.create({ url: entry.url, active: true });
+        } catch {
+          showFeedback("Failed to open history entry");
+        }
       }
     }
 
@@ -586,69 +738,73 @@ export async function openHistoryOverlay(
     }
 
     function renderTreeView(): void {
-      const entry = filtered[activeIndex];
-      detailHeader.textContent = "Time Tree";
-      showDetailPlaceholder(false);
+      try {
+        const entry = filtered[activeIndex];
+        const activeIdentity = entry ? historyEntryIdentity(entry) : null;
+        detailHeader.textContent = "Time Tree";
+        showDetailPlaceholder(false);
 
-      const isFiltering = currentQuery.trim() !== "" || activeFilters.length > 0;
-      const buckets = buildTimeBuckets(filtered);
-      const showCursor = detailMode === "treeNav";
+        const isFiltering = currentQuery.trim() !== "" || activeFilters.length > 0;
+        const buckets = buildTimeBuckets(filtered);
+        const showCursor = detailMode === "treeNav";
 
-      // Build visible items list and HTML
-      treeVisibleItems = [];
-      let idx = 0;
-      let html = '<div class="ht-hist-tree" style="max-height:none; border:none; border-radius:0; margin:0; padding:8px 0;">';
-      for (const bucket of buckets) {
-        if (bucket.entries.length === 0) continue;
+        // Build visible items list and HTML
+        treeVisibleItems = [];
+        let idx = 0;
+        let html = '<div class="ht-hist-tree" style="max-height:none; border:none; border-radius:0; margin:0; padding:8px 0;">';
+        for (const bucket of buckets) {
+          if (bucket.entries.length === 0) continue;
 
-        // Bucket header — highlight if active entry is in this bucket
-        const bucketHasActive = entry
-          && bucket.entries.some(
-            (historyEntry) =>
-              historyEntry.url === entry.url
-              && historyEntry.lastVisitTime === entry.lastVisitTime,
-          );
-        // When filtering, auto-expand all buckets; otherwise use user collapsed state
-        const collapsed = isFiltering ? false : treeCollapsed.has(bucket.label);
-        const arrow = collapsed ? '\u25B6' : '\u25BC';
-        const isCursor = showCursor && idx === treeCursorIndex;
+          // Bucket header — highlight if active entry is in this bucket
+          const bucketHasActive = !!activeIdentity
+            && bucket.entries.some(
+              (historyEntry) => historyEntryIdentity(historyEntry) === activeIdentity,
+            );
+          // When filtering, auto-expand all buckets; otherwise use user collapsed state
+          const collapsed = isFiltering ? false : treeCollapsed.has(bucket.label);
+          const arrow = collapsed ? '\u25B6' : '\u25BC';
+          const isCursor = showCursor && idx === treeCursorIndex;
 
-        treeVisibleItems.push({ type: "bucket", id: bucket.label });
-        html += `<div class="ht-hist-tree-node${bucketHasActive ? ' active' : ''}${isCursor ? ' tree-cursor' : ''}" data-tree-idx="${idx}">`;
-        html += `<span class="ht-hist-tree-collapse">${arrow}</span> ${bucket.icon} ${escapeHtml(bucket.label)} (${bucket.entries.length})`;
-        html += '</div>';
-        idx++;
+          treeVisibleItems.push({ type: "bucket", id: bucket.label });
+          html += `<div class="ht-hist-tree-node${bucketHasActive ? ' active' : ''}${isCursor ? ' tree-cursor' : ''}" data-tree-idx="${idx}">`;
+          html += `<span class="ht-hist-tree-collapse">${arrow}</span> ${bucket.icon} ${escapeHtml(bucket.label)} (${bucket.entries.length})`;
+          html += '</div>';
+          idx++;
 
-        // Child entries under this bucket (hidden if collapsed)
-        if (!collapsed) {
-          for (const child of bucket.entries) {
-            const isActive = entry && child.url === entry.url && child.lastVisitTime === entry.lastVisitTime;
-            const domain = extractDomain(child.url);
-            const title = child.title || "Untitled";
-            const isCur = showCursor && idx === treeCursorIndex;
+          // Child entries under this bucket (hidden if collapsed)
+          if (!collapsed) {
+            for (const child of bucket.entries) {
+              const isActive = activeIdentity !== null && historyEntryIdentity(child) === activeIdentity;
+              const domain = extractDomain(child.url);
+              const title = child.title || "Untitled";
+              const isCur = showCursor && idx === treeCursorIndex;
 
-            treeVisibleItems.push({ type: "entry", id: `${child.lastVisitTime}:${child.url}` });
-            html += `<div class="ht-hist-tree-entry${isActive ? ' active' : ''}${isCur ? ' tree-cursor' : ''}" data-tree-idx="${idx}">`;
-            html += `\u{1F4C4} ${escapeHtml(title)}<span class="ht-hist-tree-domain">\u00b7 ${escapeHtml(domain)}</span>`;
-            html += '</div>';
-            idx++;
+              treeVisibleItems.push({ type: "entry", id: historyEntryIdentity(child) });
+              html += `<div class="ht-hist-tree-entry${isActive ? ' active' : ''}${isCur ? ' tree-cursor' : ''}" data-tree-idx="${idx}">`;
+              html += `\u{1F4C4} ${escapeHtml(title)}<span class="ht-hist-tree-domain">\u00b7 ${escapeHtml(domain)}</span>`;
+              html += '</div>';
+              idx++;
+            }
           }
         }
-      }
-      html += '</div>';
-      detailContent.innerHTML = html;
+        html += '</div>';
+        detailContent.innerHTML = html;
 
-      // Clamp cursor
-      if (treeCursorIndex >= treeVisibleItems.length) {
-        treeCursorIndex = Math.max(0, treeVisibleItems.length - 1);
-      }
-
-      // Auto-scroll cursor into view (only in treeNav)
-      if (showCursor) {
-        const cursorEl = detailContent.querySelector('.tree-cursor') as HTMLElement;
-        if (cursorEl) {
-          cursorEl.scrollIntoView({ block: 'nearest' });
+        // Clamp cursor
+        if (treeCursorIndex >= treeVisibleItems.length) {
+          treeCursorIndex = Math.max(0, treeVisibleItems.length - 1);
         }
+
+        // Auto-scroll cursor into view (only in treeNav)
+        if (showCursor) {
+          const cursorEl = detailContent.querySelector('.tree-cursor') as HTMLElement;
+          if (cursorEl) {
+            cursorEl.scrollIntoView({ block: 'nearest' });
+          }
+        }
+      } catch (error) {
+        console.error("[Harpoon Telescope] History tree render failed; dismissing panel.", error);
+        close();
       }
     }
 
@@ -860,10 +1016,7 @@ export async function openHistoryOverlay(
           event.stopPropagation();
           const item = treeVisibleItems[treeCursorIndex];
           if (!item || item.type !== "entry") return;
-          const sepIdx = item.id.indexOf(":");
-          const ts = Number(item.id.substring(0, sepIdx));
-          const url = item.id.substring(sepIdx + 1);
-          const entry = filtered.find((h) => h.lastVisitTime === ts && h.url === url);
+          const entry = filtered.find((h) => historyEntryIdentity(h) === item.id);
           if (!entry) return;
           pendingTreeDeleteEntry = entry;
           renderTreeDeleteConfirm();
@@ -879,10 +1032,7 @@ export async function openHistoryOverlay(
           if (item.type === "bucket") {
             toggleTreeCollapse();
           } else {
-            const sepIdx = item.id.indexOf(":");
-            const ts = Number(item.id.substring(0, sepIdx));
-            const url = item.id.substring(sepIdx + 1);
-            const entry = filtered.find((h) => h.lastVisitTime === ts && h.url === url);
+            const entry = filtered.find((h) => historyEntryIdentity(h) === item.id);
             if (entry) {
               pendingTreeOpenEntry = entry;
               renderTreeOpenConfirm();
@@ -986,7 +1136,7 @@ export async function openHistoryOverlay(
         const entry = filtered[activeIndex];
         if (entry) {
           const matchIdx = treeVisibleItems.findIndex(
-            (item) => item.type === "entry" && item.id === `${entry.lastVisitTime}:${entry.url}`,
+            (item) => item.type === "entry" && item.id === historyEntryIdentity(entry),
           );
           if (matchIdx >= 0) {
             treeCursorIndex = matchIdx;
@@ -1127,10 +1277,7 @@ export async function openHistoryOverlay(
       const item = treeVisibleItems[idx];
       if (item.type !== "entry") return;
       treeCursorIndex = idx;
-      const sepIdx = item.id.indexOf(":");
-      const ts = Number(item.id.substring(0, sepIdx));
-      const url = item.id.substring(sepIdx + 1);
-      const entry = filtered.find((h) => h.lastVisitTime === ts && h.url === url);
+      const entry = filtered.find((h) => historyEntryIdentity(h) === item.id);
       if (entry) {
         pendingTreeOpenEntry = entry;
         renderTreeOpenConfirm();
@@ -1147,26 +1294,29 @@ export async function openHistoryOverlay(
     });
 
     input.addEventListener("input", () => {
-      const { filters, query } = parseInput(input.value);
-      activeFilters = filters;
-      currentQuery = query;
-      updateTitle();
-      updateFilterPills();
-      applyFilter();
-      renderResults();
+      scheduleInputProcessing(input.value);
     });
 
     // --- Initial load ---
-    allEntries = (await browser.runtime.sendMessage({
-      type: "HISTORY_LIST",
-      maxResults: MAX_HISTORY,
-    })) as HistoryEntry[];
-    filtered = [...allEntries];
-
     document.addEventListener("keydown", keyHandler, true);
     registerPanelCleanup(close);
     renderResults();
     input.focus();
+    // Let the shell/backdrop paint before we start async history fetch work.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (!panelOpen) return;
+
+    try {
+      allEntries = await fetchHistoryEntriesWithRetry();
+    } catch (error) {
+      console.error("[Harpoon Telescope] History load failed after retries.", error);
+      allEntries = [];
+    }
+
+    if (!panelOpen) return;
+    initialLoadPending = false;
+    applyFilter();
+    renderResults();
   } catch (err) {
     console.error("[Harpoon Telescope] Failed to open history overlay:", err);
   }

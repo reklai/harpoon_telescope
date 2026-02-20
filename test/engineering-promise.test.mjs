@@ -41,9 +41,11 @@ test("package scripts expose engineering guardrail chain", () => {
   const packageJson = JSON.parse(readText("package.json"));
   assert.equal(packageJson.scripts.lint, "node esBuildConfig/lint.mjs");
   assert.equal(packageJson.scripts.test, "node --test test/*.test.mjs");
+  assert.equal(packageJson.scripts["verify:store"], "node esBuildConfig/verifyStore.mjs");
   assert.match(packageJson.scripts.ci, /\bnpm run lint\b/);
   assert.match(packageJson.scripts.ci, /\bnpm run test\b/);
   assert.match(packageJson.scripts.ci, /\bnpm run verify:compat\b/);
+  assert.match(packageJson.scripts.ci, /\bnpm run verify:store\b/);
 });
 
 test("overlay css includes anti-glitch container baseline", () => {

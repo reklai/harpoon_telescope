@@ -120,7 +120,8 @@ npm run lint             # lightweight repository lint checks
 npm run test             # node:test suite (manifest/docs guardrails)
 npm run typecheck        # tsc --noEmit
 npm run verify:compat    # manifest + permission sanity checks
-npm run ci               # lint + test + typecheck + compat + both builds
+npm run verify:store     # manifest/store/privacy policy consistency checks
+npm run ci               # lint + test + typecheck + compat + store + both builds
 npm run clean            # rm -rf dist
 ```
 
@@ -129,6 +130,12 @@ The JS bundles are identical across targets — `webextension-polyfill` handles 
 ### Command Registration Strategy
 
 Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps only core shortcuts (`open`, `add`, `search`), and the content script handles slot jumps, cycling, vim mode, and panel-local actions so behavior stays consistent across Firefox, Chrome, and Zen.
+
+### Release Flow
+
+1. If permissions, storage limits, or privacy claims changed, update `manifest_v2.json`, `manifest_v3.json`, `STORE.md`, and `PRIVACY.md` together in the same PR.
+2. Run `npm run ci` before tagging a release. This now includes `npm run verify:store`, which blocks releases when manifest/docs/privacy policy drift.
+3. Build the target package (`npm run build:firefox` and/or `npm run build:chrome`) and use `STORE.md` + `PRIVACY.md` as the source of truth for store submission text.
 
 ## Installation (Development)
 
@@ -148,7 +155,7 @@ Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps
 harpoon_telescope/
 ├── src/
 │   ├── entrypoints/                        # Browser-executed entry bundles
-│   │   ├── background/background.ts        # Background state + message router
+│   │   ├── background/background.ts        # Background bootstrap + router composition
 │   │   ├── content-script/content-script.ts
 │   │   ├── options-page/
 │   │   │   ├── options-page.ts
@@ -161,6 +168,7 @@ harpoon_telescope/
 │   ├── lib/                                # Feature modules + shared utilities
 │   │   ├── appInit/
 │   │   ├── addBookmark/
+│   │   ├── background/                     # Background domains + message/command routers
 │   │   ├── bookmarks/
 │   │   ├── help/
 │   │   ├── history/
@@ -206,10 +214,14 @@ harpoon_telescope/
 - **webextension-polyfill** — unified `browser.*` API across Chrome and Firefox
 - **Dual manifests** — MV2 for Firefox/Zen, MV3 for Chrome (service worker lifecycle)
 - **Compatibility guardrail** — `npm run verify:compat` checks manifest permission/command invariants
-- **`ensureTabManagerLoaded()` guards** — state is lazily reloaded when background context is cold-started
+- **Store policy guardrail** — `npm run verify:store` keeps manifests, store copy, and privacy policy aligned
+- **Background domain routing** — `background.ts` is orchestration; tab manager/bookmarks/history handlers live in `src/lib/background/*`
+- **`ensureTabManagerLoaded()` guards** — tab manager state is lazily reloaded when background context is cold-started
 - **Configurable keybindings** — all bindings in `browser.storage.local` with per-scope collision detection
 - **Navigation modes** — vim mode adds aliases on top of basic keys (never replaces)
 - **rAF-throttled rendering** — frecency, telescope, bookmark, and history defer DOM updates to animation frames
+- **Perf regression budgets** — filter/render hotspots use `withPerfTrace` + `src/lib/shared/perfBudgets.json` guardrails
+- **Shared design tokens** — overlays consume `panelHost` CSS variables for consistent Ghostty-inspired styling
 - **Virtual scrolling** — telescope, bookmark, and history results render only ~25 visible items from a pool
 - **Tree views** — bookmark and history overlays provide hierarchical navigation with collapse/expand and confirmation flows
 
@@ -235,7 +247,7 @@ Architecture walkthrough for contributors: `docs/ARCHITECTURE.md`.
 - **Fast by default** — rAF-throttled rendering, virtualized result panes, capped datasets, and lazy work on demand.
 - **Minimal UI glitching** — one active panel host, isolated styles, explicit focus reclaim, and compositor-friendly overlay containers.
 - **Cross-platform parity** — shared TypeScript bundles across Firefox/Zen and Chrome with MV2/MV3 compatibility guardrails.
-- **Enforced in CI** — `npm run lint`, `npm run test`, `npm run typecheck`, and `npm run verify:compat`.
+- **Enforced in CI** — `npm run lint`, `npm run test`, `npm run typecheck`, `npm run verify:compat`, and `npm run verify:store`.
 
 Visual theme is customizable and separate from this engineering contract.
 

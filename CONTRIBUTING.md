@@ -7,9 +7,16 @@
 3. `npm run test`
 4. `npm run typecheck`
 5. `npm run verify:compat`
-6. `npm run build:firefox` or `npm run build:chrome`
+6. `npm run verify:store`
+7. `npm run build:firefox` or `npm run build:chrome`
 
 Architecture reference: `docs/ARCHITECTURE.md`
+
+## Release Flow
+
+1. Keep `manifest_v2.json`, `manifest_v3.json`, `STORE.md`, and `PRIVACY.md` updated together whenever permissions, storage limits, or privacy claims change.
+2. Run `npm run ci` before release; this includes `verify:compat` and `verify:store`.
+3. Use `STORE.md` and `PRIVACY.md` as the canonical text for AMO/Chrome submission fields.
 
 ## Naming Conventions
 
@@ -51,7 +58,9 @@ Architecture reference: `docs/ARCHITECTURE.md`
 
 - Keep runtime UI framework-free: prefer browser primitives, Shadow DOM, and plain TypeScript.
 - New overlays must compose from `createPanelHost()`, `getBaseStyles()`, and `registerPanelCleanup()`.
+- Overlay CSS should consume shared `panelHost` tokens (`var(--ht-color-*)`) instead of hardcoded palette values.
 - Treat UI smoothness as a default requirement: avoid full-list rerenders, prefer rAF-throttled work, and keep compositor-friendly panel containers.
+- Keep perf budgets explicit: update `src/lib/shared/perfBudgets.json` + instrumentation/tests together when hot paths change.
 - Preserve Firefox/Chrome parity when touching commands, permissions, or manifests.
 
 ## Pull Request Checklist
@@ -62,5 +71,6 @@ Architecture reference: `docs/ARCHITECTURE.md`
 - `npm run test` passes.
 - `npm run typecheck` passes.
 - `npm run verify:compat` passes.
+- `npm run verify:store` passes.
 - `npm run build:firefox` and `npm run build:chrome` pass.
-- `README.md` and/or this file updated if contributor-facing structure changed.
+- `README.md`, `learn.md`, and/or this file updated if contributor-facing release flow changed.

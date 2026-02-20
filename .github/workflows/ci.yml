@@ -35,6 +35,9 @@ jobs:
       - name: Verify manifest compatibility
         run: npm run verify:compat
 
+      - name: Verify store policy consistency
+        run: npm run verify:store
+
       - name: Build Firefox target
         run: npm run build:firefox
 

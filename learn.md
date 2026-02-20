@@ -130,7 +130,7 @@ Interview articulation:
 
 User presses `Alt+Shift+T` to add the current tab. The content script in `src/lib/appInit/appInit.ts` catches the keybind and sends `{ type: "TAB_MANAGER_ADD" }` to the background. Only the background has `browser.tabs.*` API access — content scripts are sandboxed and cannot manipulate browser tabs directly. This is the browser's security model.
 
-The background in `src/entrypoints/background/background.ts` first calls `ensureTabManagerLoaded()` to load state from storage if needed. MV3 service workers can be killed at any time, so every function that touches state calls this guard first — it's idempotent, safe to call multiple times. Then the background sends `GET_SCROLL` back to the content script to capture the current scroll position, because scroll state is page-owned and the background cannot read `window.scrollX` directly. With scroll position in hand, the background creates a `TabManagerEntry`, compacts slots to keep them sequential (1, 2, 3 instead of 1, 3, 4), saves to `browser.storage.local`, and returns. The content script shows a feedback toast via `src/lib/shared/feedback.ts` saying "Added to Tab Manager [slot]".
+The background bootstrap in `src/entrypoints/background/background.ts` delegates tab-manager state to `src/lib/background/tabManagerDomain.ts`. That domain first calls `ensureTabManagerLoaded()` to load state from storage if needed. MV3 service workers can be killed at any time, so every stateful handler calls this guard before reads/writes — it's idempotent and safe to call repeatedly. Then the domain sends `GET_SCROLL` back to the content script to capture the current scroll position, because scroll state is page-owned and the background cannot read `window.scrollX` directly. With scroll position in hand, it creates a `TabManagerEntry`, compacts slots to keep them sequential (1, 2, 3 instead of 1, 3, 4), saves to `browser.storage.local`, and returns. The content script shows a feedback toast via `src/lib/shared/feedback.ts` saying "Added to Tab Manager [slot]".
 
 Later, the user presses `Alt+1` to jump. The content script sends `{ type: "TAB_MANAGER_JUMP", slot: 1 }`. The background finds the entry and either activates the existing tab or, if it was closed, re-opens the URL in a new tab and restores scroll.
 
@@ -171,7 +171,7 @@ Interview articulation:
 2. "I used explicit message contracts to separate page and browser responsibilities."
 3. "I guarded state access for MV3 worker restarts."
 
-**Files to trace:** `src/lib/appInit/appInit.ts` (keybind handler), `src/entrypoints/background/background.ts` (state + message handling), `src/lib/shared/feedback.ts` (toast).
+**Files to trace:** `src/lib/appInit/appInit.ts` (keybind handler), `src/entrypoints/background/background.ts` (router composition), `src/lib/background/tabManagerDomain.ts` (state + commands), `src/lib/background/tabManagerMessageHandler.ts` (runtime API surface), `src/lib/shared/feedback.ts` (toast).
 
 ---
 
@@ -216,13 +216,13 @@ Interview articulation:
 2. "I prioritized user orientation by keeping tree context visible."
 3. "I balanced precision and recall with ranked substring+fuzzy matching."
 
-**Files to trace:** `src/lib/bookmarks/bookmarks.ts` (overlay UI + state), `src/entrypoints/background/background.ts` (API wrappers).
+**Files to trace:** `src/lib/bookmarks/bookmarks.ts` (overlay UI + state), `src/lib/background/bookmarkDomain.ts` (bookmark tree + usage), `src/lib/background/bookmarkMessageHandler.ts` (API wrappers).
 
 ---
 
 ### Flow D — Session Restore on Startup
 
-User closes the browser with tabs pinned in Tab Manager. When the browser reopens, `browser.runtime.onStartup` fires in the background process at `src/entrypoints/background/background.ts`. Tab IDs are not stable across browser restarts — the old `tabManagerList` is useless because all those tab IDs now point to nothing. The background clears the stale list and loads `tabManagerSessions` from storage to prepare for restore.
+User closes the browser with tabs pinned in Tab Manager. When the browser reopens, `browser.runtime.onStartup` fires and is handled by `src/lib/background/startupRestore.ts` (registered from `src/entrypoints/background/background.ts`). Tab IDs are not stable across browser restarts — the old `tabManagerList` is useless because all those tab IDs now point to nothing. The background clears the stale list and loads `tabManagerSessions` from storage to prepare for restore.
 
 The challenge is timing. Content scripts load asynchronously, and at startup the background is ready before any tab's content script has finished initializing. If the background immediately tries to send `SHOW_SESSION_RESTORE` to the active tab, the message fails because no listener exists yet.
 
@@ -260,7 +260,7 @@ Interview articulation:
 2. "I separated persistent session data from runtime tab identity."
 3. "I designed a graceful fallback instead of hard failure."
 
-**Files to trace:** `src/entrypoints/background/background.ts` (startup handler), `src/lib/tabManager/session.ts` (session restore UI).
+**Files to trace:** `src/lib/background/startupRestore.ts` (startup handler), `src/lib/tabManager/session.ts` (session restore UI).
 
 ---
 
@@ -289,6 +289,7 @@ harpoon_telescope/
 │   │       └── options-page.css
 │   ├── lib/
 │   │   ├── appInit/                 # content-script bootstrap
+│   │   ├── background/              # background domains + runtime/command routers
 │   │   ├── shared/                  # keybindings, helpers, sessions, scroll, feedback
 │   │   ├── tabManager/              # Tab Manager panel + sessions UI
 │   │   ├── searchCurrentPage/       # Telescope search (current page)
@@ -330,6 +331,14 @@ CSS is loaded as text via esbuild loader (`{ '.css': 'text' }`). This allows inj
 **Compatibility check:**
 
 `npm run verify:compat` validates MV2/MV3 permissions and ensures MV3 stays within Chrome suggested-command limits.
+
+**Store policy check:**
+
+`npm run verify:store` validates manifest/store/privacy consistency: permissions must match docs, privacy claims must stay present, and documented storage caps must match source constants.
+
+**Release flow:**
+
+Before cutting a release, run `npm run ci` (includes both verify scripts), then use `STORE.md` and `PRIVACY.md` as the canonical store-submission text.
 
 ---
 
@@ -405,20 +414,20 @@ Every keypress calls `getConfig()`. Without caching, that's an async message rou
 
 ## Background Process — src/entrypoints/background
 
-Background entry `src/entrypoints/background/background.ts` owns:
+Background entry `src/entrypoints/background/background.ts` orchestrates:
 
-- tab manager list + scroll restore
-- sessions storage and restore prompt
-- frecency scoring + eviction
-- bookmark usage tracking
-- message routing
+- tab manager domain (`src/lib/background/tabManagerDomain.ts`)
+- bookmark domain (`src/lib/background/bookmarkDomain.ts`)
+- runtime routers/handlers (`src/lib/background/*MessageHandler.ts`, `runtimeRouter.ts`)
+- startup restore coordination (`src/lib/background/startupRestore.ts`)
 
 **Key patterns:**
 
-- **Lazy-load guards:** `ensureTabManagerLoaded()`, `ensureFrecencyLoaded()`, and bookmark/session load helpers. MV3 service workers can restart anytime, so stateful handlers call the relevant guard before read/write.
+- **Lazy-load guards:** `ensureTabManagerLoaded()`, `ensureFrecencyLoaded()`, and bookmark/session load helpers. MV3 service workers can restart anytime, so stateful handlers call relevant guards before read/write.
 
 - **State reconciliation:** Before returning tab manager list, query all open tabs and mark entries as `closed` if their tab ID no longer exists.
 
+- **Domain routing:** `background.ts` stays thin; handler/domain modules keep privileged logic isolated and easier to review.
 - **Retry logic:** For session restore prompt, retry sending to content script until one is ready.
 
 ---
@@ -533,6 +542,8 @@ Prevents conflicts. `Alt+F` opens the panel; once open, pressing `Alt+F` should 
 
 - **Virtual lists with DOM pooling:** Only ~25 DOM nodes exist; they're recycled as the user scrolls.
 - **rAF throttled updates:** Rendering is scheduled via `requestAnimationFrame` to batch DOM writes.
+- **Measured hot paths:** `withPerfTrace(...)` instruments filter/render hotspots and writes stats to `globalThis.__HT_PERF_STATS__`.
+- **Regression budgets:** `src/lib/shared/perfBudgets.json` keeps expected latency envelopes explicit in code review + tests.
 - **Cached DOM grep + mutation invalidation:** Walk the DOM once, cache lines, invalidate on changes.
 - **Lazy computation:** Expensive fields (domContext, ancestorHeading) are computed on-demand, not upfront.
 - **Responsive pane switching:** two-pane overlays collapse to stacked panes on smaller viewports.

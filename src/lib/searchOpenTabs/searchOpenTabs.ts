@@ -45,9 +45,31 @@ export async function openSearchOpenTabs(
     // --- Keybind display strings ---
     const upKey = keyToDisplay(config.bindings.search.moveUp.key);
     const downKey = keyToDisplay(config.bindings.search.moveDown.key);
-    const switchKey = keyToDisplay(config.bindings.search.switchPane.key);
     const acceptKey = keyToDisplay(config.bindings.search.accept.key);
     const closeKey = keyToDisplay(config.bindings.search.close.key);
+    function renderFooter(): void {
+      const navHint = config.navigationMode === "vim"
+        ? `j/k nav · ${upKey}/${downKey} nav`
+        : `${upKey}/${downKey} nav`;
+      const paneHint = "Tab list F search";
+      const vimHalfPageHint = config.navigationMode === "vim"
+        ? "<span>Ctrl+D/U half-page</span>"
+        : "";
+      footer.innerHTML = `<div class="ht-footer-row">
+        <span>${navHint}</span>
+        ${vimHalfPageHint}
+      </div>
+      <div class="ht-footer-row">
+        <span>${paneHint}</span>
+        <span>Shift+C clear-search</span>
+        <span>${acceptKey} jump</span>
+        <span>${closeKey} close</span>
+      </div>`;
+    }
+
+    function onVimModeChanged(): void {
+      renderFooter();
+    }
 
     const style = document.createElement("style");
     style.textContent = getBaseStyles() + searchOpenTabsStyles;
@@ -82,7 +104,7 @@ export async function openSearchOpenTabs(
     const input = document.createElement("input");
     input.type = "text";
     input.className = "ht-open-tabs-input ht-ui-input-field";
-    input.placeholder = "Filter tabs...";
+    input.placeholder = "Search Open Tabs . . .";
     inputWrap.appendChild(input);
     panel.appendChild(inputWrap);
 
@@ -94,13 +116,7 @@ export async function openSearchOpenTabs(
     // Footer
     const footer = document.createElement("div");
     footer.className = "ht-footer";
-    footer.innerHTML = `<div class="ht-footer-row">
-      <span>j/k (vim) ${upKey}/${downKey} nav</span>
-      <span>${switchKey} list</span>
-      <span>C clear</span>
-      <span>${acceptKey} jump</span>
-      <span>${closeKey} close</span>
-    </div>`;
+    renderFooter();
     panel.appendChild(footer);
 
     let allEntries: FrecencyEntry[] = [];
@@ -115,6 +131,7 @@ export async function openSearchOpenTabs(
     function close(): void {
       panelOpen = false;
       document.removeEventListener("keydown", keyHandler, true);
+      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
       if (inputRafId !== null) cancelAnimationFrame(inputRafId);
       cancelAnimationFrame(renderRafId);
       removePanelHost();
@@ -369,11 +386,21 @@ export async function openSearchOpenTabs(
       });
     }
 
+    function getHalfPageStep(): number {
+      const first = listEl.querySelector(".ht-open-tabs-item") as HTMLElement | null;
+      const itemHeight = Math.max(1, (first?.offsetHeight ?? activeItemEl?.offsetHeight ?? 36));
+      const viewportRows = Math.max(1, Math.floor(listEl.clientHeight / itemHeight));
+      return Math.max(1, Math.floor(viewportRows / 2));
+    }
+
     function keyHandler(event: KeyboardEvent): void {
       if (!panelOpen || !document.getElementById("ht-panel-host")) {
         document.removeEventListener("keydown", keyHandler, true);
         return;
       }
+
+      const inputFocused = host.shadowRoot?.activeElement === input;
+      const vimNav = config.navigationMode === "vim";
 
       if (matchesAction(event, config, "search", "close")) {
         event.preventDefault();
@@ -382,32 +409,7 @@ export async function openSearchOpenTabs(
         return;
       }
 
-      // Tab cycles between input and results list (only if results exist)
-      if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (filtered.length === 0) return;
-        const shadowActive = host.shadowRoot?.activeElement;
-        if (shadowActive === input) {
-          if (activeItemEl) {
-            activeItemEl.focus();
-          } else {
-            const first = listEl.querySelector(".ht-open-tabs-item") as HTMLElement;
-            if (first) first.focus();
-          }
-          listEl.classList.add("focused");
-        } else {
-          input.focus();
-          listEl.classList.remove("focused");
-        }
-        return;
-      }
-
-      const inputFocused = host.shadowRoot?.activeElement === input;
-
-      // Clear search: c/C (case-insensitive, only when list is focused)
-      if (event.key.toLowerCase() === "c" && !event.ctrlKey && !event.altKey && !event.metaKey
-          && !inputFocused) {
+      if (event.key === "C" && !event.ctrlKey && !event.altKey && !event.metaKey) {
         event.preventDefault();
         event.stopPropagation();
         input.value = "";
@@ -415,6 +417,60 @@ export async function openSearchOpenTabs(
         buildHighlightRegex();
         applyFilter();
         renderList();
+        input.focus();
+        listEl.classList.remove("focused");
+        return;
+      }
+
+      // Tab cycles between input and results list (only if results exist)
+      if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (filtered.length === 0) return;
+        if (inputFocused) {
+          if (activeItemEl) {
+            activeItemEl.focus();
+          } else {
+            const first = listEl.querySelector(".ht-open-tabs-item") as HTMLElement;
+            if (first) first.focus();
+          }
+          listEl.classList.add("focused");
+        }
+        return;
+      }
+
+      if (
+        vimNav
+        && !inputFocused
+        && event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+      ) {
+        const lowerKey = event.key.toLowerCase();
+        if (lowerKey === "d" || lowerKey === "u") {
+          event.preventDefault();
+          event.stopPropagation();
+          const delta = getHalfPageStep() * (lowerKey === "d" ? 1 : -1);
+          if (filtered.length > 0) {
+            updateActiveHighlight(Math.max(0, Math.min(filtered.length - 1, activeIndex + delta)));
+            if (activeItemEl) activeItemEl.focus();
+          }
+          return;
+        }
+      }
+
+      if (
+        event.key.toLowerCase() === "f"
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+        && !event.shiftKey
+        && !inputFocused
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        input.focus();
+        listEl.classList.remove("focused");
         return;
       }
 
@@ -478,6 +534,8 @@ export async function openSearchOpenTabs(
     input.addEventListener("input", () => {
       scheduleInputProcessing(input.value);
     });
+
+    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
 
     // Fetch frecency list and render
     allEntries = await fetchFrecencyListWithRetry();

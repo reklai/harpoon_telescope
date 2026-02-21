@@ -143,6 +143,10 @@
 }
 .ht-session-item:hover { background: var(--ht-color-border-soft); }
 .ht-session-item.active { background: var(--ht-color-surface); border-left: 2px solid var(--ht-color-accent); }
+.ht-session-list-pane.focused .ht-session-item.active {
+  background: var(--ht-color-focus-active);
+  border-left: 2px solid var(--ht-color-text-strong);
+}
 .ht-session-name {
   flex: 1; font-size: 12px; color: var(--ht-color-text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -296,6 +300,51 @@
   font-size: 11px;
   color: var(--ht-color-text-faint);
 }
+.ht-session-plan-totals {
+  width: 100%;
+  max-width: 420px;
+  font-size: 11px;
+  color: var(--ht-color-text-muted);
+  text-align: center;
+}
+.ht-session-plan-list {
+  width: 100%;
+  max-width: 420px;
+  background: var(--ht-color-bg-elevated);
+  border: 1px solid var(--ht-color-border-faint);
+  border-radius: 7px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+}
+.ht-session-plan-empty {
+  font-size: 10px;
+  color: var(--ht-color-text-faint);
+}
+.ht-session-plan-row {
+  display: grid;
+  grid-template-columns: 12px 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.ht-session-plan-sign,
+.ht-session-plan-slot {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.ht-session-plan-sign { font-weight: 700; }
+.ht-session-plan-slot { color: var(--ht-color-text-faint); }
+.ht-session-plan-text {
+  color: var(--ht-color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ht-session-plan-row-reuse .ht-session-plan-sign { color: var(--ht-color-accent); }
+.ht-session-plan-row-replace .ht-session-plan-sign { color: #ffd58f; }
+.ht-session-plan-row-add .ht-session-plan-sign { color: #89deb0; }
+.ht-session-plan-row-remove .ht-session-plan-sign { color: #ffb4af; }
 
 @media (max-width: 520px), (max-height: 560px) {
   .ht-tab-manager-container { border-radius: 8px; }

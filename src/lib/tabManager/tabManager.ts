@@ -16,6 +16,7 @@ import { escapeHtml, extractDomain } from "../shared/helpers";
 import { showFeedback } from "../shared/feedback";
 import {
   SessionContext,
+  refreshSessionViewFooter,
   renderSaveSession,
   renderSessionList,
   renderReplaceSession,
@@ -83,8 +84,18 @@ export async function openTabManager(
     let sessionFilterQuery = "";
     resetSessionTransientState();
 
+    const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
+    const moveDownKey = keyToDisplay(config.bindings.tabManager.moveDown.key);
+    const jumpKey = keyToDisplay(config.bindings.tabManager.jump.key);
+    const removeKey = keyToDisplay(config.bindings.tabManager.remove.key);
+    const swapKey = keyToDisplay(config.bindings.tabManager.swap.key);
+    const saveKey = keyToDisplay(config.bindings.tabManager.saveSession.key);
+    const loadKey = keyToDisplay(config.bindings.tabManager.loadSession.key);
+    const closeKey = keyToDisplay(config.bindings.tabManager.close.key);
+
     function close(): void {
       document.removeEventListener("keydown", keyHandler, true);
+      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
       removePanelHost();
     }
 
@@ -125,6 +136,45 @@ export async function openTabManager(
       close,
     };
 
+    function buildTabManagerFooterHtml(): string {
+      const navHint = config.navigationMode === "vim"
+        ? `j/k nav · ${moveUpKey}/${moveDownKey} nav`
+        : `${moveUpKey}/${moveDownKey} nav`;
+
+      const vimExtraHints = config.navigationMode === "vim"
+        ? `<span>Ctrl+D/U half-page</span>`
+        : "";
+
+      return `<div class="ht-footer-row">
+        <span>${navHint}</span>
+        ${vimExtraHints}
+      </div>
+      <div class="ht-footer-row">
+        <span>${saveKey} save</span>
+        <span>${loadKey} load</span>
+        <span>${removeKey} del</span>
+        <span class="${swapMode ? "ht-footer-hint-active" : ""}">${swapKey} swap</span>
+        <span>${jumpKey} jump</span>
+        <span>${closeKey} close</span>
+      </div>`;
+    }
+
+    function refreshTabManagerFooter(): void {
+      const footerEl = shadow.querySelector(".ht-footer") as HTMLElement | null;
+      if (!footerEl) return;
+      footerEl.innerHTML = buildTabManagerFooterHtml();
+    }
+
+    function onVimModeChanged(): void {
+      if (viewMode === "tabManager") {
+        refreshTabManagerFooter();
+        return;
+      }
+      if (viewMode === "saveSession" || viewMode === "sessionList" || viewMode === "replaceSession") {
+        refreshSessionViewFooter(sessionCtx, viewMode);
+      }
+    }
+
     // -- Tab Manager view render --
     function renderTabManager(): void {
       const titleText = !swapMode
@@ -161,36 +211,14 @@ export async function openTabManager(
             <button class="ht-tab-manager-delete" data-tab-id="${item.tabId}" title="Remove">\u00d7</button>
           </div>`;
         } else {
-          html += `<div class="ht-tab-manager-empty-slot">
+          html += `<div class="ht-tab-manager-empty-slot" data-index="${i}">
             <span class="ht-tab-manager-slot">${i + 1}</span>
             <span>---</span>
           </div>`;
         }
       }
 
-      html += `</div><div class="ht-footer">`;
-
-      const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
-      const moveDownKey = keyToDisplay(config.bindings.tabManager.moveDown.key);
-      const jumpKey = keyToDisplay(config.bindings.tabManager.jump.key);
-      const removeKey = keyToDisplay(config.bindings.tabManager.remove.key);
-      const swapKey = keyToDisplay(config.bindings.tabManager.swap.key);
-      const saveKey = keyToDisplay(config.bindings.tabManager.saveSession.key);
-      const loadKey = keyToDisplay(config.bindings.tabManager.loadSession.key);
-      const closeKey = keyToDisplay(config.bindings.tabManager.close.key);
-
-      html += `<div class="ht-footer-row">`;
-      html += `<span>j/k (vim) ${moveUpKey}/${moveDownKey} nav</span>`;
-      html += `<span>${saveKey} save</span>`;
-      html += `<span>${loadKey} load</span>`;
-      html += `<span>${removeKey} del</span>`;
-      html += `</div><div class="ht-footer-row">`;
-      html += `<span class="${swapMode ? "ht-footer-hint-active" : ""}">${swapKey} swap</span>`;
-      html += `<span>U undo</span>`;
-      html += `<span>${jumpKey} jump</span>`;
-      html += `<span>${closeKey} close</span>`;
-      html += `</div>`;
-      html += `</div></div>`;
+      html += `</div><div class="ht-footer">${buildTabManagerFooterHtml()}</div></div>`;
 
       container.innerHTML = html;
 
@@ -249,6 +277,23 @@ export async function openTabManager(
       // Scroll active into view
       const activeEl = shadow.querySelector(".ht-tab-manager-item.active");
       if (activeEl) activeEl.scrollIntoView({ block: "nearest" });
+
+      const listEl = shadow.querySelector(".ht-tab-manager-list") as HTMLElement | null;
+      if (listEl) {
+        listEl.addEventListener("wheel", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (list.length === 0) return;
+          const delta = event.deltaY > 0 ? 1 : -1;
+          const next = Math.max(0, Math.min(list.length - 1, activeIndex + delta));
+          if (swapMode) {
+            activeIndex = next;
+            render();
+          } else {
+            setActiveIndex(next);
+          }
+        });
+      }
     }
 
     // -- Dispatch render by view mode --
@@ -333,6 +378,24 @@ export async function openTabManager(
       }
     }
 
+    function getHalfPageStep(): number {
+      const listEl = shadow.querySelector(".ht-tab-manager-list") as HTMLElement | null;
+      const itemEl = shadow.querySelector(".ht-tab-manager-item") as HTMLElement | null;
+      const itemHeight = Math.max(1, itemEl?.offsetHeight ?? 36);
+      const rows = Math.max(1, Math.floor((listEl?.clientHeight ?? (itemHeight * 6)) / itemHeight));
+      return Math.max(1, Math.floor(rows / 2));
+    }
+
+    function setIndexWithMode(newIdx: number): void {
+      const bounded = Math.max(0, Math.min(Math.max(list.length - 1, 0), newIdx));
+      if (swapMode) {
+        activeIndex = bounded;
+        render();
+      } else {
+        setActiveIndex(bounded);
+      }
+    }
+
     // -- Keyboard handler --
     function keyHandler(event: KeyboardEvent): void {
       if (!document.getElementById("ht-panel-host")) {
@@ -355,6 +418,22 @@ export async function openTabManager(
       }
 
       // -- Tab Manager mode key handling --
+
+      if (
+        config.navigationMode === "vim"
+        && event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+      ) {
+        const lowerKey = event.key.toLowerCase();
+        if (lowerKey === "d" || lowerKey === "u") {
+          event.preventDefault();
+          event.stopPropagation();
+          const delta = getHalfPageStep() * (lowerKey === "d" ? 1 : -1);
+          if (list.length > 0) setIndexWithMode(activeIndex + delta);
+          return;
+        }
+      }
 
       // Number keys 1-4: instant jump to slot
       if (!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
@@ -518,6 +597,7 @@ export async function openTabManager(
     }
 
     document.addEventListener("keydown", keyHandler, true);
+    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
     registerPanelCleanup(close);
     render();
     host.focus();

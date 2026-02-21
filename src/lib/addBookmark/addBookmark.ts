@@ -1,8 +1,9 @@
 // Add Bookmark overlay — triggered by Alt+Shift+B or `a` inside the bookmark overlay.
-// Three-step state machine:
-//   1. chooseType  — pick File, Folder, or Folder + File
-//   2. chooseDest  — pick destination folder (or root)
-//   3. nameInput   — (folder/folderAndFile) enter a name for the new folder
+// Four-step state machine:
+//   1. chooseType   — pick File, Folder, or Folder + File
+//   2. chooseDest   — pick destination folder (or root)
+//   3. nameInput    — (folder/folderAndFile) enter a name for the new folder
+//   4. confirmApply — confirm summary before writing
 
 import browser from "webextension-polyfill";
 import {
@@ -25,16 +26,32 @@ interface BookmarkFolder {
   children: BookmarkFolder[];
 }
 
+interface FlatBookmarkFolder {
+  id: string;
+  title: string;
+  depth: number;
+  path: string;
+}
+
+interface PendingBookmarkAction {
+  kind: "file" | "folder" | "folderAndFile";
+  parentId?: string;
+  destIdx: number;
+  destinationPath: string;
+  folderName?: string;
+}
+
 /** Flatten a folder tree into a depth-first list for rendering */
-function flattenFolders(folders: BookmarkFolder[]): { id: string; title: string; depth: number }[] {
-  const flat: { id: string; title: string; depth: number }[] = [];
-  function walk(nodes: BookmarkFolder[]): void {
+function flattenFolders(folders: BookmarkFolder[]): FlatBookmarkFolder[] {
+  const flat: FlatBookmarkFolder[] = [];
+  function walk(nodes: BookmarkFolder[], parentPath: string): void {
     for (const folder of nodes) {
-      flat.push({ id: folder.id, title: folder.title, depth: folder.depth });
-      if (folder.children.length > 0) walk(folder.children);
+      const path = parentPath ? `${parentPath} > ${folder.title}` : folder.title;
+      flat.push({ id: folder.id, title: folder.title, depth: folder.depth, path });
+      if (folder.children.length > 0) walk(folder.children, path);
     }
   }
-  walk(folders);
+  walk(folders, "");
   return flat;
 }
 
@@ -43,6 +60,9 @@ export async function openAddBookmarkOverlay(
 ): Promise<void> {
   try {
     const { host, shadow } = createPanelHost();
+    const getNavHint = (): string => (
+      config.navigationMode === "vim" ? "j/k nav · \u2191/\u2193 nav" : "\u2191/\u2193 nav"
+    );
 
     const style = document.createElement("style");
     style.textContent = getBaseStyles() + addBookmarkStyles;
@@ -82,17 +102,73 @@ export async function openAddBookmarkOverlay(
     const titleText = titlebar.querySelector(".ht-titlebar-text") as HTMLElement;
 
     // --- State ---
-    type Step = "chooseType" | "chooseDest" | "nameInput";
+    type Step = "chooseType" | "chooseDest" | "nameInput" | "confirmApply";
     let step: Step = "chooseType";
     let chosenType: "file" | "folder" | "folderAndFile" = "file";
     let activeIndex = 0;
-    let flatFolders: { id: string; title: string; depth: number }[] = [];
+    let flatFolders: FlatBookmarkFolder[] = [];
     let nameInputEl: HTMLInputElement | null = null;
     let errorEl: HTMLElement | null = null;
+    let pendingAction: PendingBookmarkAction | null = null;
+    let confirmBackStep: "chooseDest" | "nameInput" = "chooseDest";
+    let confirmSubmitting = false;
+    const pageTitle = document.title?.trim() || "Untitled";
 
     function close(): void {
       document.removeEventListener("keydown", keyHandler, true);
+      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
       removePanelHost();
+    }
+
+    function updateFooterForStep(): void {
+      const closeHint = "Esc cancel";
+      const vimHalfPageHint = config.navigationMode === "vim"
+        ? "<span>Ctrl+D/U half-page</span>"
+        : "";
+
+      if (step === "confirmApply") {
+        footer.innerHTML = `<div class="ht-footer-row">
+          <span>Y confirm</span>
+          <span>N cancel</span>
+        </div>`;
+        return;
+      }
+
+      if (step === "nameInput") {
+        footer.innerHTML = `<div class="ht-footer-row">
+          <span>Type name</span>
+        </div>
+        <div class="ht-footer-row">
+          <span>Enter continue</span>
+          <span>Esc back</span>
+        </div>`;
+        return;
+      }
+
+      if (step === "chooseDest") {
+        footer.innerHTML = `<div class="ht-footer-row">
+          <span>${getNavHint()}</span>
+          ${vimHalfPageHint}
+        </div>
+        <div class="ht-footer-row">
+          <span>Enter select</span>
+          <span>Esc back</span>
+        </div>`;
+        return;
+      }
+
+      footer.innerHTML = `<div class="ht-footer-row">
+        <span>${getNavHint()}</span>
+        ${vimHalfPageHint}
+      </div>
+      <div class="ht-footer-row">
+        <span>Enter select</span>
+        <span>${closeHint}</span>
+      </div>`;
+    }
+
+    function onVimModeChanged(): void {
+      updateFooterForStep();
     }
 
     // --- Step 1: Choose type (File, Folder, or Folder + File) ---
@@ -124,11 +200,7 @@ export async function openAddBookmarkOverlay(
         </div>
       </div>`;
 
-      footer.innerHTML = `<div class="ht-footer-row">
-        <span>j/k (vim) \u2191/\u2193 nav</span>
-         <span>Enter select</span>
-         <span>Esc cancel</span>
-      </div>`;
+      updateFooterForStep();
 
       // Click handler
       const list = body.querySelector(".ht-addbm-list") as HTMLElement;
@@ -176,11 +248,7 @@ export async function openAddBookmarkOverlay(
       html += `</div>`;
       body.innerHTML = html;
 
-      footer.innerHTML = `<div class="ht-footer-row">
-        <span>j/k (vim) \u2191/\u2193 nav</span>
-         <span>Enter select</span>
-         <span>Esc back</span>
-      </div>`;
+      updateFooterForStep();
 
       // Click handler
       const list = body.querySelector(".ht-addbm-list") as HTMLElement;
@@ -196,28 +264,110 @@ export async function openAddBookmarkOverlay(
       return idx === 0 ? undefined : flatFolders[idx - 1]?.id;
     }
 
+    function getDestinationPath(idx: number): string {
+      return idx === 0 ? "Root" : (flatFolders[idx - 1]?.path || "Root");
+    }
+
     function getParentLabel(idx: number): string {
       return idx === 0 ? "" : ` in ${flatFolders[idx - 1]?.title || "folder"}`;
     }
 
-    async function confirmDest(idx: number): Promise<void> {
-      if (chosenType === "file") {
-        // Save bookmark directly
-        const parentId = getParentId(idx);
-        const bookmarkAddRequest: Record<string, unknown> = { type: "BOOKMARK_ADD" };
-        if (parentId) bookmarkAddRequest.parentId = parentId;
+    function beginConfirmAction(action: PendingBookmarkAction): void {
+      pendingAction = action;
+      step = "confirmApply";
 
-        const result = (await browser.runtime.sendMessage(bookmarkAddRequest)) as {
+      const finalPath = action.kind === "file"
+        ? action.destinationPath
+        : `${action.destinationPath} > ${action.folderName || "New Folder"}`;
+
+      const confirmTitle = action.kind === "folder"
+        ? (action.folderName || "New Folder")
+        : pageTitle;
+      const confirmIcon = action.kind === "folder" ? "\u{1F4C1}" : "\u{1F516}";
+
+      titleText.textContent = "Confirm Bookmark Action";
+      body.innerHTML = `<div class="ht-bm-confirm">
+        <div class="ht-bm-confirm-icon">${confirmIcon}</div>
+        <div class="ht-bm-confirm-msg">
+          <span class="ht-bm-confirm-title">${escapeHtml(confirmTitle)}</span>
+          <div class="ht-bm-confirm-path">Destination path > ${escapeHtml(finalPath)}</div>
+        </div>
+      </div>`;
+      updateFooterForStep();
+    }
+
+    async function executeConfirmedAction(): Promise<void> {
+      if (!pendingAction || confirmSubmitting) return;
+      confirmSubmitting = true;
+      const action = pendingAction;
+
+      try {
+        if (action.kind === "file") {
+          const bookmarkAddRequest: Record<string, unknown> = { type: "BOOKMARK_ADD" };
+          if (action.parentId) bookmarkAddRequest.parentId = action.parentId;
+
+          const result = (await browser.runtime.sendMessage(bookmarkAddRequest)) as {
+            ok: boolean;
+            title?: string;
+          };
+
+          if (result.ok) {
+            showFeedback(`Bookmarked: ${result.title || "current page"}${getParentLabel(action.destIdx)}`);
+          } else {
+            showFeedback("Failed to add bookmark");
+          }
+          close();
+          return;
+        }
+
+        const folderName = action.folderName || "";
+        const createFolderRequest: Record<string, unknown> = {
+          type: "BOOKMARK_CREATE_FOLDER",
+          title: folderName,
+        };
+        if (action.parentId) createFolderRequest.parentId = action.parentId;
+
+        const result = (await browser.runtime.sendMessage(createFolderRequest)) as {
           ok: boolean;
-          title?: string;
+          id?: string;
+          reason?: string;
         };
 
-        if (result.ok) {
-          showFeedback(`Bookmarked: ${result.title || "current page"}${getParentLabel(idx)}`);
+        if (!result.ok) {
+          showFeedback(result.reason || "Failed to create folder");
+          close();
+          return;
+        }
+
+        if (action.kind === "folderAndFile" && result.id) {
+          const addResult = (await browser.runtime.sendMessage({
+            type: "BOOKMARK_ADD",
+            parentId: result.id,
+          })) as { ok: boolean; title?: string };
+
+          if (addResult.ok) {
+            showFeedback(`Created folder "${folderName}" and bookmarked: ${addResult.title || "current page"}`);
+          } else {
+            showFeedback(`Created folder "${folderName}" but failed to add bookmark`);
+          }
         } else {
-          showFeedback("Failed to add bookmark");
+          showFeedback(`Created folder: ${folderName}${getParentLabel(action.destIdx)}`);
         }
         close();
+      } finally {
+        confirmSubmitting = false;
+      }
+    }
+
+    async function confirmDest(idx: number): Promise<void> {
+      if (chosenType === "file") {
+        confirmBackStep = "chooseDest";
+        beginConfirmAction({
+          kind: "file",
+          parentId: getParentId(idx),
+          destIdx: idx,
+          destinationPath: getDestinationPath(idx),
+        });
       } else {
         // Both folder and folderAndFile go to name input
         transitionToNameInput(idx);
@@ -225,7 +375,7 @@ export async function openAddBookmarkOverlay(
     }
 
     // --- Step 3: Folder name input ---
-    function transitionToNameInput(destIdx: number): void {
+    function transitionToNameInput(destIdx: number, initialName: string = ""): void {
       step = "nameInput";
       const destLabel = destIdx === 0 ? "root" : flatFolders[destIdx - 1]?.title || "folder";
       titleText.textContent = `New folder in ${destLabel}`;
@@ -234,14 +384,11 @@ export async function openAddBookmarkOverlay(
         <div class="ht-addbm-input-wrap ht-ui-input-wrap">
           <span class="ht-addbm-prompt ht-ui-input-prompt">Name:</span>
           <input type="text" class="ht-addbm-input ht-ui-input-field"
-                 placeholder="e.g. Work, Research, Recipes..." maxlength="60" />
+                 placeholder="e.g. Work, Research, Recipes..." maxlength="60" value="${escapeHtml(initialName)}" />
         </div>
         <div class="ht-addbm-error"></div>`;
 
-      footer.innerHTML = `<div class="ht-footer-row">
-        <span>Enter create</span>
-        <span>Esc back</span>
-      </div>`;
+      updateFooterForStep();
 
       nameInputEl = body.querySelector(".ht-addbm-input") as HTMLInputElement;
       errorEl = body.querySelector(".ht-addbm-error") as HTMLElement;
@@ -270,43 +417,14 @@ export async function openAddBookmarkOverlay(
         return;
       }
       const destIdx = parseInt(nameInputEl.dataset.destIdx || "0");
-      const parentId = getParentId(destIdx);
-
-      const createFolderRequest: Record<string, unknown> = {
-        type: "BOOKMARK_CREATE_FOLDER",
-        title: name,
-      };
-      if (parentId) createFolderRequest.parentId = parentId;
-
-      const result = (await browser.runtime.sendMessage(createFolderRequest)) as {
-        ok: boolean;
-        id?: string;
-        title?: string;
-        reason?: string;
-      };
-
-      if (!result.ok) {
-        showFeedback(result.reason || "Failed to create folder");
-        close();
-        return;
-      }
-
-      if (chosenType === "folderAndFile" && result.id) {
-        // Also bookmark current page into the new folder
-        const addResult = (await browser.runtime.sendMessage({
-          type: "BOOKMARK_ADD",
-          parentId: result.id,
-        })) as { ok: boolean; title?: string };
-
-        if (addResult.ok) {
-          showFeedback(`Created folder "${name}" and bookmarked: ${addResult.title || "current page"}`);
-        } else {
-          showFeedback(`Created folder "${name}" but failed to add bookmark`);
-        }
-      } else {
-        showFeedback(`Created folder: ${name}${getParentLabel(destIdx)}`);
-      }
-      close();
+      confirmBackStep = "nameInput";
+      beginConfirmAction({
+        kind: chosenType === "folderAndFile" ? "folderAndFile" : "folder",
+        parentId: getParentId(destIdx),
+        destIdx,
+        destinationPath: getDestinationPath(destIdx),
+        folderName: name,
+      });
     }
 
     // --- Shared highlight update ---
@@ -322,10 +440,47 @@ export async function openAddBookmarkOverlay(
       }
     }
 
+    function getListHalfPageStep(): number {
+      const listEl = body.querySelector(".ht-addbm-list") as HTMLElement | null;
+      const itemEl = body.querySelector("[data-idx]") as HTMLElement | null;
+      const itemHeight = Math.max(1, itemEl?.offsetHeight ?? 34);
+      const rows = Math.max(1, Math.floor((listEl?.clientHeight ?? (itemHeight * 8)) / itemHeight));
+      return Math.max(1, Math.floor(rows / 2));
+    }
+
     // --- Keyboard handler (dispatches per step) ---
     function keyHandler(event: KeyboardEvent): void {
       if (!document.getElementById("ht-panel-host")) {
         document.removeEventListener("keydown", keyHandler, true);
+        return;
+      }
+
+      const vimNav = config.navigationMode === "vim";
+
+      if (step === "confirmApply") {
+        const key = event.key.toLowerCase();
+        if (key === "y") {
+          event.preventDefault();
+          event.stopPropagation();
+          void executeConfirmedAction();
+          return;
+        }
+        if (key === "n") {
+          event.preventDefault();
+          event.stopPropagation();
+          const action = pendingAction;
+          if (!action) return;
+          pendingAction = null;
+          if (confirmBackStep === "chooseDest") {
+            step = "chooseDest";
+            activeIndex = action.destIdx;
+            renderChooseDest();
+          } else {
+            transitionToNameInput(action.destIdx, action.folderName || "");
+          }
+          return;
+        }
+        event.stopPropagation();
         return;
       }
 
@@ -382,6 +537,25 @@ export async function openAddBookmarkOverlay(
       const totalItems = step === "chooseType" ? 3 : flatFolders.length + 1;
       const vim = config.navigationMode === "vim";
 
+      if (
+        vimNav
+        && event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+      ) {
+        const lowerKey = event.key.toLowerCase();
+        if (lowerKey === "d" || lowerKey === "u") {
+          event.preventDefault();
+          event.stopPropagation();
+          const jump = getListHalfPageStep();
+          const next = lowerKey === "d"
+            ? Math.min(activeIndex + jump, totalItems - 1)
+            : Math.max(activeIndex - jump, 0);
+          updateHighlight(next, totalItems);
+          return;
+        }
+      }
+
       if (event.key === "ArrowDown" || (vim && event.key === "j")) {
         event.preventDefault();
         event.stopPropagation();
@@ -405,6 +579,7 @@ export async function openAddBookmarkOverlay(
     titlebar.querySelector(".ht-dot-close")!.addEventListener("click", close);
 
     document.addEventListener("keydown", keyHandler, true);
+    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
     registerPanelCleanup(close);
 
     // Start at step 1

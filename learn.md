@@ -291,9 +291,9 @@ User presses `Alt+B` to open Bookmarks. The content script opens the overlay fro
 
 The overlay is a pure view layer with its own local state for navigation and filtering. It does not cache the bookmark tree long-term — it requests fresh data on every open, keeping things simple and avoiding stale-data bugs.
 
-The challenge is providing fast filtering over a potentially large dataset (thousands of bookmarks) while keeping the tree context visible so users know where things are. The solution uses a two-pane layout: the left pane shows filtered results, the right pane shows the folder tree. Users can switch focus with Tab or T. This adds UI complexity, but users always see their location in the hierarchy.
+The challenge is providing fast filtering over a potentially large dataset (thousands of bookmarks) while keeping the tree context visible so users know where things are. The solution uses a two-pane layout: the left pane shows filtered results, the right pane shows the folder tree. Users can switch focus with `Tab`/`f` for input/results and `l`/`h` for tree/results. This adds UI complexity, but users always see their location in the hierarchy.
 
-The overlay manages multiple focus targets through a `detailMode` state machine. In `"tree"` mode, the tree is visible but results have focus. In `"treeNav"` mode, the tree has a cursor and results are dimmed. When the user presses `d` to delete, `detailMode` becomes `"confirmDelete"` and a confirm prompt appears. Pressing `y` confirms, sends `{ type: "BOOKMARK_REMOVE", id }` to the background, and refreshes the list. Pressing `n` or Escape cancels back to tree mode. Each state defines what the UI looks like and which keys do what — there's no magic, every transition is explicit in the key handler.
+The overlay manages multiple focus targets through a `detailMode` state machine. In `"tree"` mode, the tree is visible but results have focus. In `"treeNav"` mode, the tree has a cursor and results are dimmed. When the user presses `d` to delete, `detailMode` becomes `"confirmDelete"` and a confirm prompt appears. Pressing `y` confirms, sends `{ type: "BOOKMARK_REMOVE", id }` to the background, and refreshes the list. Pressing `n` cancels back to tree mode. Each state defines what the UI looks like and which keys do what — there's no magic, every transition is explicit in the key handler.
 
 Filtering combines substring and fuzzy matching, then ranks by match quality (exact -> starts-with -> substring -> fuzzy). With no filter pill active, matching runs across title/url/folder path and sorts with title-first tie-breaks. With `/folder` active, matching is scoped to folder path.
 
@@ -618,8 +618,8 @@ Ambient types (in `.d.ts`) are globally available without imports. This reduces 
 Keybinding storage and matching are centralized here:
 
 - Stored in `browser.storage.local` and merged with defaults for forward compatibility.
-- Two navigation modes: basic and vim (adds j/k, never replaces).
-- Core action matching is centralized (`matchesAction`), and panel-local single-letter controls (like `d/m/t/c`) are handled case-insensitively inside overlay key handlers.
+- Vim navigation is always enabled (adds j/k, never replaces basic keys).
+- Core action matching is centralized (`matchesAction`), and panel-local controls (`d/m/l/h/f` plus `Shift+C clear-search`) are handled directly inside overlay key handlers.
 
 **Why merge with defaults?**
 
@@ -627,7 +627,7 @@ When the extension updates and adds new shortcuts, users with saved keybindings 
 
 **Why vim as additive?**
 
-Arrow keys always work. j/k are bonuses when vim mode is on. Users don't need to learn vim to use the extension.
+Arrow keys always work. j/k are bonuses on top. Users don't need to rely on vim motions to use the extension.
 
 ---
 
@@ -639,7 +639,7 @@ Entry point `src/entryPoints/contentScript/contentScript.ts` is minimal: it call
 
 - cleanup on extension reload (`window.__harpoonTelescopeCleanup`)
 - keybinding cache + invalidation
-- global key handler (panel open, toggleVim)
+- global key handler (panel open commands)
 - message router (`GREP`, `GET_SCROLL`, `OPEN_*`)
 
 **Why cleanup on reload?**
@@ -711,8 +711,9 @@ Manages list UI + sessions UI.
 - slots are compacted to 1..N
 - closed tabs persist and re-open on jump
 - sessions stored in `tabManagerSessions` (max 4)
-- session load uses preview + pre-load confirmation summary (replace/reuse/open counts)
+- session load uses preview + minimal slot-level load plan legend (`NEW (+)`, `DELETED (-)`, `REPLACED (~)`, `UNCHANGED (=)`)
 - load/save session panes support keyboard focus cycling (`Tab` / `Shift+Tab`)
+- session list search uses `Search Sessions . . .` and `Shift+C clear-search`
 
 **Why max 4 slots?**
 
@@ -726,8 +727,11 @@ Two-pane UI (results + tree). `detailMode` controls tree focus and confirm state
 
 - `/folder` filter for folder path
 - `m` opens move picker
-- `t` focuses tree
-- `c` clears search when list is focused
+- `l` focuses tree, `h` returns to results
+- `Shift+C clear-search` works from input/results/tree
+- move/confirm prompts use `y` confirm and `n` cancel
+- `Ctrl+D/U` supports half-page jumps in bookmark results/tree and add-bookmark list steps
+- add-bookmark applies a final y/n confirmation card with `Title` and `Destination path > {path}`
 
 **Why tree-first?**
 
@@ -739,7 +743,7 @@ Context matters. Seeing the folder tree while filtering helps users understand w
 
 Help overlay builds sections from live keybinding config. It documents the panel controls and filters.
 
-- includes session-specific controls (focus toggle, filter focus, load confirm/cancel)
+- includes session-specific controls (focus toggle, search focus, clear-search, load confirm/cancel)
 - key labels mirror current keybinding config instead of hard-coded defaults
 
 **Why live keybindings?**
@@ -752,7 +756,7 @@ If the user customizes shortcuts, the help menu reflects their actual bindings, 
 
 - `helpers.ts`: `escapeHtml`, `escapeRegex`, `buildFuzzyPattern`, `extractDomain`
 - `filterInput.ts`: shared slash-filter parsing used by search and bookmark overlays
-- `panelHost.ts`: shadow host, base styles, focus trapping, vim badge
+- `panelHost.ts`: shadow host, base styles, focus trapping
 - `scroll.ts`: scroll-to-text highlight
 - `feedback.ts`: toast messages
 - `sessions.ts`: session CRUD helpers
@@ -841,8 +845,9 @@ Growth checkpoint:
 
 - Footer order: nav -> secondary (list/tree) -> action (clear/del/move) -> primary (open) -> close/back
 - Footer labels: uppercase key + lowercase label (ex: `D del`)
-- Vim mode: j/k only when `navigationMode === "vim"`
-- Clear search: only when list/results pane is focused
+- Vim navigation: j/k aliases are always enabled
+- Clear-search: `Shift+C` works from input/results/tree contexts
+- Search input placeholders follow `Search <Panel Name> . . .` across session load, bookmarks, open tabs, and current-page search
 
 **Why strict footer order?**
 
@@ -907,7 +912,7 @@ Session invariants:
 
 1. Session names are unique case-insensitively.
 2. Session list ordering is deterministic (recent-first when listed).
-3. Load planning and load execution are consistent (reuse/open counts align with actual action).
+3. Load planning and load execution are consistent (slot-plan rows and totals align with actual action).
 4. Confirmation flows must be explicit and reversible.
 
 Search/bookmark invariants:
@@ -934,7 +939,7 @@ This is the quick reference I should be able to explain in interviews and design
 | Search Open Tabs | Title/URL match + ranked sort | `O(T)` matching + `O(T log T)` sort | Fast ranking without UI jank | Ranked match tiers, bounded rendering, rAF scheduling |
 | Bookmarks Panel | Filter + tree/detail state transitions | `O(B)` filtering + virtualized rendering | Multi-mode keyboard UX complexity | Explicit mode/state machine + pooled rendering |
 | Tab Manager Jump | Slot lookup + tab activate/reopen | `O(S)` where `S <= 4` | Unstable tab IDs across lifecycle/restart | Persist URL + scroll, closed-entry recovery, reconcile against open tabs |
-| Session Load Plan | Reuse/open computation | `O(O + E)` where `O` open tabs, `E` session entries | Duplicate URL handling and predictable summary | URL normalization + reusable tab pools |
+| Session Load Plan | Slot-by-slot unchanged/new/deleted/replaced computation | `O(E)` where `E` session entries | Predictable load summary against current tab-manager state | URL normalization + same-slot comparison |
 | Session Load Execute | Reuse existing or open new tabs | `O(E)` plus tab API latency | Consistent restore with partial failures | Per-entry fallback (reuse -> open), queued scroll restore, graceful skip on open failure |
 | Panel Lifecycle | Open/close/focus/error handling | `O(1)` control flow | Ghost host and readiness race conditions | Host-integrity checks, fail-closed open paths, bounded retries |
 
@@ -989,7 +994,7 @@ Incident: tab jump/session load restores wrong scroll location.
 Incident: session load summary differs from observed load.
 
 1. Compare load-plan computation vs load execution path.
-2. Verify URL normalization and reuse pool behavior.
+2. Verify URL normalization and same-slot comparison behavior.
 3. Confirm session list snapshot did not change between plan and confirm.
 
 Incident: cross-context drift (UI shows stale data).

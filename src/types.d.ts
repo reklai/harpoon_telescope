@@ -113,4 +113,23 @@ interface SessionLoadSummary {
   replaceCount: number;
   openCount: number;
   reuseCount: number;
+  slotDiffs: SessionLoadSlotDiff[];
+  reuseMatches: SessionLoadReuseMatch[];
+}
+
+interface SessionLoadSlotDiff {
+  slot: number;
+  change: "replace" | "remove" | "add";
+  currentTitle?: string;
+  currentUrl?: string;
+  incomingTitle?: string;
+  incomingUrl?: string;
+}
+
+interface SessionLoadReuseMatch {
+  slot: number;
+  sessionTitle: string;
+  sessionUrl: string;
+  openTabTitle: string;
+  openTabUrl: string;
 }

@@ -72,9 +72,17 @@ export async function openBookmarkOverlay(
     // --- Keybind display strings ---
     const upKey = keyToDisplay(config.bindings.search.moveUp.key);
     const downKey = keyToDisplay(config.bindings.search.moveDown.key);
-    const switchKey = keyToDisplay(config.bindings.search.switchPane.key);
     const acceptKey = keyToDisplay(config.bindings.search.accept.key);
     const closeKey = keyToDisplay(config.bindings.search.close.key);
+    const getNavHint = (): string => config.navigationMode === "vim"
+      ? `j/k nav · ${upKey}/${downKey} nav`
+      : `${upKey}/${downKey} nav`;
+    const getListPaneHint = (): string => "Tab list F search";
+    const getTreeBackHint = (): string => "H focus list";
+    const getMoveBackHint = (): string => "N cancel";
+    const getCloseHint = (): string => config.navigationMode === "vim"
+      ? `${closeKey} close`
+      : `${closeKey} close`;
 
     const style = document.createElement("style");
     style.textContent = getBaseStyles() + bookmarksStyles;
@@ -102,7 +110,7 @@ export async function openBookmarkOverlay(
         <div class="ht-bookmark-body">
           <div class="ht-bookmark-input-wrap ht-ui-input-wrap">
             <span class="ht-bookmark-prompt ht-ui-input-prompt">&gt;</span>
-            <input type="text" class="ht-bookmark-input ht-ui-input-field" placeholder="Filter bookmarks..." />
+            <input type="text" class="ht-bookmark-input ht-ui-input-field" placeholder="Search Bookmarks . . ." />
           </div>
           <div class="ht-bm-filter-pills"></div>
           <div class="ht-bookmark-columns">
@@ -118,16 +126,17 @@ export async function openBookmarkOverlay(
           </div>
           <div class="ht-footer">
             <div class="ht-footer-row">
-              <span>j/k (vim) ${upKey}/${downKey} nav</span>
-              <span>${switchKey} list</span>
-              <span>${acceptKey} open</span>
-              <span>${closeKey} close</span>
+              <span>${getNavHint()}</span>
+              ${config.navigationMode === "vim" ? "<span>Ctrl+D/U half-page</span>" : ""}
             </div>
             <div class="ht-footer-row">
-              <span>T focus tree</span>
-              <span>C clear</span>
+              <span>${getListPaneHint()}</span>
+              <span>${config.navigationMode === "vim" ? "L focus tree" : "T focus tree"}</span>
+              <span>Shift+C clear-search</span>
               <span>D del</span>
               <span>M move</span>
+              <span>${acceptKey} open</span>
+              <span>${getCloseHint()}</span>
             </div>
           </div>
         </div>
@@ -202,6 +211,7 @@ export async function openBookmarkOverlay(
     function close(): void {
       panelOpen = false;
       document.removeEventListener("keydown", keyHandler, true);
+      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
       if (detailRafId !== null) cancelAnimationFrame(detailRafId);
       if (scrollRafId !== null) cancelAnimationFrame(scrollRafId);
       if (inputRafId !== null) cancelAnimationFrame(inputRafId);
@@ -413,7 +423,7 @@ export async function openBookmarkOverlay(
       item.dataset.index = String(resultIdx);
 
       // Info
-      const info = item.firstElementChild as HTMLElement;
+      const info = item.children[0] as HTMLElement;
       const titleEl = info.firstElementChild as HTMLElement;
       titleEl.innerHTML = highlightMatch(entry.title || "Untitled");
 
@@ -923,17 +933,7 @@ export async function openBookmarkOverlay(
       const oldIdx = treeCursorIndex;
       treeCursorIndex = Math.max(0, Math.min(treeVisibleItems.length - 1, treeCursorIndex + delta));
       if (treeCursorIndex === oldIdx) return;
-
-      const tree = detailContent.querySelector('.ht-bm-tree') as HTMLElement;
-      if (!tree) return;
-
-      const oldEl = tree.querySelector(`[data-tree-idx="${oldIdx}"]`) as HTMLElement;
-      const newEl = tree.querySelector(`[data-tree-idx="${treeCursorIndex}"]`) as HTMLElement;
-      if (oldEl) oldEl.classList.remove('tree-cursor');
-      if (newEl) {
-        newEl.classList.add('tree-cursor');
-        newEl.scrollIntoView({ block: 'nearest' });
-      }
+      renderTreeView();
     }
 
     function toggleTreeCollapse(): void {
@@ -958,7 +958,7 @@ export async function openBookmarkOverlay(
           Open <span class="ht-bm-confirm-title">&ldquo;${escapeHtml(pendingTreeOpenEntry.title || "Untitled")}&rdquo;</span>?
           ${path ? `<div class="ht-bm-confirm-path">${escapeHtml(path)}</div>` : ""}
         </div>
-        <div class="ht-bm-confirm-hint">y / Enter confirm &middot; n / Esc cancel</div>
+        <div class="ht-bm-confirm-hint">y confirm &middot; n cancel</div>
       </div>`;
     }
 
@@ -974,7 +974,7 @@ export async function openBookmarkOverlay(
           <span class="ht-bm-confirm-title">${escapeHtml(pendingTreeDeleteEntry.title || "Untitled")}</span>
           ${path ? `<div class="ht-bm-confirm-path">${escapeHtml(path)}</div>` : ""}
         </div>
-        <div class="ht-bm-confirm-hint">y / Enter confirm &middot; n / Esc cancel</div>
+        <div class="ht-bm-confirm-hint">y confirm &middot; n cancel</div>
       </div>`;
     }
 
@@ -1033,7 +1033,7 @@ export async function openBookmarkOverlay(
           <span class="ht-bm-confirm-title">${escapeHtml(pendingTreeDeleteFolder.title)}</span>
           <div class="ht-bm-confirm-path">${childCount} bookmark${childCount !== 1 ? "s" : ""} inside</div>
         </div>
-        <div class="ht-bm-confirm-hint">y / Enter confirm &middot; n / Esc cancel</div>
+        <div class="ht-bm-confirm-hint">y confirm &middot; n cancel</div>
       </div>`;
     }
 
@@ -1076,7 +1076,7 @@ export async function openBookmarkOverlay(
           <span class="ht-bm-confirm-title">${escapeHtml(pendingDeleteEntry.title || "Untitled")}</span>
           ${path ? `<div class="ht-bm-confirm-path">${escapeHtml(path)}</div>` : ""}
         </div>
-        <div class="ht-bm-confirm-hint">y / Enter confirm &middot; n / Esc cancel</div>
+        <div class="ht-bm-confirm-hint">y confirm &middot; n cancel</div>
       </div>`;
     }
 
@@ -1115,57 +1115,134 @@ export async function openBookmarkOverlay(
           <span style="font-weight:700">\u2192</span>
           <span class="ht-bm-confirm-to">${escapeHtml(toPath)}</span>
         </div>
-        <div class="ht-bm-confirm-hint">y / Enter confirm &middot; n / Esc cancel</div>
+        <div class="ht-bm-confirm-hint">y confirm &middot; n cancel</div>
       </div>`;
     }
 
     // --- Dynamic footer ---
     function updateFooter(): void {
+      const navHint = getNavHint();
+      const listPaneHint = getListPaneHint();
+      const treeBackHint = getTreeBackHint();
+      const moveBackHint = getMoveBackHint();
+      const closeHint = getCloseHint();
+      const cancelHint = "N cancel";
+      const vimHalfPageHint = config.navigationMode === "vim" ? "<span>Ctrl+D/U half-page</span>" : "";
       // Show x button in detail header when in a sub-mode
-      detailHeaderClose.style.display = detailMode === "tree" ? "none" : "block";
+      detailHeaderClose.style.display = detailMode === "move" || detailMode === "confirmDelete" || detailMode === "confirmMove"
+        ? "block"
+        : "none";
       // Highlight tree pane when focused, dim results pane (treeNav mode)
       detailPane.classList.toggle("focused", detailMode === "treeNav");
       resultsPane.classList.toggle("dimmed", detailMode === "treeNav");
 
       if (detailMode === "confirmDelete" || detailMode === "confirmMove") {
         footerEl.innerHTML = `<div class="ht-footer-row">
-          <span>Y / ${acceptKey} confirm</span>
-          <span>N / ${closeKey} cancel</span>
+          <span>Y confirm</span>
+          <span>${cancelHint}</span>
         </div>`;
       } else if (detailMode === "move") {
         footerEl.innerHTML = `<div class="ht-footer-row">
-          <span>j/k (vim) ${upKey}/${downKey} nav</span>
-          <span>${acceptKey} confirm</span>
-          <span>${closeKey} / M back</span>
+          <span>${navHint}</span>
+          <span>Y confirm</span>
+          <span>${moveBackHint}</span>
         </div>`;
       } else if (detailMode === "treeNav") {
         if (pendingTreeOpenEntry || pendingTreeDeleteEntry || pendingTreeDeleteFolder) {
           footerEl.innerHTML = `<div class="ht-footer-row">
-            <span>Y / ${acceptKey} confirm</span>
-            <span>N / ${closeKey} cancel</span>
+            <span>Y confirm</span>
+            <span>${cancelHint}</span>
           </div>`;
         } else {
           footerEl.innerHTML = `<div class="ht-footer-row">
-            <span>j/k (vim) ${upKey}/${downKey} nav</span>
+            <span>${navHint}</span>
+            ${vimHalfPageHint}
+          </div>
+          <div class="ht-footer-row">
+            <span>F search</span>
+            <span>${treeBackHint}</span>
+            <span>Shift+C clear-search</span>
             <span>D del</span>
             <span>${acceptKey} fold/open</span>
-            <span>${closeKey} / T back</span>
+            <span>${closeHint}</span>
           </div>`;
         }
       } else {
         footerEl.innerHTML = `<div class="ht-footer-row">
-          <span>j/k (vim) ${upKey}/${downKey} nav</span>
-          <span>${switchKey} list</span>
-          <span>${acceptKey} open</span>
-          <span>${closeKey} close</span>
+          <span>${navHint}</span>
+          ${vimHalfPageHint}
         </div>
         <div class="ht-footer-row">
-          <span>T focus tree</span>
-          <span>C clear</span>
+          <span>${listPaneHint}</span>
+          <span>${config.navigationMode === "vim" ? "L focus tree" : "T focus tree"}</span>
+          <span>Shift+C clear-search</span>
           <span>D del</span>
           <span>M move</span>
+          <span>${acceptKey} open</span>
+          <span>${closeHint}</span>
         </div>`;
       }
+    }
+
+    function onVimModeChanged(): void {
+      updateFooter();
+    }
+
+    function getResultsHalfPageStep(): number {
+      const rows = Math.max(1, Math.floor(resultsPane.clientHeight / ITEM_HEIGHT));
+      return Math.max(1, Math.floor(rows / 2));
+    }
+
+    function getTreeHalfPageStep(): number {
+      const rowHeight = 22;
+      const rows = Math.max(1, Math.floor(detailContent.clientHeight / rowHeight));
+      return Math.max(1, Math.floor(rows / 2));
+    }
+
+    function focusResultsPane(): void {
+      if (activeItemEl) {
+        activeItemEl.focus();
+      } else {
+        const first = resultsList.querySelector(".ht-bm-item") as HTMLElement | null;
+        if (first) first.focus();
+      }
+      setFocusedPane("results");
+    }
+
+    function focusInputPane(): void {
+      input.focus();
+      setFocusedPane("input");
+    }
+
+    function clearBookmarkSearch(): void {
+      input.value = "";
+      activeFilters = [];
+      currentQuery = "";
+      updateTitle();
+      updateFilterPills();
+      applyFilter();
+      renderResults();
+      scheduleDetailUpdate();
+    }
+
+    function enterTreeNavFromActive(): void {
+      if (flatFolderList.length === 0) return;
+      detailMode = "treeNav";
+      treeCursorIndex = 0;
+      renderTreeView();
+      // Set initial cursor to the active entry's position in the tree.
+      const entry = filtered[activeIndex];
+      if (entry) {
+        const matchIdx = treeVisibleItems.findIndex(
+          (item) => item.type === "entry" && item.id === entry.id,
+        );
+        if (matchIdx >= 0) {
+          treeCursorIndex = matchIdx;
+          renderTreeView();
+        }
+      }
+      updateFooter();
+      focusResultsPane();
     }
 
     // --- Keyboard handler ---
@@ -1175,9 +1252,35 @@ export async function openBookmarkOverlay(
         return;
       }
 
+      const inputFocused = focusedPane === "input";
+      const vimNav = config.navigationMode === "vim";
+
+      if (
+        event.key === "C"
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+        && detailMode !== "move"
+        && detailMode !== "confirmDelete"
+        && detailMode !== "confirmMove"
+        && !pendingTreeOpenEntry
+        && !pendingTreeDeleteEntry
+        && !pendingTreeDeleteFolder
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        clearBookmarkSearch();
+        if (detailMode === "treeNav") {
+          scheduleDetailUpdate();
+        } else {
+          focusInputPane();
+        }
+        return;
+      }
+
       // --- Move mode: intercept all keys for folder picker ---
       if (detailMode === "move") {
-        if (event.key === "Escape" || event.key.toLowerCase() === "m") {
+        if (event.key.toLowerCase() === "n") {
           event.preventDefault();
           event.stopPropagation();
           detailMode = "tree";
@@ -1185,7 +1288,7 @@ export async function openBookmarkOverlay(
           updateFooter();
           return;
         }
-        if (event.key === "Enter") {
+        if (event.key.toLowerCase() === "y") {
           event.preventDefault();
           event.stopPropagation();
           const entry = filtered[activeIndex];
@@ -1220,7 +1323,7 @@ export async function openBookmarkOverlay(
       if (detailMode === "treeNav") {
         // Tree open confirmation sub-state
         if (pendingTreeOpenEntry) {
-          if (event.key === "y" || event.key === "Enter") {
+          if (event.key.toLowerCase() === "y") {
             event.preventDefault();
             event.stopPropagation();
             const entry = pendingTreeOpenEntry;
@@ -1228,7 +1331,7 @@ export async function openBookmarkOverlay(
             openBookmark(entry);
             return;
           }
-          if (event.key === "n" || event.key === "Escape") {
+          if (event.key.toLowerCase() === "n") {
             event.preventDefault();
             event.stopPropagation();
             pendingTreeOpenEntry = null;
@@ -1242,14 +1345,14 @@ export async function openBookmarkOverlay(
 
         // Tree delete confirmation sub-state
         if (pendingTreeDeleteEntry) {
-          if (event.key === "y" || event.key === "Enter") {
+          if (event.key.toLowerCase() === "y") {
             event.preventDefault();
             event.stopPropagation();
             removeTreeBookmark();
             updateFooter();
             return;
           }
-          if (event.key === "n" || event.key === "Escape") {
+          if (event.key.toLowerCase() === "n") {
             event.preventDefault();
             event.stopPropagation();
             pendingTreeDeleteEntry = null;
@@ -1263,14 +1366,14 @@ export async function openBookmarkOverlay(
 
         // Tree folder delete confirmation sub-state
         if (pendingTreeDeleteFolder) {
-          if (event.key === "y" || event.key === "Enter") {
+          if (event.key.toLowerCase() === "y") {
             event.preventDefault();
             event.stopPropagation();
             removeTreeFolder();
             updateFooter();
             return;
           }
-          if (event.key === "n" || event.key === "Escape") {
+          if (event.key.toLowerCase() === "n") {
             event.preventDefault();
             event.stopPropagation();
             pendingTreeDeleteFolder = null;
@@ -1282,14 +1385,61 @@ export async function openBookmarkOverlay(
           return;
         }
 
-        if (event.key === "Escape" || event.key.toLowerCase() === "t") {
+        if (matchesAction(event, config, "search", "close")) {
+          event.preventDefault();
+          event.stopPropagation();
+          close();
+          return;
+        }
+
+        if (
+          vimNav
+          && event.ctrlKey
+          && !event.altKey
+          && !event.metaKey
+        ) {
+          const lowerKey = event.key.toLowerCase();
+          if (lowerKey === "d" || lowerKey === "u") {
+            event.preventDefault();
+            event.stopPropagation();
+            const delta = getTreeHalfPageStep() * (lowerKey === "d" ? 1 : -1);
+            moveTreeCursor(delta);
+            return;
+          }
+        }
+
+        if (
+          event.key.toLowerCase() === "f"
+          && !event.ctrlKey
+          && !event.altKey
+          && !event.metaKey
+          && !event.shiftKey
+        ) {
           event.preventDefault();
           event.stopPropagation();
           detailMode = "tree";
           scheduleDetailUpdate();
           updateFooter();
+          focusInputPane();
           return;
         }
+
+        if (
+          vimNav
+          && !event.ctrlKey
+          && !event.altKey
+          && !event.metaKey
+          && event.key === "h"
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          detailMode = "tree";
+          scheduleDetailUpdate();
+          updateFooter();
+          focusResultsPane();
+          return;
+        }
+
         // Delete in tree: d (entries and folders)
         if (event.key.toLowerCase() === "d" && !event.ctrlKey && !event.altKey && !event.metaKey) {
           event.preventDefault();
@@ -1329,14 +1479,13 @@ export async function openBookmarkOverlay(
           return;
         }
         // j/k/arrows navigate the tree cursor
-        const vim = config.navigationMode === "vim";
-        if (event.key === "ArrowDown" || (vim && event.key.toLowerCase() === "j")) {
+        if (event.key === "ArrowDown" || (vimNav && event.key.toLowerCase() === "j")) {
           event.preventDefault();
           event.stopPropagation();
           moveTreeCursor(1);
           return;
         }
-        if (event.key === "ArrowUp" || (vim && event.key.toLowerCase() === "k")) {
+        if (event.key === "ArrowUp" || (vimNav && event.key.toLowerCase() === "k")) {
           event.preventDefault();
           event.stopPropagation();
           moveTreeCursor(-1);
@@ -1346,9 +1495,9 @@ export async function openBookmarkOverlay(
         return;
       }
 
-      // --- Confirm delete mode: y/Enter to confirm, n/Esc to cancel ---
+      // --- Confirm delete mode: y to confirm, n to cancel ---
       if (detailMode === "confirmDelete") {
-        if (event.key === "y" || event.key === "Enter") {
+        if (event.key.toLowerCase() === "y") {
           event.preventDefault();
           event.stopPropagation();
           pendingDeleteEntry = null;
@@ -1357,7 +1506,7 @@ export async function openBookmarkOverlay(
           updateFooter();
           return;
         }
-        if (event.key === "n" || event.key === "Escape") {
+        if (event.key.toLowerCase() === "n") {
           event.preventDefault();
           event.stopPropagation();
           pendingDeleteEntry = null;
@@ -1370,9 +1519,9 @@ export async function openBookmarkOverlay(
         return;
       }
 
-      // --- Confirm move mode: y/Enter to confirm, n/Esc to cancel ---
+      // --- Confirm move mode: y to confirm, n to cancel ---
       if (detailMode === "confirmMove") {
-        if (event.key === "y" || event.key === "Enter") {
+        if (event.key.toLowerCase() === "y") {
           event.preventDefault();
           event.stopPropagation();
           pendingMoveEntry = null;
@@ -1382,7 +1531,7 @@ export async function openBookmarkOverlay(
           updateFooter();
           return;
         }
-        if (event.key === "n" || event.key === "Escape") {
+        if (event.key.toLowerCase() === "n") {
           event.preventDefault();
           event.stopPropagation();
           pendingMoveEntry = null;
@@ -1396,12 +1545,59 @@ export async function openBookmarkOverlay(
         return;
       }
 
-      // Escape: close overlay
       if (matchesAction(event, config, "search", "close")) {
         event.preventDefault();
         event.stopPropagation();
         close();
         return;
+      }
+
+      if (
+        vimNav
+        && !inputFocused
+        && event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+      ) {
+        const lowerKey = event.key.toLowerCase();
+        if (lowerKey === "d" || lowerKey === "u") {
+          event.preventDefault();
+          event.stopPropagation();
+          const delta = getResultsHalfPageStep() * (lowerKey === "d" ? 1 : -1);
+          if (filtered.length > 0) {
+            setActiveIndex(Math.max(0, Math.min(filtered.length - 1, activeIndex + delta)));
+          }
+          return;
+        }
+      }
+
+      if (
+        event.key.toLowerCase() === "f"
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+        && !event.shiftKey
+        && !inputFocused
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        focusInputPane();
+        return;
+      }
+
+      if (
+        vimNav
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+        && filtered.length > 0
+      ) {
+        if (!inputFocused && event.key === "l") {
+          event.preventDefault();
+          event.stopPropagation();
+          enterTreeNavFromActive();
+          return;
+        }
       }
 
       // Backspace on empty input removes the last active filter pill
@@ -1433,22 +1629,15 @@ export async function openBookmarkOverlay(
         event.preventDefault();
         event.stopPropagation();
         if (filtered.length === 0) return;
-        if (focusedPane === "input") {
-          if (activeItemEl) {
-            activeItemEl.focus();
-          } else {
-            const first = resultsList.querySelector(".ht-bm-item") as HTMLElement;
-            if (first) first.focus();
-          }
-          setFocusedPane("results");
-        } else {
-          input.focus();
-          setFocusedPane("input");
+        if (inputFocused) {
+          focusResultsPane();
+          return;
+        }
+        if (!vimNav && !event.shiftKey) {
+          enterTreeNavFromActive();
         }
         return;
       }
-
-      const inputFocused = focusedPane === "input";
 
       // Remove bookmark: d/D (case-insensitive, only when list is focused)
       if (event.key.toLowerCase() === "d" && !event.ctrlKey && !event.altKey && !event.metaKey && !inputFocused) {
@@ -1477,40 +1666,17 @@ export async function openBookmarkOverlay(
       }
 
       // Toggle tree nav: t/T (case-insensitive, only when list is focused)
-      if (event.key.toLowerCase() === "t" && !event.ctrlKey && !event.altKey && !event.metaKey && !inputFocused) {
+      if (
+        !vimNav
+        && event.key.toLowerCase() === "t"
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+        && !inputFocused
+      ) {
         event.preventDefault();
         event.stopPropagation();
-        if (flatFolderList.length === 0) return;
-        detailMode = "treeNav";
-        treeCursorIndex = 0;
-        renderTreeView();
-        // Set initial cursor to the active entry's position in the tree
-        const entry = filtered[activeIndex];
-        if (entry) {
-          const matchIdx = treeVisibleItems.findIndex(
-            (item) => item.type === "entry" && item.id === entry.id,
-          );
-          if (matchIdx >= 0) {
-            treeCursorIndex = matchIdx;
-            renderTreeView();
-          }
-        }
-        updateFooter();
-        return;
-      }
-
-      // Clear search: c/C (case-insensitive, only when list is focused)
-      if (event.key.toLowerCase() === "c" && !event.ctrlKey && !event.altKey && !event.metaKey && !inputFocused) {
-        event.preventDefault();
-        event.stopPropagation();
-        input.value = "";
-        activeFilters = [];
-        currentQuery = "";
-        updateTitle();
-        updateFilterPills();
-        applyFilter();
-        renderResults();
-        scheduleDetailUpdate();
+        enterTreeNavFromActive();
         return;
       }
 
@@ -1605,19 +1771,9 @@ export async function openBookmarkOverlay(
         treeCursorIndex = idx;
         toggleTreeCollapse();
       } else if (detailMode === "treeNav") {
-        // Move cursor to clicked entry (only in treeNav)
-        const oldIdx = treeCursorIndex;
+        // Move cursor to clicked entry (only in treeNav).
         treeCursorIndex = idx;
-        const tree = detailContent.querySelector('.ht-bm-tree') as HTMLElement;
-        if (tree) {
-          const oldEl = tree.querySelector(`[data-tree-idx="${oldIdx}"]`) as HTMLElement;
-          const newEl = tree.querySelector(`[data-tree-idx="${idx}"]`) as HTMLElement;
-          if (oldEl) oldEl.classList.remove('tree-cursor');
-          if (newEl) {
-            newEl.classList.add('tree-cursor');
-            newEl.scrollIntoView({ block: 'nearest' });
-          }
-        }
+        renderTreeView();
       }
     });
 
@@ -1654,6 +1810,7 @@ export async function openBookmarkOverlay(
 
     // --- Initial load ---
     document.addEventListener("keydown", keyHandler, true);
+    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
     registerPanelCleanup(close);
     renderResults();
     input.focus();

@@ -28,6 +28,10 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
   const h = config.bindings.tabManager;
   const s = config.bindings.search;
   const k = (b: KeyBinding) => keyToDisplay(b.key);
+  const paneSwitchHint = "Tab list F search";
+  const treeFocusHint = "l (tree) / h (results)";
+  const closeHint = k(s.close);
+  const escHint = "Esc close/back";
 
   return [
     {
@@ -41,9 +45,9 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
       ],
     },
     {
-      title: "Vim Mode (optional)",
+      title: "Vim Mode",
       items: [
-        { label: "Toggle vim mode", key: k(g.toggleVim) },
+        { label: "Vim mode", key: "always on" },
         { label: "Adds j / k for up / down", key: "in all panels" },
       ],
     },
@@ -51,9 +55,11 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
       title: "Inside Any Panel",
       items: [
         { label: "Navigate up / down", key: `${k(s.moveUp)} / ${k(s.moveDown)}` },
-        { label: "Switch input and results", key: `${k(s.switchPane)} / Shift+${k(s.switchPane)}` },
+        { label: "Half-page jump (list-focused)", key: "Ctrl+D / Ctrl+U" },
+        { label: "Focus search/list", key: paneSwitchHint },
         { label: "Open / jump to selection", key: k(s.accept) },
-        { label: "Close panel", key: k(s.close) },
+        { label: "Close panel", key: closeHint },
+        { label: "Esc behavior", key: escHint },
         { label: "Click item to select or open", key: "mouse" },
         { label: "Scroll wheel to navigate", key: "mouse" },
       ],
@@ -70,10 +76,13 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
         { label: "Save session", key: k(h.saveSession).toLowerCase() },
         { label: "Load session", key: k(h.loadSession).toLowerCase() },
         { label: "Save mode preview cycle", key: "Tab / Shift+Tab" },
-        { label: "Session list focus toggle", key: "Tab / Shift+Tab" },
-        { label: "Session filter focus", key: "/" },
+        { label: "Session list focus list", key: "Tab" },
+        { label: "Session search focus", key: "f" },
+        { label: "Session clear-search", key: "Shift+C" },
+        { label: "Session list half-page jump", key: "Ctrl+D / Ctrl+U" },
         { label: "Start load confirmation", key: k(h.jump) },
-        { label: "Session load confirm / cancel", key: "Y or Enter / N or Esc" },
+        { label: "Load plan symbols", key: "NEW (+) · DELETED (-) · REPLACED (~) · UNCHANGED (=)" },
+        { label: "Session load confirm / cancel", key: "Y / N" },
         { label: "Rename session (in session list)", key: "r" },
         { label: "Overwrite session (in session list)", key: "o" },
       ],
@@ -82,22 +91,35 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
       title: "Bookmarks Panel",
       items: [
         { label: "Add bookmark", key: k(g.addBookmark) },
-        { label: "Focus tree", key: "t" },
-        { label: "Clear search", key: "c" },
+        { label: "Focus tree", key: treeFocusHint },
+        { label: "Clear-search (any pane)", key: "Shift+C" },
         { label: "Del bookmark", key: "d" },
         { label: "Move to folder", key: "m" },
+        { label: "Move confirm / cancel", key: "Y / N" },
+      ],
+    },
+    {
+      title: "Add Bookmark Overlay",
+      items: [
+        { label: "Navigate list", key: "j/k or ↑/↓" },
+        { label: "Half-page jump", key: "Ctrl+D / Ctrl+U" },
+        { label: "Select type/destination", key: "Enter" },
+        { label: "Name step continue", key: "Enter" },
+        { label: "Confirm summary path", key: "Destination path > {path}" },
+        { label: "Final confirm / cancel", key: "Y / N" },
+        { label: "Back / cancel", key: "Esc" },
       ],
     },
     {
       title: "Search Current Page",
       items: [
-        { label: "Clear search", key: "c" },
+        { label: "Clear-search", key: "Shift+C" },
       ],
     },
     {
       title: "Search Open Tabs",
       items: [
-        { label: "Clear search", key: "c" },
+        { label: "Clear-search", key: "Shift+C" },
       ],
     },
     {
@@ -155,11 +177,24 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
     // Footer
     const footer = document.createElement("div");
     footer.className = "ht-footer";
-    footer.innerHTML = `<div class="ht-footer-row">
-      <span>j/k (vim) ↑/↓ scroll</span>
-      <span>wheel scroll</span>
-      <span>${closeKey} close</span>
-    </div>`;
+    function renderFooter(): void {
+      const scrollHint = config.navigationMode === "vim"
+        ? "j/k scroll · \u2191/\u2193 scroll"
+        : "\u2191/\u2193 scroll";
+      footer.innerHTML = `<div class="ht-footer-row">
+        <span>${scrollHint}</span>
+        <span>wheel scroll</span>
+      </div>
+      <div class="ht-footer-row">
+        <span>${closeKey} close</span>
+      </div>`;
+    }
+
+    function onVimModeChanged(): void {
+      renderFooter();
+    }
+
+    renderFooter();
     panel.appendChild(footer);
 
     // --- Render sections ---
@@ -211,6 +246,7 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
 
     function close(): void {
       document.removeEventListener("keydown", keyHandler, true);
+      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
       removePanelHost();
     }
 
@@ -220,6 +256,7 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
         return;
       }
 
+      const vimNav = config.navigationMode === "vim";
       if (matchesAction(event, config, "search", "close")) {
         event.preventDefault();
         event.stopPropagation();
@@ -254,6 +291,7 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
     backdrop.addEventListener("mousedown", (event) => event.preventDefault());
     titlebar.querySelector(".ht-dot-close")!.addEventListener("click", close);
     document.addEventListener("keydown", keyHandler, true);
+    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
     registerPanelCleanup(close);
     host.focus();
   } catch (err) {

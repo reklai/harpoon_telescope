@@ -1,4 +1,4 @@
-// Options page: keybinding editor with collision detection and navigation mode toggle.
+// Options page: keybinding editor with collision detection.
 
 import {
   loadKeybindings,
@@ -28,24 +28,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const resetAllBtn = document.getElementById("resetAllBtn")!;
   const statusBar = document.getElementById("statusBar")!;
 
-  // Navigation mode radio buttons
-  const navRadios = document.querySelectorAll<HTMLInputElement>(
-    'input[name="navMode"]',
-  );
-  navRadios.forEach((radio) => {
-    if (radio.value === config.navigationMode) {
-      radio.checked = true;
-    }
-    radio.addEventListener("change", async () => {
-      config.navigationMode = radio.value as "basic" | "vim";
-      await saveKeybindings(config);
-      showStatus(
-        `Navigation mode: ${radio.value === "vim" ? "Vim-enhanced" : "Basic"}`,
-        "success",
-      );
-    });
-  });
-
   // Render all keybinding rows grouped by scope
   function renderBindings(): void {
     container.innerHTML = "";
@@ -59,6 +41,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       container.appendChild(header);
 
       for (const [action, binding] of Object.entries(actions)) {
+        if (scope === "global" && action === "toggleVim") continue;
         const label = ACTION_LABELS[scope]?.[action] || action;
         const isModified = binding.key !== binding.default;
 
@@ -180,13 +163,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderBindings();
   }
 
-  // Reset all bindings and navigation mode to defaults
+  // Reset all bindings to defaults
   resetAllBtn.addEventListener("click", async () => {
     config = JSON.parse(JSON.stringify(DEFAULT_KEYBINDINGS));
     await saveKeybindings(config);
-    navRadios.forEach((radio) => {
-      radio.checked = radio.value === config.navigationMode;
-    });
     showStatus("All keybindings reset to defaults.", "success");
     renderBindings();
   });

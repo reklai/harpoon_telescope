@@ -2,7 +2,7 @@
 // Imported by contentScript.ts as the single bootstrap for all content-side logic.
 
 import browser from "webextension-polyfill";
-import { DEFAULT_KEYBINDINGS, matchesAction, saveKeybindings } from "../shared/keybindings";
+import { DEFAULT_KEYBINDINGS, matchesAction } from "../shared/keybindings";
 import { grepPage, getPageContent } from "../searchCurrentPage/grep";
 import { scrollToText } from "../shared/scroll";
 import { showFeedback } from "../shared/feedback";
@@ -41,6 +41,7 @@ export function initApp(): void {
     configLoadPromise = browser.runtime.sendMessage({ type: "GET_KEYBINDINGS" })
       .then((loadedConfig) => {
         cachedConfig = loadedConfig as KeybindingsConfig;
+        cachedConfig.navigationMode = "vim";
         return cachedConfig;
       })
       .finally(() => {
@@ -60,8 +61,14 @@ export function initApp(): void {
 
   browser.storage.onChanged.addListener((changes) => {
     if (changes.keybindings) {
-      cachedConfig = null;
-      requestConfigLoad().catch(() => {});
+      const nextConfig = changes.keybindings.newValue as KeybindingsConfig | undefined;
+      if (nextConfig && typeof nextConfig === "object") {
+        nextConfig.navigationMode = "vim";
+        cachedConfig = nextConfig;
+      } else {
+        cachedConfig = null;
+        requestConfigLoad().catch(() => {});
+      }
     }
   });
 
@@ -203,25 +210,6 @@ export function initApp(): void {
       return;
     }
     const config = cachedConfig;
-
-    // toggleVim works regardless of whether a panel is open.
-    // stopImmediatePropagation prevents overlay handlers from double-firing.
-    if (matchesAction(event, config, "global", "toggleVim")) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      config.navigationMode = config.navigationMode === "vim" ? "basic" : "vim";
-      saveKeybindings(config); // fire-and-forget persistence
-      showFeedback(config.navigationMode === "vim" ? "Vim motions ON" : "Vim motions OFF");
-      const panelHost = document.getElementById("ht-panel-host");
-      if (panelHost?.shadowRoot) {
-        const badge = panelHost.shadowRoot.querySelector(".ht-vim-badge");
-        if (badge) {
-          badge.classList.toggle("on", config.navigationMode === "vim");
-          badge.classList.toggle("off", config.navigationMode !== "vim");
-        }
-      }
-      return;
-    }
 
     void tryHandleGlobalActions(event, config);
   }

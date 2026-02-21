@@ -108,7 +108,7 @@ export async function openSearchCurrentPage(
         <div class="ht-search-page-body">
           <div class="ht-search-page-input-wrap ht-ui-input-wrap">
             <span class="ht-prompt ht-ui-input-prompt">&gt;</span>
-            <input type="text" class="ht-search-page-input ht-ui-input-field" placeholder="Search..." />
+            <input type="text" class="ht-search-page-input ht-ui-input-field" placeholder="Search Current Page . . ." />
           </div>
           <div class="ht-filter-pills"></div>
           <div class="ht-search-page-columns">
@@ -134,17 +134,34 @@ export async function openSearchCurrentPage(
     const upKey = keyToDisplay(config.bindings.search.moveUp.key);
     const downKey = keyToDisplay(config.bindings.search.moveDown.key);
     const acceptKey = keyToDisplay(config.bindings.search.accept.key);
-    const switchKey = keyToDisplay(config.bindings.search.switchPane.key);
     const closeKey = keyToDisplay(config.bindings.search.close.key);
-    footer.innerHTML = `
-      <div class="ht-footer-row">
-        <span>j/k (vim) ${upKey}/${downKey} nav</span>
-        <span>${switchKey} list</span>
-        <span>C clear</span>
-        <span>${acceptKey} jump</span>
-        <span>${closeKey} close</span>
-      </div>
-    `;
+    function renderFooter(): void {
+      const navHint = config.navigationMode === "vim"
+        ? `j/k nav · ${upKey}/${downKey} nav`
+        : `${upKey}/${downKey} nav`;
+      const paneHint = "Tab list F search";
+      const vimHalfPageHint = config.navigationMode === "vim"
+        ? "<span>Ctrl+D/U half-page</span>"
+        : "";
+      footer.innerHTML = `
+        <div class="ht-footer-row">
+          <span>${navHint}</span>
+          ${vimHalfPageHint}
+        </div>
+        <div class="ht-footer-row">
+          <span>${paneHint}</span>
+          <span>Shift+C clear-search</span>
+          <span>${acceptKey} jump</span>
+          <span>${closeKey} close</span>
+        </div>
+      `;
+    }
+
+    function onVimModeChanged(): void {
+      renderFooter();
+    }
+
+    renderFooter();
 
     const input = shadow.querySelector(".ht-search-page-input") as HTMLInputElement;
     const resultsList = shadow.querySelector(".ht-results-list") as HTMLElement;
@@ -190,6 +207,7 @@ export async function openSearchCurrentPage(
       panelOpen = false;
       lastSearchState = { query: input.value };
       document.removeEventListener("keydown", keyHandler, true);
+      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
       if (previewRafId !== null) cancelAnimationFrame(previewRafId);
       if (scrollRafId !== null) cancelAnimationFrame(scrollRafId);
       if (inputRafId !== null) cancelAnimationFrame(inputRafId);
@@ -295,7 +313,7 @@ export async function openSearchCurrentPage(
       item.dataset.index = String(resultIdx);
 
       // Update badge
-      const badge = item.firstElementChild as HTMLElement;
+      const badge = item.children[0] as HTMLElement;
       if (result.tag) {
         const colors = TAG_COLORS[result.tag] || DEFAULT_TAG_COLOR;
         badge.style.background = colors.bg;
@@ -307,7 +325,7 @@ export async function openSearchCurrentPage(
       }
 
       // Update text
-      const span = item.lastElementChild as HTMLElement;
+      const span = item.children[1] as HTMLElement;
       span.innerHTML = highlightMatch(result.text);
 
       // Active state
@@ -655,6 +673,11 @@ export async function openSearchCurrentPage(
       scrollToText(result.text, result.nodeRef);
     }
 
+    function getHalfPageStep(): number {
+      const rows = Math.max(1, Math.floor(resultsPane.clientHeight / ITEM_HEIGHT));
+      return Math.max(1, Math.floor(rows / 2));
+    }
+
     // -- Keyboard handler --
 
     function keyHandler(event: KeyboardEvent): void {
@@ -663,10 +686,64 @@ export async function openSearchCurrentPage(
         return;
       }
 
+      const inputFocused = focusedPane === "input";
+      const vimNav = config.navigationMode === "vim";
+
       if (matchesAction(event, config, "search", "close")) {
         event.preventDefault();
         event.stopPropagation();
         close();
+        return;
+      }
+
+      if (event.key === "C" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        input.value = "";
+        activeFilters = [];
+        currentQuery = "";
+        results = [];
+        activeIndex = 0;
+        updateTitle();
+        updateFilterPills();
+        renderResults();
+        schedulePreviewUpdate();
+        input.focus();
+        setFocusedPane("input");
+        return;
+      }
+
+      if (
+        vimNav
+        && !inputFocused
+        && event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+      ) {
+        const lowerKey = event.key.toLowerCase();
+        if (lowerKey === "d" || lowerKey === "u") {
+          event.preventDefault();
+          event.stopPropagation();
+          const delta = getHalfPageStep() * (lowerKey === "d" ? 1 : -1);
+          if (results.length > 0) {
+            setActiveIndex(Math.max(0, Math.min(results.length - 1, activeIndex + delta)));
+          }
+          return;
+        }
+      }
+
+      if (
+        event.key.toLowerCase() === "f"
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+        && !event.shiftKey
+        && !inputFocused
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        input.focus();
+        setFocusedPane("input");
         return;
       }
 
@@ -693,7 +770,7 @@ export async function openSearchCurrentPage(
       if (matchesAction(event, config, "search", "switchPane")) {
         event.preventDefault();
         event.stopPropagation();
-        if (focusedPane === "input") {
+        if (inputFocused) {
           if (activeItemEl) {
             activeItemEl.focus();
           } else {
@@ -701,29 +778,7 @@ export async function openSearchCurrentPage(
             if (first) first.focus();
           }
           setFocusedPane("results");
-        } else {
-          input.focus();
-          setFocusedPane("input");
         }
-        return;
-      }
-
-      // Clear search: c/C (case-insensitive, only when results pane is focused)
-      if (event.key.toLowerCase() === "c" && !event.ctrlKey && !event.altKey && !event.metaKey
-          && focusedPane === "results") {
-        event.preventDefault();
-        event.stopPropagation();
-        input.value = "";
-        activeFilters = [];
-        currentQuery = "";
-        results = [];
-        activeIndex = 0;
-        updateTitle();
-        updateFilterPills();
-        renderResults();
-        schedulePreviewUpdate();
-        input.focus();
-        setFocusedPane("input");
         return;
       }
 
@@ -759,6 +814,7 @@ export async function openSearchCurrentPage(
     }
 
     document.addEventListener("keydown", keyHandler, true);
+    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
     registerPanelCleanup(close);
 
     // Mouse wheel on results pane: navigate items, block page scroll

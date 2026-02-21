@@ -9,6 +9,7 @@ import {
   removePanelHost,
   registerPanelCleanup,
   getBaseStyles,
+  vimBadgeHtml,
   dismissPanel,
 } from "../shared/panelHost";
 import { escapeHtml, escapeRegex, extractDomain, normalizeUrlForMatch, buildFuzzyPattern } from "../shared/helpers";
@@ -126,16 +127,65 @@ function highlightSessionName(name: string, highlightRegex: RegExp | null): stri
   return escaped.replace(highlightRegex, "<mark>$1</mark>");
 }
 
+function getSessionListHalfPageStep(shadow: ShadowRoot): number {
+  const listEl = shadow.querySelector(".ht-session-list-scroll") as HTMLElement | null;
+  const itemEl = shadow.querySelector(".ht-session-item") as HTMLElement | null;
+  const itemHeight = Math.max(1, itemEl?.offsetHeight ?? 34);
+  const rows = Math.max(1, Math.floor((listEl?.clientHeight ?? (itemHeight * 8)) / itemHeight));
+  return Math.max(1, Math.floor(rows / 2));
+}
+
 function buildLoadSummaryHtml(summary: SessionLoadSummary): string {
-  const replaceText = summary.replaceCount === 0
-    ? "No existing Tab Manager slots will be replaced."
-    : `${summary.replaceCount} Tab Manager ${pluralize(summary.replaceCount, "slot")} will be replaced.`;
-  const reuseText = summary.reuseCount === 0
-    ? "No matching open tabs will be reused."
-    : `${summary.reuseCount} already-open ${pluralize(summary.reuseCount, "tab")} will be reused.`;
-  const openText = summary.openCount === 0
-    ? "No new tabs need to be opened."
-    : `${summary.openCount} new ${pluralize(summary.openCount, "tab")} will be opened.`;
+  const slotDiffs = Array.isArray(summary.slotDiffs)
+    ? [...summary.slotDiffs].sort((a, b) => a.slot - b.slot)
+    : [];
+  const reuseMatches = Array.isArray(summary.reuseMatches) ? summary.reuseMatches : [];
+  const reuseBySlot = new Map<number, SessionLoadReuseMatch>();
+  for (const match of reuseMatches) {
+    reuseBySlot.set(match.slot, match);
+  }
+
+  const removeCount = slotDiffs.filter((row) => row.change === "remove").length;
+  const replaceCount = slotDiffs.filter(
+    (row) => row.change === "replace" && !reuseBySlot.has(row.slot),
+  ).length;
+
+  const renderTabLabel = (title?: string, url?: string): string => {
+    const display = (title || "").trim() || extractDomain(url || "") || "Untitled";
+    return `&ldquo;${escapeHtml(display)}&rdquo;`;
+  };
+
+  const planRowsHtml = slotDiffs.length === 0
+    ? `<div class="ht-session-plan-empty">No slot changes detected.</div>`
+    : slotDiffs.map((row) => {
+      const match = reuseBySlot.get(row.slot);
+      if (match) {
+        return `<div class="ht-session-plan-row ht-session-plan-row-reuse">
+          <span class="ht-session-plan-sign">=</span>
+          <span class="ht-session-plan-slot">${row.slot}</span>
+          <span class="ht-session-plan-text">Session ${renderTabLabel(match.sessionTitle, match.sessionUrl)} \u21C4 Current ${renderTabLabel(match.openTabTitle, match.openTabUrl)}</span>
+        </div>`;
+      }
+      if (row.change === "replace") {
+        return `<div class="ht-session-plan-row ht-session-plan-row-replace">
+          <span class="ht-session-plan-sign">~</span>
+          <span class="ht-session-plan-slot">${row.slot}</span>
+          <span class="ht-session-plan-text">${renderTabLabel(row.currentTitle, row.currentUrl)} \u2192 ${renderTabLabel(row.incomingTitle, row.incomingUrl)}</span>
+        </div>`;
+      }
+      if (row.change === "add") {
+        return `<div class="ht-session-plan-row ht-session-plan-row-add">
+          <span class="ht-session-plan-sign">+</span>
+          <span class="ht-session-plan-slot">${row.slot}</span>
+          <span class="ht-session-plan-text">${renderTabLabel(row.incomingTitle, row.incomingUrl)} (new tab)</span>
+        </div>`;
+      }
+      return `<div class="ht-session-plan-row ht-session-plan-row-remove">
+        <span class="ht-session-plan-sign">-</span>
+        <span class="ht-session-plan-slot">${row.slot}</span>
+        <span class="ht-session-plan-text">${renderTabLabel(row.currentTitle, row.currentUrl)} (slot cleared)</span>
+      </div>`;
+    }).join("");
 
   return `<div class="ht-session-confirm">
       <div class="ht-session-confirm-icon">\u21bb</div>
@@ -143,12 +193,11 @@ function buildLoadSummaryHtml(summary: SessionLoadSummary): string {
         Load <span class="ht-session-confirm-title">&ldquo;${escapeHtml(summary.sessionName)}&rdquo;</span>?
         <div class="ht-session-confirm-path">${summary.totalCount} saved ${pluralize(summary.totalCount, "tab")}</div>
       </div>
-      <div class="ht-session-confirm-details">
-        <div>${replaceText}</div>
-        <div>${reuseText}</div>
-        <div>${openText}</div>
+      <div class="ht-session-plan-totals">
+        NEW <strong>(+)</strong> &middot; DELETED <strong>(-)</strong> &middot; REPLACED <strong>(~)</strong> &middot; UNCHANGED <strong>(=)</strong>
       </div>
-      <div class="ht-session-confirm-hint">y / Enter confirm &middot; n / Esc cancel</div>
+      <div class="ht-session-plan-list">${planRowsHtml}</div>
+      <div class="ht-session-confirm-hint">y confirm &middot; n cancel</div>
     </div>`;
 }
 
@@ -214,6 +263,88 @@ async function confirmLoadSession(ctx: SessionContext): Promise<void> {
   await loadSession(ctx, target);
 }
 
+export type SessionPanelMode = "saveSession" | "sessionList" | "replaceSession";
+
+function buildSaveSessionFooterHtml(config: KeybindingsConfig, saveKey: string, closeKey: string): string {
+  const backHint = config.navigationMode === "vim" ? "Esc back" : `${closeKey} back`;
+  return `<div class="ht-footer-row">
+      <span>Tab ↓ / Shift+Tab ↑</span>
+    </div>
+    <div class="ht-footer-row">
+      <span>${saveKey} save</span>
+      <span>${backHint}</span>
+    </div>`;
+}
+
+function buildSessionListFooterHtml(config: KeybindingsConfig, selectedSessionName?: string): string {
+  if (isLoadConfirmationActive) {
+    return `<div class="ht-footer-row">
+      <span>Y confirm</span>
+      <span>N cancel</span>
+    </div>`;
+  }
+
+  if (isOverwriteConfirmationActive) {
+    return `<div class="ht-footer-row">
+      <span>Y overwrite "${escapeHtml(selectedSessionName || "session")}"</span>
+      <span>N cancel</span>
+    </div>`;
+  }
+
+  const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
+  const moveDownKey = keyToDisplay(config.bindings.tabManager.moveDown.key);
+  const removeKey = keyToDisplay(config.bindings.tabManager.remove.key);
+  const navHint = config.navigationMode === "vim"
+    ? `j/k nav · ${moveUpKey}/${moveDownKey} nav`
+    : `${moveUpKey}/${moveDownKey} nav`;
+  const focusHint = "Tab list F search";
+  const vimHalfPageHint = config.navigationMode === "vim" ? "<span>Ctrl+D/U half-page</span>" : "";
+
+  return `<div class="ht-footer-row">
+      <span>${navHint}</span>
+      ${vimHalfPageHint}
+    </div>
+    <div class="ht-footer-row">
+      <span>${focusHint}</span>
+      <span>Shift+C clear-search</span>
+      <span>R rename</span>
+      <span>O overwrite</span>
+      <span>${removeKey} del</span>
+      <span>Enter load</span>
+      <span>Esc back</span>
+    </div>`;
+}
+
+function buildReplaceSessionFooterHtml(config: KeybindingsConfig): string {
+  return `<div class="ht-footer-row">
+      <span>${config.navigationMode === "vim" ? "j/k nav · ↑/↓ nav" : "↑/↓ nav"}</span>
+    </div>
+    <div class="ht-footer-row">
+      <span>Enter replace</span>
+      <span>Esc back</span>
+    </div>`;
+}
+
+export function refreshSessionViewFooter(ctx: SessionContext, viewMode: SessionPanelMode): void {
+  const footerEl = ctx.shadow.querySelector(".ht-footer") as HTMLElement | null;
+  if (!footerEl) return;
+
+  if (viewMode === "saveSession") {
+    const saveKey = keyToDisplay(ctx.config.bindings.tabManager.jump.key);
+    const closeKey = keyToDisplay(ctx.config.bindings.tabManager.close.key);
+    footerEl.innerHTML = buildSaveSessionFooterHtml(ctx.config, saveKey, closeKey);
+    return;
+  }
+
+  if (viewMode === "sessionList") {
+    const selectedSession = ctx.sessions[ctx.sessionIndex];
+    footerEl.innerHTML = buildSessionListFooterHtml(ctx.config, selectedSession?.name);
+    return;
+  }
+
+  footerEl.innerHTML = buildReplaceSessionFooterHtml(ctx.config);
+}
+
 // -- Save session view --
 
 export async function renderSaveSession(ctx: SessionContext): Promise<void> {
@@ -244,6 +375,7 @@ export async function renderSaveSession(ctx: SessionContext): Promise<void> {
           <button class="ht-dot ht-dot-close" title="Close (Esc)"></button>
         </div>
         <span class="ht-titlebar-text">${saveTitleText}</span>
+        ${vimBadgeHtml(ctx.config)}
       </div>
       <div class="ht-session-body">
         <div class="ht-session-input-wrap ht-ui-input-wrap">
@@ -282,13 +414,7 @@ export async function renderSaveSession(ctx: SessionContext): Promise<void> {
           </div>
         </div>
         <div class="ht-footer">
-          <div class="ht-footer-row">
-            <span>Tab ↓ / Shift+Tab ↑</span>
-          </div>
-          <div class="ht-footer-row">
-            <span>${saveKey} save</span>
-            <span>${closeKey} back</span>
-          </div>
+          ${buildSaveSessionFooterHtml(ctx.config, saveKey, closeKey)}
         </div>
       </div>
     </div>`;
@@ -319,6 +445,20 @@ export async function renderSaveSession(ctx: SessionContext): Promise<void> {
       ctx.render();
     });
   });
+
+  const listScroll = shadow.querySelector(".ht-session-list-scroll") as HTMLElement | null;
+  if (listScroll) {
+    listScroll.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (ctx.sessions.length === 0) return;
+      const delta = event.deltaY > 0 ? 1 : -1;
+      const next = Math.max(0, Math.min(ctx.sessions.length - 1, ctx.sessionIndex + delta));
+      if (next === ctx.sessionIndex) return;
+      ctx.setSessionIndex(next);
+      ctx.render();
+    });
+  }
 
   input.addEventListener("input", () => {
     ctx.setPendingSaveName(input.value);
@@ -354,6 +494,7 @@ export function renderSessionList(ctx: SessionContext): void {
           <button class="ht-dot ht-dot-close" title="Close (Esc)"></button>
         </div>
         <span class="ht-titlebar-text">${titleText}</span>
+        ${vimBadgeHtml(ctx.config)}
       </div>
       <div class="ht-session-body">
         <div class="ht-session-filter-wrap ht-ui-input-wrap">
@@ -361,7 +502,7 @@ export function renderSessionList(ctx: SessionContext): void {
           <input
             type="text"
             class="ht-session-filter-input ht-ui-input-field"
-            placeholder="Filter Sessions . . ."
+            placeholder="Search Sessions . . ."
             value="${escapeHtml(ctx.sessionFilterQuery)}"
             maxlength="40"
           />
@@ -408,51 +549,25 @@ export function renderSessionList(ctx: SessionContext): void {
           </div>
         </div>`;
 
-  const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
-  const moveDownKey = keyToDisplay(config.bindings.tabManager.moveDown.key);
-  const removeKey = keyToDisplay(config.bindings.tabManager.remove.key);
-
-  if (isLoadConfirmationActive) {
-    html += `<div class="ht-footer">
-        <div class="ht-footer-row">
-          <span>Y / Enter confirm</span>
-          <span>N / Esc cancel</span>
-        </div>
-      </div>
+  html += `<div class="ht-footer">
+      ${buildSessionListFooterHtml(config, selectedSession?.name)}
+    </div>
     </div>
     </div>`;
-  } else if (isOverwriteConfirmationActive) {
-    html += `<div class="ht-footer">
-        <div class="ht-footer-row">
-          <span>Y overwrite "${escapeHtml(selectedSession?.name || "session")}"</span>
-          <span>N / Esc cancel</span>
-        </div>
-      </div>
-    </div>
-    </div>`;
-  } else {
-    html += `<div class="ht-footer">
-        <div class="ht-footer-row">
-          <span>j/k (vim) ${moveUpKey}/${moveDownKey} nav</span>
-          <span>R rename</span>
-          <span>O overwrite</span>
-          <span>${removeKey} del</span>
-        </div>
-        <div class="ht-footer-row">
-          <span>Enter load</span>
-          <span>Tab toggle focus</span>
-          <span>Esc back</span>
-        </div>
-      </div>
-    </div>
-    </div>`;
-  }
 
   container.innerHTML = html;
 
   const backdrop = shadow.querySelector(".ht-backdrop") as HTMLElement;
   const closeBtn = shadow.querySelector(".ht-dot-close") as HTMLElement;
   const filterInput = shadow.querySelector(".ht-session-filter-input") as HTMLInputElement;
+  const listPane = shadow.querySelector(".ht-session-list-pane") as HTMLElement | null;
+
+  function setSessionListPaneFocus(target: "filter" | "list"): void {
+    sessionListFocusTarget = target;
+    if (listPane) {
+      listPane.classList.toggle("focused", target === "list");
+    }
+  }
 
   backdrop.addEventListener("click", () => {
     resetSessionTransientState();
@@ -469,7 +584,7 @@ export function renderSessionList(ctx: SessionContext): void {
   });
 
   filterInput.addEventListener("focus", () => {
-    sessionListFocusTarget = "filter";
+    setSessionListPaneFocus("filter");
   });
 
   filterInput.addEventListener("input", () => {
@@ -481,7 +596,7 @@ export function renderSessionList(ctx: SessionContext): void {
       pendingLoadSummary = null;
       pendingLoadSessionName = "";
     }
-    sessionListFocusTarget = "filter";
+    setSessionListPaneFocus("filter");
     ctx.setSessionFilterQuery(nextQuery);
     if (nextVisibleIndices.length > 0) {
       ctx.setSessionIndex(nextVisibleIndices[0]);
@@ -501,7 +616,7 @@ export function renderSessionList(ctx: SessionContext): void {
       if ((event.target as HTMLElement).closest(".ht-session-delete")) return;
       const idx = parseInt((el as HTMLElement).dataset.index!);
       if (Number.isNaN(idx)) return;
-      sessionListFocusTarget = "list";
+      setSessionListPaneFocus("list");
       void beginLoadConfirmation(ctx, idx);
     });
   });
@@ -512,7 +627,7 @@ export function renderSessionList(ctx: SessionContext): void {
       event.stopPropagation();
       const idx = parseInt((el as HTMLElement).dataset.index!);
       if (Number.isNaN(idx)) return;
-      sessionListFocusTarget = "list";
+      setSessionListPaneFocus("list");
       isLoadConfirmationActive = false;
       pendingLoadSummary = null;
       pendingLoadSessionName = "";
@@ -523,6 +638,30 @@ export function renderSessionList(ctx: SessionContext): void {
   const activeEl = shadow.querySelector(".ht-session-item.active");
   if (activeEl) activeEl.scrollIntoView({ block: "nearest" });
 
+  const listScroll = shadow.querySelector(".ht-session-list-scroll") as HTMLElement | null;
+  if (listScroll) {
+    listScroll.addEventListener("focusin", () => {
+      setSessionListPaneFocus("list");
+    });
+  }
+  if (listScroll && !isRenameModeActive && !isOverwriteConfirmationActive && !isLoadConfirmationActive) {
+    listScroll.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const indices = getFilteredSessionIndices(ctx.sessions, ctx.sessionFilterQuery);
+      if (indices.length === 0) return;
+      const currentPos = Math.max(0, indices.indexOf(ctx.sessionIndex));
+      const nextPos = event.deltaY > 0
+        ? Math.min(currentPos + 1, indices.length - 1)
+        : Math.max(currentPos - 1, 0);
+      const nextIndex = indices[nextPos];
+      if (nextIndex === ctx.sessionIndex) return;
+      setSessionListPaneFocus("list");
+      ctx.setSessionIndex(nextIndex);
+      ctx.render();
+    });
+  }
+
   if (
     filterInput
     && !isRenameModeActive
@@ -530,15 +669,17 @@ export function renderSessionList(ctx: SessionContext): void {
     && !isLoadConfirmationActive
   ) {
     if (sessionListFocusTarget === "filter") {
+      setSessionListPaneFocus("filter");
       const end = filterInput.value.length;
       filterInput.focus();
       filterInput.setSelectionRange(end, end);
     } else {
       const activeSessionItem = shadow.querySelector(".ht-session-item.active") as HTMLElement | null;
       if (activeSessionItem) {
+        setSessionListPaneFocus("list");
         activeSessionItem.focus();
       } else {
-        sessionListFocusTarget = "filter";
+        setSessionListPaneFocus("filter");
         const end = filterInput.value.length;
         filterInput.focus();
         filterInput.setSelectionRange(end, end);
@@ -559,6 +700,7 @@ export function renderReplaceSession(ctx: SessionContext): void {
           <button class="ht-dot ht-dot-close" title="Close (Esc)"></button>
         </div>
         <span class="ht-titlebar-text">Replace which session?</span>
+        ${vimBadgeHtml(ctx.config)}
       </div>
       <div class="ht-tab-manager-list">`;
 
@@ -573,11 +715,7 @@ export function renderReplaceSession(ctx: SessionContext): void {
   }
 
   html += `</div><div class="ht-footer">
-    <div class="ht-footer-row">
-      <span>\u2191/\u2193 nav</span>
-       <span>Enter replace</span>
-      <span>Esc back</span>
-    </div>
+    ${buildReplaceSessionFooterHtml(ctx.config)}
   </div></div>`;
 
   container.innerHTML = html;
@@ -604,6 +742,20 @@ export function renderReplaceSession(ctx: SessionContext): void {
       replaceSession(ctx, idx);
     });
   });
+
+  const listEl = shadow.querySelector(".ht-tab-manager-list") as HTMLElement | null;
+  if (listEl) {
+    listEl.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (sessions.length === 0) return;
+      const delta = event.deltaY > 0 ? 1 : -1;
+      const next = Math.max(0, Math.min(sessions.length - 1, ctx.sessionIndex + delta));
+      if (next === ctx.sessionIndex) return;
+      ctx.setSessionIndex(next);
+      ctx.render();
+    });
+  }
 
   const activeEl = shadow.querySelector(".ht-session-item.active");
   if (activeEl) activeEl.scrollIntoView({ block: "nearest" });
@@ -770,6 +922,8 @@ async function validateSessionSave(name: string): Promise<string | null> {
 
 /** Handle keydown events in saveSession view. Returns true if handled. */
 export function handleSaveSessionKey(ctx: SessionContext, event: KeyboardEvent): boolean {
+  const input = ctx.shadow.querySelector(".ht-session-input") as HTMLInputElement | null;
+
   if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
     event.preventDefault();
     event.stopPropagation();
@@ -793,7 +947,6 @@ export function handleSaveSessionKey(ctx: SessionContext, event: KeyboardEvent):
   if (event.key === "Enter") {
     event.preventDefault();
     event.stopPropagation();
-    const input = ctx.shadow.querySelector(".ht-session-input") as HTMLInputElement;
     if (input && !input.value.trim()) {
       const errorEl = ctx.shadow.querySelector(".ht-session-error") as HTMLElement;
       if (errorEl) {
@@ -833,6 +986,10 @@ export function handleSaveSessionKey(ctx: SessionContext, event: KeyboardEvent):
 
 /** Handle keydown events in sessionList view. Returns true if handled. */
 export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent): boolean {
+  const vimNav = ctx.config.navigationMode === "vim";
+  const filterInput = ctx.shadow.querySelector(".ht-session-filter-input") as HTMLInputElement | null;
+  const filterInputFocused = !!filterInput && ctx.shadow.activeElement === filterInput;
+
   // During rename mode, only handle Enter/Escape — let all other keys through to the input
   if (isRenameModeActive) {
     if (event.key === "Escape") {
@@ -880,11 +1037,12 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     return true;
   }
 
-  // During overwrite confirmation, only accept y/n/Escape
+  // During overwrite confirmation, only accept y or n.
   if (isOverwriteConfirmationActive) {
     event.preventDefault();
     event.stopPropagation();
-    if (event.key.toLowerCase() === "y") {
+    const key = event.key.toLowerCase();
+    if (key === "y") {
       const session = ctx.sessions[ctx.sessionIndex];
       isOverwriteConfirmationActive = false;
       (async () => {
@@ -907,8 +1065,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
         }
         ctx.render();
       })();
-    } else {
-      // n, Escape, or any other key cancels
+    } else if (key === "n") {
       isOverwriteConfirmationActive = false;
       ctx.render();
     }
@@ -920,9 +1077,9 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     event.preventDefault();
     event.stopPropagation();
     const key = event.key.toLowerCase();
-    if (event.key === "Enter" || key === "y") {
+    if (key === "y") {
       void confirmLoadSession(ctx);
-    } else if (event.key === "Escape" || key === "n") {
+    } else if (key === "n") {
       isLoadConfirmationActive = false;
       pendingLoadSummary = null;
       pendingLoadSessionName = "";
@@ -931,8 +1088,29 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     return true;
   }
 
-  const filterInput = ctx.shadow.querySelector(".ht-session-filter-input") as HTMLInputElement | null;
-  const filterInputFocused = !!filterInput && ctx.shadow.activeElement === filterInput;
+  if (
+    event.key === "C"
+    && !event.ctrlKey
+    && !event.altKey
+    && !event.metaKey
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    sessionListFocusTarget = "filter";
+    ctx.setSessionFilterQuery("");
+    const visibleIndices = getFilteredSessionIndices(ctx.sessions, "");
+    if (visibleIndices.length > 0) {
+      ctx.setSessionIndex(visibleIndices[0]);
+    }
+    ctx.render();
+    const restoredInput = ctx.shadow.querySelector(".ht-session-filter-input") as HTMLInputElement | null;
+    if (restoredInput) {
+      restoredInput.focus();
+      restoredInput.setSelectionRange(0, 0);
+    }
+    return true;
+  }
+
   if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
     event.preventDefault();
     event.stopPropagation();
@@ -956,17 +1134,18 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
       return true;
     }
 
-    sessionListFocusTarget = "filter";
-    ctx.render();
+    // One-way Tab: keep list focus; use "f" to return to filter.
     return true;
   }
 
   if (filterInputFocused) {
     if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      filterInput.blur();
-      return true;
+      if (!vimNav) {
+        event.preventDefault();
+        event.stopPropagation();
+        filterInput.blur();
+        return true;
+      }
     }
     if (event.key === "Enter") {
       event.preventDefault();
@@ -977,17 +1156,46 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
       }
       return true;
     }
-    // Let text editing keys flow to the focused input.
-    event.stopPropagation();
-    return true;
+    if (event.key !== "Escape") {
+      // Let text editing keys flow to the focused input.
+      event.stopPropagation();
+      return true;
+    }
+  }
+
+  if (
+    vimNav
+    && !filterInputFocused
+    && event.ctrlKey
+    && !event.altKey
+    && !event.metaKey
+  ) {
+    const lowerKey = event.key.toLowerCase();
+    if (lowerKey === "d" || lowerKey === "u") {
+      event.preventDefault();
+      event.stopPropagation();
+      const visibleIndices = getFilteredSessionIndices(ctx.sessions, ctx.sessionFilterQuery);
+      if (visibleIndices.length > 0) {
+        const currentPos = Math.max(0, visibleIndices.indexOf(ctx.sessionIndex));
+        const jump = getSessionListHalfPageStep(ctx.shadow);
+        const nextPos = lowerKey === "d"
+          ? Math.min(currentPos + jump, visibleIndices.length - 1)
+          : Math.max(currentPos - jump, 0);
+        sessionListFocusTarget = "list";
+        ctx.setSessionIndex(visibleIndices[nextPos]);
+        ctx.render();
+      }
+      return true;
+    }
   }
 
   if (
     filterInput
-    && event.key === "/"
+    && event.key.toLowerCase() === "f"
     && !event.ctrlKey
     && !event.altKey
     && !event.metaKey
+    && !event.shiftKey
   ) {
     event.preventDefault();
     event.stopPropagation();
@@ -1110,7 +1318,24 @@ export async function openSessionRestoreOverlay(): Promise<void> {
 
     function close(): void {
       document.removeEventListener("keydown", keyHandler, true);
+      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
       removePanelHost();
+    }
+
+    function renderRestoreFooter(): void {
+      const footer = shadow.querySelector(".ht-footer") as HTMLElement | null;
+      if (!footer) return;
+      footer.innerHTML = `<div class="ht-footer-row">
+        <span>${config.navigationMode === "vim" ? "j/k nav · ↑/↓ nav" : "↑/↓ nav"}</span>
+      </div>
+      <div class="ht-footer-row">
+        <span>Enter restore</span>
+        <span>Esc decline</span>
+      </div>`;
+    }
+
+    function onVimModeChanged(): void {
+      renderRestoreFooter();
     }
 
     function render(): void {
@@ -1121,6 +1346,7 @@ export async function openSessionRestoreOverlay(): Promise<void> {
               <button class="ht-dot ht-dot-close" title="Decline (Esc)"></button>
             </div>
             <span class="ht-titlebar-text">Restore Session?</span>
+            ${vimBadgeHtml(config)}
           </div>
           <div class="ht-session-restore-list">`;
 
@@ -1135,16 +1361,11 @@ export async function openSessionRestoreOverlay(): Promise<void> {
       }
 
       html += `</div>
-        <div class="ht-footer">
-          <div class="ht-footer-row">
-      <span>j/k (vim) \u2191/\u2193 nav</span>
-             <span>Enter restore</span>
-            <span>Esc decline</span>
-          </div>
-        </div>
+        <div class="ht-footer"></div>
       </div>`;
 
       container.innerHTML = html;
+      renderRestoreFooter();
 
       const backdrop = shadow.querySelector(".ht-backdrop") as HTMLElement;
       const closeBtn = shadow.querySelector(".ht-dot-close") as HTMLElement;
@@ -1159,6 +1380,20 @@ export async function openSessionRestoreOverlay(): Promise<void> {
           restoreSession(sessions[idx]);
         });
       });
+
+      const listEl = shadow.querySelector(".ht-session-restore-list") as HTMLElement | null;
+      if (listEl) {
+        listEl.addEventListener("wheel", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (sessions.length === 0) return;
+          const delta = event.deltaY > 0 ? 1 : -1;
+          const next = Math.max(0, Math.min(sessions.length - 1, activeIndex + delta));
+          if (next === activeIndex) return;
+          activeIndex = next;
+          render();
+        });
+      }
 
       const activeEl = shadow.querySelector(".ht-session-restore-item.active");
       if (activeEl) activeEl.scrollIntoView({ block: "nearest" });
@@ -1184,6 +1419,8 @@ export async function openSessionRestoreOverlay(): Promise<void> {
         document.removeEventListener("keydown", keyHandler, true);
         return;
       }
+
+      const vimNav = config.navigationMode === "vim";
 
       if (event.key === "Escape") {
         event.preventDefault();
@@ -1215,6 +1452,7 @@ export async function openSessionRestoreOverlay(): Promise<void> {
     }
 
     document.addEventListener("keydown", keyHandler, true);
+    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
     registerPanelCleanup(close);
     render();
     host.focus();

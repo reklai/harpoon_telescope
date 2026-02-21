@@ -1,6 +1,6 @@
 # Harpoon Telescope — Browser Extension
 
-A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fast tab navigation with optional vim motions. Works on **Firefox**, **Chrome**, and **Zen** (Firefox fork).
+A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fast tab navigation with vim motions. Works on **Firefox**, **Chrome**, and **Zen** (Firefox fork).
 
 ## Current Product Priority (Release Gate)
 
@@ -21,6 +21,7 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 - **Match count** in title bar
 - **Code block line splitting** — `<pre>` blocks are split into individual searchable lines
 - **Page size safety guard** — pages with >200k DOM elements or >10MB text show a toast and bail
+- **Shift+C clear-search** — clears the query from any pane
 
 ### Tab Manager (Harpoon)
 - **Anchor up to 4 tabs** to your harpoon list
@@ -28,6 +29,8 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 - **Swap mode** (`w`) — stays active after a swap; press another slot to keep swapping, `w` or `Esc` to exit
 - **Sessions** — save (`s`), load (`l`), and delete named harpoon sessions (max 4)
   - Session list includes a preview pane showing tabs in the selected profile
+  - Session search uses `Search Sessions . . .` with `Shift+C clear-search`
+  - Session load confirmation shows a minimal slot plan legend: `NEW (+)`, `DELETED (-)`, `REPLACED (~)`, `UNCHANGED (=)`
   - Duplicate session names rejected (case-insensitive)
   - Identical session content rejected (compares URL arrays)
   - Cannot save an empty harpoon list
@@ -36,20 +39,22 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 
 ### Bookmarks
 - **`Alt+B`** opens a two-pane bookmark browser with virtual scrolling
-- **Type to filter** — fuzzy matching against title, URL, and folder path
+- **Type to search** — fuzzy matching against title, URL, and folder path
 - **Slash filters** — `/folder` narrows by folder path
 - **Detail pane** — shows title, URL, folder path, date added, domain, and usage score
-- **Tree view** (`t`) — full hierarchical folder/bookmark tree with collapse indicators (`▶`/`▼`), j/k cursor navigation, Enter to fold/open
-- **Open confirmation** — Enter or double-click on a tree entry shows "Open 'title'?" dialog (y/n)
-- **Move bookmark** (`m`) — folder picker to move a bookmark to a different folder, with confirmation
+- **Tree view** (`l` to focus tree, `h` to return to results) — full hierarchical folder/bookmark tree with collapse indicators (`▶`/`▼`), j/k cursor navigation, Enter to fold/open
+- **Open confirmation** — Enter or double-click on a tree entry opens a y/n confirmation prompt
+- **Move bookmark** (`m`) — folder picker to move a bookmark, then `y` confirm / `n` cancel
 - **Remove bookmark** (`d`) — delete with y/n confirmation
-- **Add bookmark** (`Alt+Shift+B`) — three-step wizard: choose File or Folder → pick destination folder → (folder only) enter name
-- **Tab pane switching** — Tab key cycles between search input and results list
+- **Shift+C clear-search** — clears search from input, results list, or tree mode
+- **Add bookmark** (`Alt+Shift+B`) — wizard flow: choose Bookmark / Folder / Bookmark into New Folder → pick destination folder → (folder flows) enter name → confirm via `y/n` summary (`Title` and `Destination path > {path}`) (`Ctrl+D/U` half-page in list steps)
+- **Tab pane switching** — `Tab` moves to list, `f` focuses search input
 
 ### Frecency Tab List
 - **`Alt+Shift+F`** opens a frecency-scored list of all open tabs
-- **Type to filter** — fuzzy matching against title and URL
+- **Type to search** — fuzzy matching against title and URL
 - **Tab key** cycles between search input and results list
+- **Shift+C clear-search** clears the query
 - **Max 50 entries** — lowest-scored entry evicted when full
 
 ### Help Menu
@@ -58,23 +63,10 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 - Reflects current (possibly customized) keybindings live
 - Scroll to browse, Esc to close
 
-### Navigation Modes
-- **Basic** (default) — arrow keys, mouse
-- **Vim-enhanced** (`Alt+V` to toggle) — adds j/k on top of basic keys
-- Green **vim** badge in titlebar of all panels shows current mode
-
-| Action | Basic Mode | Vim Mode (adds) |
-|--------|-----------|-----------------|
-| Navigate results | Arrow Up/Down | j/k |
-| Jump to selected | Enter | Enter |
-| Remove (harpoon/bookmark) | d | d |
-| Swap mode (harpoon) | w | w |
-| Move bookmark | m | m |
-| Toggle tree view | t | t |
-| Save session | s | s |
-| Load session | l | l |
-| Cycle input / results | Tab | Tab |
-| Close overlay | Esc | Esc |
+### Navigation Mode
+- Vim navigation is always enabled
+- Arrow keys and mouse still work; vim adds j/k and related motions on top
+- List-focused overlays also support `Ctrl+D/U` half-page jumps
 
 ### Keyboard Shortcuts
 | Shortcut | Action |
@@ -89,8 +81,6 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 | `Alt+B` | Open bookmarks browser |
 | `Alt+Shift+B` | Add bookmark (current page or new folder) |
 | `Alt+M` | Open help menu |
-| `Alt+V` | Toggle vim motions globally |
-
 All keybindings are fully configurable in the extension options page with per-scope collision detection.
 
 ## Engineering Promise
@@ -223,7 +213,7 @@ harpoon_telescope/
 - **Background domain routing** — `background.ts` is orchestration; tab manager/bookmark handlers live in `src/lib/background/*`
 - **`ensureTabManagerLoaded()` guards** — tab manager state is lazily reloaded when background context is cold-started
 - **Configurable keybindings** — all bindings in `browser.storage.local` with per-scope collision detection
-- **Navigation modes** — vim mode adds aliases on top of basic keys (never replaces)
+- **Navigation mode** — vim aliases are always enabled on top of basic keys
 - **rAF-throttled rendering** — frecency, telescope, and bookmark views defer DOM updates to animation frames
 - **Perf regression budgets** — filter/render hotspots use `withPerfTrace` + `src/lib/shared/perfBudgets.json` guardrails
 - **Shared design tokens** — overlays consume `panelHost` CSS variables for consistent Ghostty-inspired styling

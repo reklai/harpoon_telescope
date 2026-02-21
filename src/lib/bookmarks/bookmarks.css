@@ -79,7 +79,7 @@
 .ht-bm-item {
   padding: 4px 10px; cursor: pointer;
   border-bottom: 1px solid var(--ht-color-border-faint);
-  display: flex; align-items: center;
+  display: flex; align-items: center; gap: 10px;
   height: 44px; box-sizing: border-box;
   outline: none; user-select: none;
 }

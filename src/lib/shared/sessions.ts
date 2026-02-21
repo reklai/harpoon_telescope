@@ -2,7 +2,6 @@
 // Extracted from background.ts; requires access to tab manager state via TabManagerState interface.
 
 import browser from "webextension-polyfill";
-import type { Tabs } from "webextension-polyfill";
 import { MAX_SESSIONS } from "./keybindings";
 import { normalizeUrlForMatch } from "./helpers";
 
@@ -22,33 +21,108 @@ interface SessionLoadComputation {
   reuseCount: number;
 }
 
-function buildReusableTabPools(tabs: Tabs.Tab[]): Map<string, number[]> {
-  const pools = new Map<string, number[]>();
-  for (const tab of tabs) {
-    if (tab.id == null) continue;
-    const normalized = normalizeUrlForMatch(tab.url || "");
-    if (!normalized) continue;
-    const pool = pools.get(normalized);
-    if (pool) {
-      pool.push(tab.id);
-    } else {
-      pools.set(normalized, [tab.id]);
-    }
-  }
-  return pools;
+function resolveDisplayTitle(title: string | undefined, url: string | undefined): string {
+  const trimmedTitle = (title || "").trim();
+  if (trimmedTitle) return trimmedTitle;
+  const trimmedUrl = (url || "").trim();
+  if (trimmedUrl) return trimmedUrl;
+  return "Untitled";
 }
 
-function computeSessionLoad(entries: TabManagerSessionEntry[], openTabs: Tabs.Tab[]): SessionLoadComputation {
-  const pools = buildReusableTabPools(openTabs);
+function buildSessionSlotDiffs(
+  currentList: TabManagerEntry[],
+  incomingEntries: TabManagerSessionEntry[],
+): SessionLoadSlotDiff[] {
+  const diffRows: SessionLoadSlotDiff[] = [];
+  const maxLen = Math.max(currentList.length, incomingEntries.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    const current = currentList[i];
+    const incoming = incomingEntries[i];
+    const slot = i + 1;
+
+    if (current && incoming) {
+      diffRows.push({
+        slot,
+        change: "replace",
+        currentTitle: resolveDisplayTitle(current.title, current.url),
+        currentUrl: current.url,
+        incomingTitle: resolveDisplayTitle(incoming.title, incoming.url),
+        incomingUrl: incoming.url,
+      });
+      continue;
+    }
+
+    if (current) {
+      diffRows.push({
+        slot,
+        change: "remove",
+        currentTitle: resolveDisplayTitle(current.title, current.url),
+        currentUrl: current.url,
+      });
+      continue;
+    }
+
+    if (incoming) {
+      diffRows.push({
+        slot,
+        change: "add",
+        incomingTitle: resolveDisplayTitle(incoming.title, incoming.url),
+        incomingUrl: incoming.url,
+      });
+    }
+  }
+
+  return diffRows;
+}
+
+function buildSessionReuseMatches(
+  entries: TabManagerSessionEntry[],
+  reuseTabIds: Array<number | null>,
+  currentList: TabManagerEntry[],
+): SessionLoadReuseMatch[] {
+  const matches: SessionLoadReuseMatch[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const reusedTabId = reuseTabIds[i];
+    if (reusedTabId == null) continue;
+    const current = currentList[i];
+    if (!current || current.tabId !== reusedTabId) continue;
+    const entry = entries[i];
+    matches.push({
+      slot: i + 1,
+      sessionTitle: resolveDisplayTitle(entry.title, entry.url),
+      sessionUrl: entry.url,
+      openTabTitle: resolveDisplayTitle(current.title, current.url),
+      openTabUrl: current.url || entry.url,
+    });
+  }
+
+  return matches;
+}
+
+function computeSessionLoad(
+  entries: TabManagerSessionEntry[],
+  currentList: TabManagerEntry[],
+): SessionLoadComputation {
   const reuseTabIds: Array<number | null> = [];
   let reuseCount = 0;
   let openCount = 0;
 
-  for (const entry of entries) {
-    const normalized = normalizeUrlForMatch(entry.url);
-    const pool = normalized ? pools.get(normalized) : undefined;
-    if (pool && pool.length > 0) {
-      reuseTabIds.push(pool.shift() ?? null);
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    const current = currentList[i];
+    const incomingUrl = normalizeUrlForMatch(entry.url);
+    const currentUrl = normalizeUrlForMatch(current?.url || "");
+    const isUnchangedSlot = !!(
+      current
+      && !current.closed
+      && incomingUrl
+      && currentUrl
+      && incomingUrl === currentUrl
+    );
+
+    if (isUnchangedSlot) {
+      reuseTabIds.push(current.tabId);
       reuseCount++;
     } else {
       reuseTabIds.push(null);
@@ -113,16 +187,21 @@ export async function sessionLoadPlan(
   const session = sessions.find((savedSession) => savedSession.name === name);
   if (!session) return { ok: false, reason: "Session not found" };
 
-  const openTabs = await browser.tabs.query({});
-  const computation = computeSessionLoad(session.entries, openTabs);
+  const currentList = state.getList();
+  const computation = computeSessionLoad(session.entries, currentList);
+  const slotDiffs = buildSessionSlotDiffs(currentList, session.entries);
+  const reuseMatches = buildSessionReuseMatches(session.entries, computation.reuseTabIds, currentList);
+
   return {
     ok: true,
     summary: {
       sessionName: session.name,
       totalCount: session.entries.length,
-      replaceCount: state.getList().length,
+      replaceCount: currentList.length,
       openCount: computation.openCount,
       reuseCount: computation.reuseCount,
+      slotDiffs,
+      reuseMatches,
     },
   };
 }
@@ -144,9 +223,9 @@ export async function sessionLoad(
   const session = sessions.find((savedSession) => savedSession.name === name);
   if (!session) return { ok: false, reason: "Session not found" };
 
-  const replaceCount = state.getList().length;
-  const openTabs = await browser.tabs.query({});
-  const loadPlan = computeSessionLoad(session.entries, openTabs);
+  const currentList = state.getList();
+  const replaceCount = currentList.length;
+  const loadPlan = computeSessionLoad(session.entries, currentList);
 
   const newList: TabManagerEntry[] = [];
   let openedCount = 0;

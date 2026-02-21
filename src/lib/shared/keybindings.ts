@@ -7,7 +7,7 @@ export const MAX_TAB_MANAGER_SLOTS = 4;
 export const MAX_SESSIONS = 4;
 
 export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
-  navigationMode: "basic",
+  navigationMode: "vim",
   bindings: {
     global: {
       openTabManager:    { key: "Alt+T",       default: "Alt+T"       },
@@ -124,7 +124,7 @@ function mergeWithDefaults(stored: Partial<KeybindingsConfig>): KeybindingsConfi
   const merged: KeybindingsConfig = JSON.parse(
     JSON.stringify(DEFAULT_KEYBINDINGS),
   );
-  merged.navigationMode = stored.navigationMode || "basic";
+  merged.navigationMode = "vim";
   for (const scope of Object.keys(merged.bindings) as Array<
     keyof KeybindingsConfig["bindings"]
   >) {

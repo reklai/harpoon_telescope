@@ -59,6 +59,35 @@
   padding: 4px 14px; font-size: 10px; color: var(--ht-color-danger); display: none;
 }
 
+/* Confirmation dialog style aligned with bookmark/session confirmation conventions */
+.ht-bm-confirm {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 20px;
+}
+.ht-bm-confirm-icon { font-size: 28px; }
+.ht-bm-confirm-msg {
+  font-size: 13px;
+  color: var(--ht-color-text);
+  text-align: center;
+  line-height: 1.6;
+  max-width: 320px;
+}
+.ht-bm-confirm-title {
+  color: var(--ht-color-text-strong);
+  font-weight: 600;
+}
+.ht-bm-confirm-path {
+  font-size: 11px;
+  color: var(--ht-color-text-muted);
+  margin-top: 2px;
+  word-break: break-word;
+}
+
 @media (max-width: 520px), (max-height: 560px) {
   .ht-addbm-container { border-radius: 8px; }
   .ht-addbm-list { max-height: min(56vh, 300px); }

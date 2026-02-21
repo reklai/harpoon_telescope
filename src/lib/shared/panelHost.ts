@@ -76,31 +76,61 @@ export function createPanelHost(): PanelHost {
   const shadow = host.attachShadow({ mode: "open" });
   document.body.appendChild(host);
 
+  let lastFocusedInPanel: HTMLElement | null = null;
+  let pointerInteractionInPanel = false;
+  shadow.addEventListener("focusin", (event: Event) => {
+    const target = event.target;
+    if (target instanceof HTMLElement) {
+      lastFocusedInPanel = target;
+    }
+  });
+  shadow.addEventListener("pointerdown", () => {
+    pointerInteractionInPanel = true;
+  });
+  const onGlobalPointerEnd = (): void => {
+    pointerInteractionInPanel = false;
+  };
+  window.addEventListener("pointerup", onGlobalPointerEnd, true);
+  window.addEventListener("pointercancel", onGlobalPointerEnd, true);
+
+  const focusPreferredPanelTarget = (): void => {
+    if (!document.getElementById("ht-panel-host")) return;
+    if (lastFocusedInPanel && shadow.contains(lastFocusedInPanel)) {
+      lastFocusedInPanel.focus({ preventScroll: true });
+      return;
+    }
+    host.focus({ preventScroll: true });
+  };
+
   // Reclaim focus when it escapes the panel (e.g. to browser chrome).
   // Must check both host.contains() and shadowRoot.contains() because
   // Shadow DOM children aren't found by host.contains().
   let reclaimId = 0;
-  host.addEventListener("focusout", (event: FocusEvent) => {
-    const related = event.relatedTarget as Node | null;
-    const staysInPanel =
-      related &&
-      (host.contains(related) || host.shadowRoot!.contains(related));
-    if (!staysInPanel) {
-      cancelAnimationFrame(reclaimId);
-      reclaimId = requestAnimationFrame(() => {
-        if (document.getElementById("ht-panel-host")) {
-          host.focus({ preventScroll: true });
-        }
-      });
-    }
+  host.addEventListener("focusout", () => {
+    cancelAnimationFrame(reclaimId);
+    reclaimId = requestAnimationFrame(() => {
+      if (document.visibilityState !== "visible") return;
+      if (pointerInteractionInPanel) return;
+      if (!document.getElementById("ht-panel-host")) return;
+
+      const activeInHostTree = document.activeElement === host || host.contains(document.activeElement);
+      const activeInShadow = !!shadow.activeElement && shadow.contains(shadow.activeElement as Node);
+      if (!activeInHostTree && !activeInShadow) {
+        focusPreferredPanelTarget();
+      }
+    });
   });
 
-  // Prevent clicks on the transparent backdrop from shifting focus behind the overlay
-  host.addEventListener("mousedown", (event: MouseEvent) => {
-    if (event.target === host) {
-      event.preventDefault();
+  const onVisibilityChange = (): void => {
+    if (document.visibilityState !== "visible") return;
+    if (!document.getElementById("ht-panel-host")) return;
+    const activeInHostTree = document.activeElement === host || host.contains(document.activeElement);
+    const activeInShadow = !!shadow.activeElement && shadow.contains(shadow.activeElement as Node);
+    if (!activeInHostTree && !activeInShadow) {
+      focusPreferredPanelTarget();
     }
-  });
+  };
+  document.addEventListener("visibilitychange", onVisibilityChange);
 
   const onError = (event: ErrorEvent): void => {
     if (!isPanelRuntimeFaultFromExtension(event)) return;
@@ -133,6 +163,9 @@ export function createPanelHost(): PanelHost {
   activePanelFailSafeCleanup = () => {
     window.removeEventListener("error", onError);
     window.removeEventListener("unhandledrejection", onUnhandledRejection);
+    window.removeEventListener("pointerup", onGlobalPointerEnd, true);
+    window.removeEventListener("pointercancel", onGlobalPointerEnd, true);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
     cancelAnimationFrame(frameProbeId);
     window.clearInterval(watchdogIntervalId);
   };
@@ -158,8 +191,9 @@ export function dismissPanel(): void {
 
 /** Generate the vim mode badge HTML for panel titlebars */
 export function vimBadgeHtml(config: KeybindingsConfig): string {
-  const isVim = config.navigationMode === "vim";
-  return `<span class="ht-vim-badge ${isVim ? "on" : "off"}">vim</span>`;
+  const _ = config;
+  void _;
+  return "";
 }
 
 /** Shared overlay shell styles used by all panels */
@@ -297,6 +331,11 @@ export function getBaseStyles(): string {
       font-family: inherit;
       font-size: var(--ht-input-font-size);
       caret-color: var(--ht-input-caret-color);
+    }
+    input,
+    textarea {
+      user-select: text;
+      -webkit-user-select: text;
     }
     .ht-ui-input-field::placeholder {
       color: var(--ht-color-text-dim);

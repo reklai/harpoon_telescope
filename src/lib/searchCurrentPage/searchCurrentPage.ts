@@ -11,7 +11,14 @@
 //  - Direct DOM refs: no querySelector for active item toggling
 
 import { matchesAction, keyToDisplay } from "../shared/keybindings";
-import { createPanelHost, removePanelHost, registerPanelCleanup, getBaseStyles, vimBadgeHtml } from "../shared/panelHost";
+import {
+  createPanelHost,
+  removePanelHost,
+  registerPanelCleanup,
+  getBaseStyles,
+  vimBadgeHtml,
+  dismissPanel,
+} from "../shared/panelHost";
 import { escapeHtml, escapeRegex } from "../shared/helpers";
 import { parseSlashFilterQuery } from "../shared/filterInput";
 import { grepPage, enrichResult, initLineCache, destroyLineCache } from "./grep";
@@ -99,9 +106,9 @@ export async function openSearchCurrentPage(
           ${vimBadgeHtml(config)}
         </div>
         <div class="ht-search-page-body">
-          <div class="ht-search-page-input-wrap">
-            <span class="ht-prompt">&gt;</span>
-            <input type="text" class="ht-search-page-input" placeholder="Search..." />
+          <div class="ht-search-page-input-wrap ht-ui-input-wrap">
+            <span class="ht-prompt ht-ui-input-prompt">&gt;</span>
+            <input type="text" class="ht-search-page-input ht-ui-input-field" placeholder="Search..." />
           </div>
           <div class="ht-filter-pills"></div>
           <div class="ht-search-page-columns">
@@ -110,7 +117,7 @@ export async function openSearchCurrentPage(
               <div class="ht-results-list"></div>
             </div>
             <div class="ht-preview-pane">
-              <div class="ht-preview-header">Preview</div>
+              <div class="ht-preview-header ht-ui-pane-header">Preview</div>
               <div class="ht-preview-breadcrumb" style="display:none;"></div>
               <div class="ht-preview-placeholder">Select a result to preview</div>
               <div class="ht-preview-content" style="display:none;"></div>
@@ -782,5 +789,6 @@ export async function openSearchCurrentPage(
     }
   } catch (err) {
     console.error("[Harpoon Telescope] Failed to open search current page:", err);
+    dismissPanel();
   }
 }

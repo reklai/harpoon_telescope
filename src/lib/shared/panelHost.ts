@@ -211,6 +211,18 @@ export function getBaseStyles(): string {
       --ht-color-surface-strong: rgba(255,255,255,0.15);
       --ht-shadow-overlay: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
       --ht-radius: 10px;
+      --ht-input-row-pad-y: 8px;
+      --ht-input-row-pad-x: 14px;
+      --ht-input-row-pad-x-compact: 10px;
+      --ht-input-prompt-gap: 8px;
+      --ht-input-prompt-size: 14px;
+      --ht-input-prompt-weight: 600;
+      --ht-input-font-size: 13px;
+      --ht-input-caret-color: var(--ht-color-text-strong);
+      --ht-pane-header-pad-y: 5px;
+      --ht-pane-header-pad-x: 14px;
+      --ht-pane-header-font-size: 11px;
+      --ht-pane-header-weight: 500;
       font-family: var(--ht-font-mono);
       font-size: 13px;
       color: var(--ht-color-text);
@@ -230,7 +242,6 @@ export function getBaseStyles(): string {
     .ht-open-tabs-container,
     .ht-search-page-container,
     .ht-bookmark-container,
-    .ht-history-container,
     .ht-help-container,
     .ht-addbm-container {
       position: fixed !important;
@@ -261,6 +272,53 @@ export function getBaseStyles(): string {
     .ht-titlebar-text {
       flex: 1; text-align: center; font-size: 12px;
       color: var(--ht-color-text-title); font-weight: 500;
+    }
+
+    /* Reusable UI primitives (input rows + pane headers) for panel consistency */
+    .ht-ui-input-wrap {
+      display: flex;
+      align-items: center;
+      padding: var(--ht-input-row-pad-y) var(--ht-input-row-pad-x);
+      border-bottom: 1px solid var(--ht-color-border-soft);
+      background: var(--ht-color-bg-elevated);
+    }
+    .ht-ui-input-prompt {
+      color: var(--ht-color-accent);
+      margin-right: var(--ht-input-prompt-gap);
+      font-weight: var(--ht-input-prompt-weight);
+      font-size: var(--ht-input-prompt-size);
+    }
+    .ht-ui-input-field {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--ht-color-text);
+      font-family: inherit;
+      font-size: var(--ht-input-font-size);
+      caret-color: var(--ht-input-caret-color);
+    }
+    .ht-ui-input-field::placeholder {
+      color: var(--ht-color-text-dim);
+    }
+    .ht-ui-pane-header {
+      padding: var(--ht-pane-header-pad-y) var(--ht-pane-header-pad-x);
+      font-size: var(--ht-pane-header-font-size);
+      color: var(--ht-color-text-muted);
+      background: var(--ht-color-bg-elevated);
+      border-bottom: 1px solid var(--ht-color-border-faint);
+      font-weight: var(--ht-pane-header-weight);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ht-ui-pane-header-text {
+      flex: 1;
+    }
+    .ht-ui-pane-header-meta {
+      font-size: 10px;
+      color: var(--ht-color-text-dim);
+      flex-shrink: 0;
     }
 
     .ht-vim-badge {
@@ -295,6 +353,12 @@ export function getBaseStyles(): string {
       *, *::before, *::after {
         animation: none !important;
         transition: none !important;
+      }
+    }
+
+    @media (max-width: 520px), (max-height: 560px) {
+      .ht-ui-input-wrap {
+        padding: var(--ht-input-row-pad-y) var(--ht-input-row-pad-x-compact);
       }
     }
   `;

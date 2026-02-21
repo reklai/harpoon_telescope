@@ -2,7 +2,6 @@ import browser from "webextension-polyfill";
 import { loadKeybindings, saveKeybindings } from "../shared/keybindings";
 import { getFrecencyList } from "../shared/frecencyScoring";
 import { grepCurrentTab, getPageContent } from "./pageSearchDomain";
-import { getHistoryEntries } from "./historyDomain";
 import { RuntimeMessageHandler, UNHANDLED } from "./runtimeRouter";
 
 export const miscMessageHandler: RuntimeMessageHandler = async (message) => {
@@ -35,9 +34,6 @@ export const miscMessageHandler: RuntimeMessageHandler = async (message) => {
 
     case "FRECENCY_LIST":
       return await getFrecencyList();
-
-    case "HISTORY_LIST":
-      return await getHistoryEntries(message.maxResults || 500, message.text || "");
 
     default:
       return UNHANDLED;

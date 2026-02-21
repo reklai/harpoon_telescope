@@ -12,7 +12,6 @@ function readText(pathFromRoot) {
 const SPLIT_LAYOUT_FILES = [
   "src/lib/searchCurrentPage/searchCurrentPage.css",
   "src/lib/bookmarks/bookmarks.css",
-  "src/lib/history/history.css",
 ];
 
 const SINGLE_PANEL_FILES = [

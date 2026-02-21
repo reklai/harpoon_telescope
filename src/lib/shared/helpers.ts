@@ -56,3 +56,53 @@ export function extractDomain(url: string): string {
     return cacheDomain(url, url.length > 30 ? url.substring(0, 30) + "\u2026" : url);
   }
 }
+
+const TRACKING_QUERY_PREFIXES = ["utm_"];
+const TRACKING_QUERY_KEYS = new Set([
+  "fbclid",
+  "gclid",
+  "mc_cid",
+  "mc_eid",
+]);
+
+/** Normalize URL for duplicate detection/reuse matching across tabs and sessions. */
+export function normalizeUrlForMatch(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    const protocol = parsed.protocol.toLowerCase();
+
+    let hostname = parsed.hostname.toLowerCase();
+    if (hostname.startsWith("www.")) hostname = hostname.slice(4);
+
+    const isDefaultPort = (protocol === "http:" && parsed.port === "80")
+      || (protocol === "https:" && parsed.port === "443");
+    const port = parsed.port && !isDefaultPort ? `:${parsed.port}` : "";
+
+    let pathname = parsed.pathname || "/";
+    pathname = pathname.replace(/\/{2,}/g, "/");
+    if (pathname.length > 1 && pathname.endsWith("/")) pathname = pathname.slice(0, -1);
+
+    const kept: Array<[string, string]> = [];
+    for (const [key, value] of parsed.searchParams.entries()) {
+      const lowerKey = key.toLowerCase();
+      if (TRACKING_QUERY_KEYS.has(lowerKey)) continue;
+      if (TRACKING_QUERY_PREFIXES.some((prefix) => lowerKey.startsWith(prefix))) continue;
+      kept.push([key, value]);
+    }
+    kept.sort((a, b) => {
+      const keyCompare = a[0].localeCompare(b[0]);
+      if (keyCompare !== 0) return keyCompare;
+      return a[1].localeCompare(b[1]);
+    });
+    const search = kept.length
+      ? `?${kept.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&")}`
+      : "";
+
+    return `${protocol}//${hostname}${port}${pathname}${search}`;
+  } catch (_) {
+    // For non-standard URLs, fallback to trimmed lowercase and strip trailing slash.
+    return trimmed.toLowerCase().replace(/\/+$/, "");
+  }
+}

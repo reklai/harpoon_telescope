@@ -12,14 +12,24 @@
   overscroll-behavior: contain;
 }
 .ht-open-tabs-input-wrap {
-  display: flex; align-items: center; padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  padding: var(--ht-input-row-pad-y) var(--ht-input-row-pad-x);
   border-bottom: 1px solid var(--ht-color-border-soft); background: var(--ht-color-bg-elevated);
 }
-.ht-open-tabs-prompt { color: var(--ht-color-accent); margin-right: 8px; font-weight: 600; font-size: 14px; }
+.ht-open-tabs-prompt {
+  color: var(--ht-color-accent);
+  margin-right: var(--ht-input-prompt-gap);
+  font-weight: var(--ht-input-prompt-weight);
+  font-size: var(--ht-input-prompt-size);
+}
 .ht-open-tabs-input {
   flex: 1; background: transparent; border: none; outline: none;
-  color: var(--ht-color-text); font-family: inherit; font-size: 13px;
-  caret-color: var(--ht-color-text-strong); caret-shape: block;
+  color: var(--ht-color-text);
+  font-family: inherit;
+  font-size: var(--ht-input-font-size);
+  caret-color: var(--ht-input-caret-color);
+  caret-shape: block;
 }
 .ht-open-tabs-input::placeholder { color: var(--ht-color-text-dim); }
 .ht-open-tabs-list { max-height: 380px; overflow-y: auto; }
@@ -57,6 +67,8 @@
 
 @media (max-width: 520px), (max-height: 560px) {
   .ht-open-tabs-container { border-radius: 8px; }
-  .ht-open-tabs-input-wrap { padding: 8px 10px; }
+  .ht-open-tabs-input-wrap {
+    padding: var(--ht-input-row-pad-y) var(--ht-input-row-pad-x-compact);
+  }
   .ht-open-tabs-item { padding: 8px 10px; }
 }

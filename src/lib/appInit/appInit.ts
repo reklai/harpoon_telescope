@@ -2,7 +2,7 @@
 // Imported by contentScript.ts as the single bootstrap for all content-side logic.
 
 import browser from "webextension-polyfill";
-import { matchesAction, saveKeybindings } from "../shared/keybindings";
+import { DEFAULT_KEYBINDINGS, matchesAction, saveKeybindings } from "../shared/keybindings";
 import { grepPage, getPageContent } from "../searchCurrentPage/grep";
 import { scrollToText } from "../shared/scroll";
 import { showFeedback } from "../shared/feedback";
@@ -11,7 +11,6 @@ import { openSearchCurrentPage } from "../searchCurrentPage/searchCurrentPage";
 import { openSearchOpenTabs } from "../searchOpenTabs/searchOpenTabs";
 import { openBookmarkOverlay } from "../bookmarks/bookmarks";
 import { openAddBookmarkOverlay } from "../addBookmark/addBookmark";
-import { openHistoryOverlay } from "../history/history";
 import { openHelpOverlay } from "../help/help";
 import { dismissPanel } from "../shared/panelHost";
 import { ContentRuntimeMessage } from "../shared/runtimeMessages";
@@ -72,26 +71,135 @@ export function initApp(): void {
   const PANEL_DEBOUNCE_MS = 50;
 
   /** Debounced panel opener — prevents rapid/concurrent opens from racing */
-  function openPanel(fn: () => void): void {
+  function openPanel(fn: () => void | Promise<void>): void {
     const now = Date.now();
     if (now - panelDebounce < PANEL_DEBOUNCE_MS) return;
     panelDebounce = now;
     try {
-      fn();
+      const maybePromise = fn();
+      if (maybePromise && typeof (maybePromise as Promise<void>).then === "function") {
+        void (maybePromise as Promise<void>).catch((err) => {
+          console.error("[Harpoon Telescope] panel open failed:", err);
+          dismissPanel();
+          showFeedback("Panel failed to open");
+        });
+      }
     } catch (err) {
       console.error("[Harpoon Telescope] panel open failed:", err);
+      dismissPanel();
       showFeedback("Panel failed to open");
     }
+  }
+
+  // Defensive host integrity check:
+  // if a prior panel open crashed before rendering, clear the stale host so
+  // the next shortcut can proceed instead of getting blocked forever.
+  function hasLivePanelHost(): boolean {
+    const host = document.getElementById("ht-panel-host");
+    if (!host) return false;
+    const shadow = host.shadowRoot;
+    if (!shadow || shadow.childElementCount === 0) {
+      dismissPanel();
+      return false;
+    }
+    return true;
   }
 
   // -- Global Keybinding Handler --
   // Runs on capture phase so pages that call stopPropagation() on keydown
   // can't break our keybinds. Fully synchronous — no microtask overhead.
 
+  function tryHandleGlobalActions(event: KeyboardEvent, config: KeybindingsConfig): boolean {
+    // Block all actions when a panel is already open — user must close it first.
+    if (hasLivePanelHost()) return false;
+
+    if (matchesAction(event, config, "global", "openTabManager")) {
+      event.preventDefault();
+      event.stopPropagation();
+      openPanel(() => openTabManager(config));
+      return true;
+    }
+    if (matchesAction(event, config, "global", "addTab")) {
+      event.preventDefault();
+      event.stopPropagation();
+      browser.runtime.sendMessage({ type: "TAB_MANAGER_ADD" });
+      return true;
+    }
+    if (matchesAction(event, config, "global", "jumpSlot1")) {
+      event.preventDefault();
+      event.stopPropagation();
+      browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 1 });
+      return true;
+    }
+    if (matchesAction(event, config, "global", "jumpSlot2")) {
+      event.preventDefault();
+      event.stopPropagation();
+      browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 2 });
+      return true;
+    }
+    if (matchesAction(event, config, "global", "jumpSlot3")) {
+      event.preventDefault();
+      event.stopPropagation();
+      browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 3 });
+      return true;
+    }
+    if (matchesAction(event, config, "global", "jumpSlot4")) {
+      event.preventDefault();
+      event.stopPropagation();
+      browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 4 });
+      return true;
+    }
+    if (matchesAction(event, config, "global", "cyclePrev")) {
+      event.preventDefault();
+      event.stopPropagation();
+      browser.runtime.sendMessage({ type: "TAB_MANAGER_CYCLE", direction: "prev" });
+      return true;
+    }
+    if (matchesAction(event, config, "global", "cycleNext")) {
+      event.preventDefault();
+      event.stopPropagation();
+      browser.runtime.sendMessage({ type: "TAB_MANAGER_CYCLE", direction: "next" });
+      return true;
+    }
+    if (matchesAction(event, config, "global", "searchInPage")) {
+      event.preventDefault();
+      event.stopPropagation();
+      openPanel(() => openSearchCurrentPage(config));
+      return true;
+    }
+    if (matchesAction(event, config, "global", "openFrecency")) {
+      event.preventDefault();
+      event.stopPropagation();
+      openPanel(() => openSearchOpenTabs(config));
+      return true;
+    }
+    if (matchesAction(event, config, "global", "openBookmarks")) {
+      event.preventDefault();
+      event.stopPropagation();
+      openPanel(() => openBookmarkOverlay(config));
+      return true;
+    }
+    if (matchesAction(event, config, "global", "addBookmark")) {
+      event.preventDefault();
+      event.stopPropagation();
+      openPanel(() => openAddBookmarkOverlay(config));
+      return true;
+    }
+    if (matchesAction(event, config, "global", "openHelp")) {
+      event.preventDefault();
+      event.stopPropagation();
+      openPanel(() => openHelpOverlay(config));
+      return true;
+    }
+    return false;
+  }
+
   function globalKeyHandler(event: KeyboardEvent): void {
     if (!cachedConfig) {
       // Retry in-case initial keybinding fetch failed during tab startup.
       requestConfigLoad().catch(() => {});
+      // Fallback to defaults so first keypress on a fresh tab still works.
+      if (tryHandleGlobalActions(event, DEFAULT_KEYBINDINGS)) return;
       return;
     }
     const config = cachedConfig;
@@ -115,66 +223,7 @@ export function initApp(): void {
       return;
     }
 
-    // Block all actions when a panel is already open — user must close it first.
-    if (document.getElementById("ht-panel-host")) return;
-
-    if (matchesAction(event, config, "global", "openTabManager")) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel(() => openTabManager(config));
-    } else if (matchesAction(event, config, "global", "addTab")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_ADD" });
-    } else if (matchesAction(event, config, "global", "jumpSlot1")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 1 });
-    } else if (matchesAction(event, config, "global", "jumpSlot2")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 2 });
-    } else if (matchesAction(event, config, "global", "jumpSlot3")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 3 });
-    } else if (matchesAction(event, config, "global", "jumpSlot4")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 4 });
-    } else if (matchesAction(event, config, "global", "cyclePrev")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_CYCLE", direction: "prev" });
-    } else if (matchesAction(event, config, "global", "cycleNext")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_CYCLE", direction: "next" });
-    } else if (matchesAction(event, config, "global", "searchInPage")) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel(() => openSearchCurrentPage(config));
-    } else if (matchesAction(event, config, "global", "openFrecency")) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel(() => openSearchOpenTabs(config));
-    } else if (matchesAction(event, config, "global", "openBookmarks")) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel(() => openBookmarkOverlay(config));
-    } else if (matchesAction(event, config, "global", "addBookmark")) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel(() => openAddBookmarkOverlay(config));
-    } else if (matchesAction(event, config, "global", "openHistory")) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel(() => openHistoryOverlay(config));
-    } else if (matchesAction(event, config, "global", "openHelp")) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel(() => openHelpOverlay(config));
-    }
+    void tryHandleGlobalActions(event, config);
   }
 
   document.addEventListener("keydown", globalKeyHandler, true);
@@ -201,32 +250,27 @@ export function initApp(): void {
       case "GET_CONTENT":
         return Promise.resolve(getPageContent());
       case "OPEN_SEARCH_CURRENT_PAGE":
-        if (!document.getElementById("ht-panel-host"))
+        if (!hasLivePanelHost())
           getConfig().then((config) => openPanel(() => openSearchCurrentPage(config)))
             .catch(() => showFeedback("Panel failed to open"));
         return Promise.resolve({ ok: true });
       case "OPEN_TAB_MANAGER":
-        if (!document.getElementById("ht-panel-host"))
+        if (!hasLivePanelHost())
           getConfig().then((config) => openPanel(() => openTabManager(config)))
             .catch(() => showFeedback("Panel failed to open"));
         return Promise.resolve({ ok: true });
       case "OPEN_FRECENCY":
-        if (!document.getElementById("ht-panel-host"))
+        if (!hasLivePanelHost())
           getConfig().then((config) => openPanel(() => openSearchOpenTabs(config)))
             .catch(() => showFeedback("Panel failed to open"));
         return Promise.resolve({ ok: true });
       case "OPEN_BOOKMARKS":
-        if (!document.getElementById("ht-panel-host"))
+        if (!hasLivePanelHost())
           getConfig().then((config) => openPanel(() => openBookmarkOverlay(config)))
             .catch(() => showFeedback("Panel failed to open"));
         return Promise.resolve({ ok: true });
-      case "OPEN_HISTORY":
-        if (!document.getElementById("ht-panel-host"))
-          getConfig().then((config) => openPanel(() => openHistoryOverlay(config)))
-            .catch(() => showFeedback("Panel failed to open"));
-        return Promise.resolve({ ok: true });
       case "SHOW_SESSION_RESTORE":
-        if (!document.getElementById("ht-panel-host"))
+        if (!hasLivePanelHost())
           openSessionRestoreOverlay();
         return Promise.resolve({ ok: true });
       case "SCROLL_TO_TEXT":

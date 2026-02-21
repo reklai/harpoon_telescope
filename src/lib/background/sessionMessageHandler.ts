@@ -3,7 +3,9 @@ import {
   sessionDelete,
   sessionList,
   sessionLoad,
+  sessionLoadPlan,
   sessionRename,
+  sessionReplace,
   sessionSave,
   sessionUpdate,
 } from "../shared/sessions";
@@ -20,6 +22,9 @@ export function createSessionMessageHandler(
       case "SESSION_LIST":
         return await sessionList();
 
+      case "SESSION_LOAD_PLAN":
+        return await sessionLoadPlan(tabManagerState, message.name);
+
       case "SESSION_LOAD":
         return await sessionLoad(tabManagerState, message.name);
 
@@ -31,6 +36,9 @@ export function createSessionMessageHandler(
 
       case "SESSION_UPDATE":
         return await sessionUpdate(tabManagerState, message.name);
+
+      case "SESSION_REPLACE":
+        return await sessionReplace(tabManagerState, message.oldName, message.newName);
 
       default:
         return UNHANDLED;

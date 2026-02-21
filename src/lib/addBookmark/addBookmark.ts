@@ -5,7 +5,14 @@
 //   3. nameInput   — (folder/folderAndFile) enter a name for the new folder
 
 import browser from "webextension-polyfill";
-import { createPanelHost, removePanelHost, registerPanelCleanup, getBaseStyles, vimBadgeHtml } from "../shared/panelHost";
+import {
+  createPanelHost,
+  removePanelHost,
+  registerPanelCleanup,
+  getBaseStyles,
+  vimBadgeHtml,
+  dismissPanel,
+} from "../shared/panelHost";
 import { escapeHtml } from "../shared/helpers";
 import { showFeedback } from "../shared/feedback";
 import addBookmarkStyles from "./addBookmark.css";
@@ -224,9 +231,9 @@ export async function openAddBookmarkOverlay(
       titleText.textContent = `New folder in ${destLabel}`;
 
       body.innerHTML = `
-        <div class="ht-addbm-input-wrap">
-          <span class="ht-addbm-prompt">Name:</span>
-          <input type="text" class="ht-addbm-input"
+        <div class="ht-addbm-input-wrap ht-ui-input-wrap">
+          <span class="ht-addbm-prompt ht-ui-input-prompt">Name:</span>
+          <input type="text" class="ht-addbm-input ht-ui-input-field"
                  placeholder="e.g. Work, Research, Recipes..." maxlength="60" />
         </div>
         <div class="ht-addbm-error"></div>`;
@@ -404,5 +411,6 @@ export async function openAddBookmarkOverlay(
     renderChooseType();
   } catch (err) {
     console.error("[Harpoon Telescope] Failed to open add-bookmark overlay:", err);
+    dismissPanel();
   }
 }

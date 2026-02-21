@@ -28,7 +28,7 @@ All feature modules live in `src/lib/*` and are imported by entryPoints.
   - Background-only domains and routers (`tabManagerDomain`, `bookmarkDomain`, `runtimeRouter`, `commandRouter`, etc.).
 - `src/lib/<feature>/*`
   - Feature-local logic and UI.
-  - Current features: `tabManager`, `searchCurrentPage`, `searchOpenTabs`, `bookmarks`, `history`, `addBookmark`, `help`.
+  - Current features: `tabManager`, `searchCurrentPage`, `searchOpenTabs`, `bookmarks`, `addBookmark`, `help`.
 
 Rule of thumb:
 - Feature modules can use `shared`.

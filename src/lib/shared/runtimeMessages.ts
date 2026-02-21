@@ -10,7 +10,6 @@ export type ContentRuntimeMessage =
   | { type: "OPEN_TAB_MANAGER" }
   | { type: "OPEN_FRECENCY" }
   | { type: "OPEN_BOOKMARKS" }
-  | { type: "OPEN_HISTORY" }
   | { type: "SHOW_SESSION_RESTORE" }
   | { type: "SCROLL_TO_TEXT"; text: string }
   | {
@@ -38,7 +37,6 @@ export type BackgroundRuntimeMessage =
   | { type: "SWITCH_TO_TAB"; tabId: number }
   | { type: "FRECENCY_LIST" }
   | { type: "BOOKMARK_LIST" }
-  | { type: "HISTORY_LIST"; maxResults?: number; text?: string }
   | { type: "OPEN_BOOKMARK_TAB"; url: string }
   | { type: "BOOKMARK_ADD"; parentId?: string }
   | { type: "BOOKMARK_REMOVE"; id: string; url?: string }
@@ -49,7 +47,9 @@ export type BackgroundRuntimeMessage =
   | { type: "CONTENT_SCRIPT_READY" }
   | { type: "SESSION_SAVE"; name: string }
   | { type: "SESSION_LIST" }
+  | { type: "SESSION_LOAD_PLAN"; name: string }
   | { type: "SESSION_LOAD"; name: string }
   | { type: "SESSION_DELETE"; name: string }
   | { type: "SESSION_RENAME"; oldName: string; newName: string }
-  | { type: "SESSION_UPDATE"; name: string };
+  | { type: "SESSION_UPDATE"; name: string }
+  | { type: "SESSION_REPLACE"; oldName: string; newName: string };

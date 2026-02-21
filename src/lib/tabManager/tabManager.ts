@@ -4,7 +4,14 @@
 
 import browser from "webextension-polyfill";
 import { MAX_TAB_MANAGER_SLOTS, matchesAction, keyToDisplay } from "../shared/keybindings";
-import { createPanelHost, removePanelHost, registerPanelCleanup, getBaseStyles, vimBadgeHtml } from "../shared/panelHost";
+import {
+  createPanelHost,
+  removePanelHost,
+  registerPanelCleanup,
+  getBaseStyles,
+  vimBadgeHtml,
+  dismissPanel,
+} from "../shared/panelHost";
 import { escapeHtml, extractDomain } from "../shared/helpers";
 import { showFeedback } from "../shared/feedback";
 import {
@@ -17,10 +24,31 @@ import {
   handleSaveSessionKey,
   handleSessionListKey,
   handleReplaceSessionKey,
+  resetSessionTransientState,
 } from "./session";
 import tabManagerStyles from "./tabManager.css";
 
 type ViewMode = "tabManager" | "saveSession" | "sessionList" | "replaceSession";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchTabManagerListWithRetry(): Promise<TabManagerEntry[]> {
+  const retryDelaysMs = [0, 90, 240, 450];
+  let lastError: unknown = null;
+  for (const delay of retryDelaysMs) {
+    if (delay > 0) await sleep(delay);
+    try {
+      return (await browser.runtime.sendMessage({
+        type: "TAB_MANAGER_LIST",
+      })) as TabManagerEntry[];
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("Failed to load Tab Manager list");
+}
 
 export async function openTabManager(
   config: KeybindingsConfig,
@@ -35,9 +63,7 @@ export async function openTabManager(
     const container = document.createElement("div");
     shadow.appendChild(container);
 
-    let list = (await browser.runtime.sendMessage({
-      type: "TAB_MANAGER_LIST",
-    })) as TabManagerEntry[];
+    let list = await fetchTabManagerListWithRetry();
     let activeIndex = 0;
 
     // View mode
@@ -54,10 +80,26 @@ export async function openTabManager(
     let sessions: TabManagerSession[] = [];
     let sessionIndex = 0;
     let pendingSaveName = "";
+    let sessionFilterQuery = "";
+    resetSessionTransientState();
 
     function close(): void {
       document.removeEventListener("keydown", keyHandler, true);
       removePanelHost();
+    }
+
+    function failToSafeTabManagerState(context: string, error: unknown): void {
+      console.error(`[Harpoon Telescope] ${context}:`, error);
+      showFeedback("Tab Manager action failed");
+      resetSessionTransientState();
+      viewMode = "tabManager";
+      exitSwapMode();
+      try {
+        renderTabManager();
+      } catch (renderError) {
+        console.error("[Harpoon Telescope] Failed to recover tab manager panel:", renderError);
+        close();
+      }
     }
 
     function exitSwapMode(): void {
@@ -73,9 +115,11 @@ export async function openTabManager(
       get sessions() { return sessions; },
       get sessionIndex() { return sessionIndex; },
       get pendingSaveName() { return pendingSaveName; },
+      get sessionFilterQuery() { return sessionFilterQuery; },
       setSessionIndex(i: number) { sessionIndex = i; },
       setSessions(s: TabManagerSession[]) { sessions = s; },
       setPendingSaveName(name: string) { pendingSaveName = name; },
+      setSessionFilterQuery(query: string) { sessionFilterQuery = query; },
       setViewMode(mode: ViewMode) { viewMode = mode; },
       render,
       close,
@@ -185,16 +229,20 @@ export async function openTabManager(
       shadow.querySelectorAll(".ht-tab-manager-delete").forEach((el) => {
         el.addEventListener("click", async (event) => {
           event.stopPropagation();
-          const tabId = parseInt((el as HTMLElement).dataset.tabId!);
-          const idx = list.findIndex((item) => item.tabId === tabId);
-          if (idx !== -1) undoEntry = { entry: { ...list[idx] }, index: idx };
-          await browser.runtime.sendMessage({ type: "TAB_MANAGER_REMOVE", tabId });
-          list = (await browser.runtime.sendMessage({
-            type: "TAB_MANAGER_LIST",
-          })) as TabManagerEntry[];
-          activeIndex = Math.min(activeIndex, Math.max(list.length - 1, 0));
-          if (swapMode) exitSwapMode();
-          render();
+          try {
+            const tabId = parseInt((el as HTMLElement).dataset.tabId!);
+            const idx = list.findIndex((item) => item.tabId === tabId);
+            if (idx !== -1) undoEntry = { entry: { ...list[idx] }, index: idx };
+            await browser.runtime.sendMessage({ type: "TAB_MANAGER_REMOVE", tabId });
+            list = (await browser.runtime.sendMessage({
+              type: "TAB_MANAGER_LIST",
+            })) as TabManagerEntry[];
+            activeIndex = Math.min(activeIndex, Math.max(list.length - 1, 0));
+            if (swapMode) exitSwapMode();
+            render();
+          } catch (error) {
+            failToSafeTabManagerState("Delete tab-manager entry failed", error);
+          }
         });
       });
 
@@ -210,7 +258,9 @@ export async function openTabManager(
           renderTabManager();
           break;
         case "saveSession":
-          renderSaveSession(sessionCtx);
+          void renderSaveSession(sessionCtx).catch((error) => {
+            failToSafeTabManagerState("Render save-session view failed", error);
+          });
           break;
         case "sessionList":
           renderSessionList(sessionCtx);
@@ -260,6 +310,11 @@ export async function openTabManager(
           .then((fresh) => {
             list = fresh as TabManagerEntry[];
             render();
+          })
+          .catch(() => {
+            showFeedback("Swap failed");
+            exitSwapMode();
+            render();
           });
       }
     }
@@ -267,10 +322,15 @@ export async function openTabManager(
     async function jumpToSlot(item: TabManagerEntry): Promise<void> {
       if (!item) return;
       close();
-      await browser.runtime.sendMessage({
-        type: "TAB_MANAGER_JUMP",
-        slot: item.slot,
-      });
+      try {
+        await browser.runtime.sendMessage({
+          type: "TAB_MANAGER_JUMP",
+          slot: item.slot,
+        });
+      } catch (error) {
+        console.error("[Harpoon Telescope] Jump to tab-manager slot failed:", error);
+        showFeedback("Jump failed");
+      }
     }
 
     // -- Keyboard handler --
@@ -327,6 +387,8 @@ export async function openTabManager(
         event.preventDefault();
         event.stopPropagation();
         if (list.length === 0) return;
+        pendingSaveName = "";
+        resetSessionTransientState();
         viewMode = "saveSession";
         render();
         return;
@@ -337,12 +399,18 @@ export async function openTabManager(
         event.preventDefault();
         event.stopPropagation();
         (async () => {
-          sessions = (await browser.runtime.sendMessage({
-            type: "SESSION_LIST",
-          })) as TabManagerSession[];
-          sessionIndex = 0;
-          viewMode = "sessionList";
-          render();
+          try {
+            sessions = (await browser.runtime.sendMessage({
+              type: "SESSION_LIST",
+            })) as TabManagerSession[];
+            sessionIndex = 0;
+            sessionFilterQuery = "";
+            resetSessionTransientState();
+            viewMode = "sessionList";
+            render();
+          } catch (error) {
+            failToSafeTabManagerState("Load sessions failed", error);
+          }
         })();
         return;
       }
@@ -393,19 +461,23 @@ export async function openTabManager(
         event.stopPropagation();
         if (list[activeIndex]) {
           (async () => {
-            undoEntry = { entry: { ...list[activeIndex] }, index: activeIndex };
-            await browser.runtime.sendMessage({
-              type: "TAB_MANAGER_REMOVE",
-              tabId: list[activeIndex].tabId,
-            });
-            list = (await browser.runtime.sendMessage({
-              type: "TAB_MANAGER_LIST",
-            })) as TabManagerEntry[];
-            activeIndex = Math.min(
-              activeIndex,
-              Math.max(list.length - 1, 0),
-            );
-            render();
+            try {
+              undoEntry = { entry: { ...list[activeIndex] }, index: activeIndex };
+              await browser.runtime.sendMessage({
+                type: "TAB_MANAGER_REMOVE",
+                tabId: list[activeIndex].tabId,
+              });
+              list = (await browser.runtime.sendMessage({
+                type: "TAB_MANAGER_LIST",
+              })) as TabManagerEntry[];
+              activeIndex = Math.min(
+                activeIndex,
+                Math.max(list.length - 1, 0),
+              );
+              render();
+            } catch (error) {
+              failToSafeTabManagerState("Remove tab-manager entry failed", error);
+            }
           })();
         }
       } else if (
@@ -425,15 +497,19 @@ export async function openTabManager(
           return;
         }
         (async () => {
-          const restoreIdx = Math.min(undoEntry!.index, list.length);
-          list.splice(restoreIdx, 0, undoEntry!.entry);
-          undoEntry = null;
-          await browser.runtime.sendMessage({ type: "TAB_MANAGER_REORDER", list });
-          list = (await browser.runtime.sendMessage({
-            type: "TAB_MANAGER_LIST",
-          })) as TabManagerEntry[];
-          activeIndex = restoreIdx;
-          render();
+          try {
+            const restoreIdx = Math.min(undoEntry!.index, list.length);
+            list.splice(restoreIdx, 0, undoEntry!.entry);
+            undoEntry = null;
+            await browser.runtime.sendMessage({ type: "TAB_MANAGER_REORDER", list });
+            list = (await browser.runtime.sendMessage({
+              type: "TAB_MANAGER_LIST",
+            })) as TabManagerEntry[];
+            activeIndex = restoreIdx;
+            render();
+          } catch (error) {
+            failToSafeTabManagerState("Undo tab-manager remove failed", error);
+          }
         })();
       } else {
         // Block all other keys from reaching the page
@@ -447,5 +523,6 @@ export async function openTabManager(
     host.focus();
   } catch (err) {
     console.error("[Harpoon Telescope] Failed to open tab manager overlay:", err);
+    dismissPanel();
   }
 }

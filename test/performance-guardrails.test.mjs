@@ -21,8 +21,6 @@ const REQUIRED_BUDGETS = {
   "searchCurrentPage.renderVisibleItems": 16,
   "bookmarks.applyFilter": 28,
   "bookmarks.renderVisibleItems": 20,
-  "history.applyFilter": 28,
-  "history.renderVisibleItems": 20,
 };
 
 const REQUIRED_INSTRUMENTATION = {
@@ -34,10 +32,6 @@ const REQUIRED_INSTRUMENTATION = {
   "src/lib/bookmarks/bookmarks.ts": [
     'withPerfTrace("bookmarks.applyFilter"',
     'withPerfTrace("bookmarks.renderVisibleItems"',
-  ],
-  "src/lib/history/history.ts": [
-    'withPerfTrace("history.applyFilter"',
-    'withPerfTrace("history.renderVisibleItems"',
   ],
 };
 

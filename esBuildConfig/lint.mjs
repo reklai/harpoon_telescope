@@ -18,7 +18,6 @@ const OVERLAY_TS_FILES = [
   "src/lib/addBookmark/addBookmark.ts",
   "src/lib/bookmarks/bookmarks.ts",
   "src/lib/help/help.ts",
-  "src/lib/history/history.ts",
   "src/lib/searchCurrentPage/searchCurrentPage.ts",
   "src/lib/searchOpenTabs/searchOpenTabs.ts",
   "src/lib/tabManager/session.ts",
@@ -29,7 +28,6 @@ const OVERLAY_CSS_FILES = [
   "src/lib/addBookmark/addBookmark.css",
   "src/lib/bookmarks/bookmarks.css",
   "src/lib/help/help.css",
-  "src/lib/history/history.css",
   "src/lib/searchCurrentPage/searchCurrentPage.css",
   "src/lib/searchOpenTabs/searchOpenTabs.css",
   "src/lib/tabManager/session.css",
@@ -48,10 +46,6 @@ const PERF_INSTRUMENTATION_REQUIREMENTS = {
     'withPerfTrace("bookmarks.applyFilter"',
     'withPerfTrace("bookmarks.renderVisibleItems"',
   ],
-  "src/lib/history/history.ts": [
-    'withPerfTrace("history.applyFilter"',
-    'withPerfTrace("history.renderVisibleItems"',
-  ],
 };
 
 const REQUIRED_PERF_BUDGET_KEYS = [
@@ -60,8 +54,6 @@ const REQUIRED_PERF_BUDGET_KEYS = [
   "searchCurrentPage.renderVisibleItems",
   "bookmarks.applyFilter",
   "bookmarks.renderVisibleItems",
-  "history.applyFilter",
-  "history.renderVisibleItems",
 ];
 
 const DISALLOWED_IDENTIFIER_PATTERNS = [

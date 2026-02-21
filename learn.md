@@ -2,6 +2,13 @@
 
 This file exists so I can grow from junior -> mid -> senior by mastering how this codebase actually works. It is a full rebuildable walkthrough, not a tutorial. It is meant to make me confident explaining every subsystem in an interview, because this product is mine and I can defend every tradeoff.
 
+## Current Product Priority (Non-Negotiable)
+
+- The core value of this product is Tab Manager + Session Manager reliability.
+- Rapid tab switching must stay stable: no freeze, no input lock, no missed jumps.
+- Scroll restore must be consistent for jump, reopen, and session load, including reused tabs.
+- Store release work (AMO/CWS packaging and submission) is secondary until this reliability gate is proven in Firefox and Chrome.
+
 What I want to get out of this:
 
 - I can trace data from user input to UI output to storage and back.
@@ -38,15 +45,14 @@ This guide is self-contained: no prerequisite docs are required to learn the sys
 11. [Search Open Tabs — src/lib/searchOpenTabs](#search-open-tabs--srclibsearchopentabs)
 12. [Tab Manager — src/lib/tabManager](#tab-manager--srclibtabmanager)
 13. [Bookmarks — src/lib/bookmarks](#bookmarks--srclibbookmarks)
-14. [History — src/lib/history](#history--srclibhistory)
-15. [Help — src/lib/help](#help--srclibhelp)
-16. [Shared Utilities — src/lib/shared](#shared-utilities--srclibshared)
-17. [Panel Lifecycle + Guards](#panel-lifecycle--guards)
-18. [Performance Patterns](#performance-patterns)
-19. [UI Conventions (Footers, Vim, Filters)](#ui-conventions-footers-vim-filters)
-20. [Patterns Worth Reusing](#patterns-worth-reusing)
-21. [Interview Prep + Codebase Walkthrough](#interview-prep--codebase-walkthrough)
-22. [Final Thought](#final-thought)
+14. [Help — src/lib/help](#help--srclibhelp)
+15. [Shared Utilities — src/lib/shared](#shared-utilities--srclibshared)
+16. [Panel Lifecycle + Guards](#panel-lifecycle--guards)
+17. [Performance Patterns](#performance-patterns)
+18. [UI Conventions (Footers, Vim, Filters)](#ui-conventions-footers-vim-filters)
+19. [Patterns Worth Reusing](#patterns-worth-reusing)
+20. [Interview Prep + Codebase Walkthrough](#interview-prep--codebase-walkthrough)
+21. [Final Thought](#final-thought)
 
 ---
 
@@ -57,7 +63,7 @@ Harpoon Telescope is a keyboard-first browser extension inspired by Neovim plugi
 - Tab Manager (Harpoon): pin up to 4 tabs with scroll restore and sessions.
 - Search Current Page (Telescope): fuzzy grep with structural filters + preview.
 - Search Open Tabs (Frecency): ranked open tabs by frequency and recency.
-- Bookmarks + History: two-pane browsers with tree views and confirmations.
+- Bookmarks: two-pane browser with tree views and confirmations.
 
 Everything runs in plain TypeScript with no UI framework. Overlays are Shadow DOM panels injected into the active page.
 Engineering promise: stay Ghostty-inspired and browser-primitive (DOM/Shadow DOM/WebExtension APIs), keep UI latency low, minimize visual glitching, and preserve Firefox/Chrome parity.
@@ -267,7 +273,7 @@ Growth checkpoint:
 
 ---
 
-### Flow C — Bookmarks / History
+### Flow C — Bookmarks
 
 User presses `Alt+B` to open Bookmarks. The content script opens the overlay from `src/lib/bookmarks/bookmarks.ts` and immediately sends `{ type: "BOOKMARK_LIST" }` to the background. The background calls `browser.bookmarks.getTree()` — an API only available in the background context — and returns flattened entries. Until that Promise resolves, the overlay shows nothing or a loading state. Once data arrives, it's stored in `allEntries` and rendered synchronously. No partial updates, no flickering.
 
@@ -476,7 +482,6 @@ harpoon_telescope/
 │   │   ├── searchCurrentPage/       # Telescope search (current page)
 │   │   ├── searchOpenTabs/          # Frecency open tabs list
 │   │   ├── bookmarks/               # Bookmarks browser
-│   │   ├── history/                 # History browser
 │   │   ├── addBookmark/             # Add bookmark wizard
 │   │   └── help/                    # Help overlay
 │   └── icons/
@@ -586,7 +591,7 @@ This file defines global types shared across background + content + UI:
 
 - `TabManagerEntry`, `TabManagerSession`
 - `GrepResult`, `SearchFilter`
-- `BookmarkEntry`, `HistoryEntry`, `FrecencyEntry`
+- `BookmarkEntry`, `FrecencyEntry`
 
 **Why ambient types?**
 
@@ -716,16 +721,6 @@ Context matters. Seeing the folder tree while filtering helps users understand w
 
 ---
 
-## History — src/lib/history
-
-Same two-pane tree-first pattern:
-
-- time-bucketed tree view (Today, Yesterday, This Week, Last Week, This Month, Older)
-- filters: `/hour`, `/today`, `/week`, `/month`
-- `c` clears search when list is focused
-
----
-
 ## Help — src/lib/help
 
 Help overlay builds sections from live keybinding config. It documents the panel controls and filters.
@@ -739,7 +734,7 @@ If the user customizes shortcuts, the help menu reflects their actual bindings, 
 ## Shared Utilities — src/lib/shared
 
 - `helpers.ts`: `escapeHtml`, `escapeRegex`, `buildFuzzyPattern`, `extractDomain`
-- `filterInput.ts`: shared slash-filter parsing used by search/bookmarks/history overlays
+- `filterInput.ts`: shared slash-filter parsing used by search and bookmark overlays
 - `panelHost.ts`: shadow host, base styles, focus trapping, vim badge
 - `scroll.ts`: scroll-to-text highlight
 - `feedback.ts`: toast messages

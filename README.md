@@ -2,6 +2,13 @@
 
 A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fast tab navigation with optional vim motions. Works on **Firefox**, **Chrome**, and **Zen** (Firefox fork).
 
+## Current Product Priority (Release Gate)
+
+- Primary goal: Tab Manager + Session Manager must be fast, stable, and predictable under real rapid usage.
+- Must pass rapid-switch stress (`Alt+1..4`, `Alt+-`, `Alt+=`) with no UI lockups, missed jumps, or panel freeze.
+- Must restore saved scroll location reliably on jump, reopen, and session load (including reused tabs).
+- Store publishing happens only after this reliability gate is signed off on both Firefox and Chrome builds.
+
 ## Features
 
 ### Telescope Search
@@ -20,6 +27,7 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 - **Remembers scroll position (X, Y)** — restores exactly where you left off
 - **Swap mode** (`w`) — stays active after a swap; press another slot to keep swapping, `w` or `Esc` to exit
 - **Sessions** — save (`s`), load (`l`), and delete named harpoon sessions (max 4)
+  - Session list includes a preview pane showing tabs in the selected profile
   - Duplicate session names rejected (case-insensitive)
   - Identical session content rejected (compares URL arrays)
   - Cannot save an empty harpoon list
@@ -36,16 +44,6 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 - **Move bookmark** (`m`) — folder picker to move a bookmark to a different folder, with confirmation
 - **Remove bookmark** (`d`) — delete with y/n confirmation
 - **Add bookmark** (`Alt+Shift+B`) — three-step wizard: choose File or Folder → pick destination folder → (folder only) enter name
-- **Tab pane switching** — Tab key cycles between search input and results list
-
-### History
-- **`Alt+Y`** opens a two-pane history browser with virtual scrolling (max 200 entries)
-- **Type to filter** — fuzzy matching against title and URL
-- **Slash filters** — `/hour`, `/today`, `/week`, `/month` narrow by time range
-- **Detail pane** — shows title, URL, domain, visit count, last visit time, and first visit time
-- **Tree view** (`t`) — time-bucketed tree (Today / Yesterday / This Week / Last Week / This Month / Older) with entries nested inside, collapse indicators, j/k cursor navigation
-- **Open confirmation** — Enter or double-click on a tree entry shows "Open 'title'?" dialog with domain shown underneath (y/n)
-- **Remove history entry** (`d`) — delete with y/n confirmation
 - **Tab pane switching** — Tab key cycles between search input and results list
 
 ### Frecency Tab List
@@ -69,7 +67,7 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 |--------|-----------|-----------------|
 | Navigate results | Arrow Up/Down | j/k |
 | Jump to selected | Enter | Enter |
-| Remove (harpoon/bookmark/history) | d | d |
+| Remove (harpoon/bookmark) | d | d |
 | Swap mode (harpoon) | w | w |
 | Move bookmark | m | m |
 | Toggle tree view | t | t |
@@ -90,11 +88,17 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 | `Alt+Shift+F` | Open frecency tab list |
 | `Alt+B` | Open bookmarks browser |
 | `Alt+Shift+B` | Add bookmark (current page or new folder) |
-| `Alt+Y` | Open history browser |
 | `Alt+M` | Open help menu |
 | `Alt+V` | Toggle vim motions globally |
 
 All keybindings are fully configurable in the extension options page with per-scope collision detection.
+
+## Engineering Promise
+
+- Ghostty-inspired UX with fast keyboard-first workflows.
+- Native browser primitives first: Shadow DOM, DOM APIs, and WebExtension APIs over UI frameworks.
+- Cross-platform parity between Firefox/Zen and Chrome targets.
+- Minimal UI glitching through guarded panel lifecycle, responsive layout, and perf instrumentation.
 
 ## Build
 
@@ -134,9 +138,10 @@ Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps
 
 ### Release Flow
 
-1. If permissions, storage limits, or privacy claims changed, update `manifest_v2.json`, `manifest_v3.json`, `STORE.md`, and `PRIVACY.md` together in the same PR.
-2. Run `npm run ci` before tagging a release. This now includes `npm run verify:upgrade` and `npm run verify:store`, which block releases on migration regressions or manifest/docs/privacy policy drift.
-3. Build the target package (`npm run build:firefox` and/or `npm run build:chrome`) and use `STORE.md` + `PRIVACY.md` as the source of truth for store submission text.
+1. Pass the Tab Manager/Session Manager reliability gate first: rapid-switch stability, consistent panel open behavior, and correct scroll restore on jump/reopen/session load.
+2. If permissions, storage limits, or privacy claims changed, update `manifest_v2.json`, `manifest_v3.json`, `STORE.md`, and `PRIVACY.md` together in the same PR.
+3. Run `npm run ci` before tagging a release. This includes `npm run verify:upgrade` and `npm run verify:store`, which block releases on migration regressions or manifest/docs/privacy-policy drift.
+4. Build the target package (`npm run build:firefox` and/or `npm run build:chrome`) and use `STORE.md` + `PRIVACY.md` as the source of truth for store submission text.
 
 ## Installation (Development)
 
@@ -172,7 +177,6 @@ harpoon_telescope/
 │   │   ├── background/                     # Background domains + message/command routers
 │   │   ├── bookmarks/
 │   │   ├── help/
-│   │   ├── history/
 │   │   ├── searchCurrentPage/
 │   │   ├── searchOpenTabs/
 │   │   ├── tabManager/
@@ -191,7 +195,7 @@ harpoon_telescope/
 ┌──────────────────────────────────────────────────────┐
 │                background.js                          │
 │   tab manager + sessions + frecency + bookmarks      │
-│   + history + message routing                         │
+│   + message routing                                   │
 └───────────────┬──────────────────────┬────────────────┘
                 │                      │
       runtime messages          runtime messages
@@ -216,15 +220,15 @@ harpoon_telescope/
 - **Dual manifests** — MV2 for Firefox/Zen, MV3 for Chrome (service worker lifecycle)
 - **Compatibility guardrail** — `npm run verify:compat` checks manifest permission/command invariants
 - **Store policy guardrail** — `npm run verify:store` keeps manifests, store copy, and privacy policy aligned
-- **Background domain routing** — `background.ts` is orchestration; tab manager/bookmarks/history handlers live in `src/lib/background/*`
+- **Background domain routing** — `background.ts` is orchestration; tab manager/bookmark handlers live in `src/lib/background/*`
 - **`ensureTabManagerLoaded()` guards** — tab manager state is lazily reloaded when background context is cold-started
 - **Configurable keybindings** — all bindings in `browser.storage.local` with per-scope collision detection
 - **Navigation modes** — vim mode adds aliases on top of basic keys (never replaces)
-- **rAF-throttled rendering** — frecency, telescope, bookmark, and history defer DOM updates to animation frames
+- **rAF-throttled rendering** — frecency, telescope, and bookmark views defer DOM updates to animation frames
 - **Perf regression budgets** — filter/render hotspots use `withPerfTrace` + `src/lib/shared/perfBudgets.json` guardrails
 - **Shared design tokens** — overlays consume `panelHost` CSS variables for consistent Ghostty-inspired styling
-- **Virtual scrolling** — telescope, bookmark, and history results render only ~25 visible items from a pool
-- **Tree views** — bookmark and history overlays provide hierarchical navigation with collapse/expand and confirmation flows
+- **Virtual scrolling** — telescope and bookmark results render only ~25 visible items from a pool
+- **Tree views** — bookmark overlays provide hierarchical navigation with collapse/expand and confirmation flows
 
 ## Storage Keys
 

@@ -107,10 +107,10 @@ interface TabManagerSession {
   savedAt: number;  // timestamp
 }
 
-// Browser history entry for the history overlay
-interface HistoryEntry {
-  url: string;
-  title: string;
-  lastVisitTime: number;
-  visitCount: number;
+interface SessionLoadSummary {
+  sessionName: string;
+  totalCount: number;
+  replaceCount: number;
+  openCount: number;
+  reuseCount: number;
 }

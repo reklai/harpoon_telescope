@@ -3,7 +3,14 @@
 
 import { keyToDisplay } from "../shared/keybindings";
 import { matchesAction } from "../shared/keybindings";
-import { createPanelHost, removePanelHost, registerPanelCleanup, getBaseStyles, vimBadgeHtml } from "../shared/panelHost";
+import {
+  createPanelHost,
+  removePanelHost,
+  registerPanelCleanup,
+  getBaseStyles,
+  vimBadgeHtml,
+  dismissPanel,
+} from "../shared/panelHost";
 import styles from "./help.css";
 
 /** Section definition for the help content */
@@ -30,7 +37,6 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
         { label: "Search Open Tabs", key: k(g.openFrecency) },
         { label: "Tab Manager", key: k(g.openTabManager) },
         { label: "Bookmarks", key: k(g.openBookmarks) },
-        { label: "History", key: k(g.openHistory) },
         { label: "Help (this menu)", key: k(g.openHelp) },
       ],
     },
@@ -78,14 +84,6 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
       ],
     },
     {
-      title: "History Panel",
-      items: [
-        { label: "Focus tree", key: "t" },
-        { label: "Clear search", key: "c" },
-        { label: "Del entry", key: "d" },
-      ],
-    },
-    {
       title: "Search Current Page",
       items: [
         { label: "Clear search", key: "c" },
@@ -106,10 +104,6 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
         { label: "Links (<a> elements)", key: "/links" },
         { label: "Combine filters (union)", key: "/code /links" },
         { label: "Bookmark: folder path", key: "/folder" },
-        { label: "History: last hour", key: "/hour" },
-        { label: "History: today", key: "/today" },
-        { label: "History: last 7 days", key: "/week" },
-        { label: "History: last 30 days", key: "/month" },
       ],
     },
   ];
@@ -259,5 +253,6 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
     host.focus();
   } catch (err) {
     console.error("[Harpoon Telescope] Failed to open help overlay:", err);
+    dismissPanel();
   }
 }

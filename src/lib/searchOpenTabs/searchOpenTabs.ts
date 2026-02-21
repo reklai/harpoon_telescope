@@ -3,10 +3,37 @@
 
 import browser from "webextension-polyfill";
 import { matchesAction, keyToDisplay } from "../shared/keybindings";
-import { createPanelHost, removePanelHost, registerPanelCleanup, getBaseStyles, vimBadgeHtml } from "../shared/panelHost";
+import {
+  createPanelHost,
+  removePanelHost,
+  registerPanelCleanup,
+  getBaseStyles,
+  vimBadgeHtml,
+  dismissPanel,
+} from "../shared/panelHost";
 import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../shared/helpers";
 import { withPerfTrace } from "../shared/perf";
 import searchOpenTabsStyles from "./searchOpenTabs.css";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchFrecencyListWithRetry(): Promise<FrecencyEntry[]> {
+  const retryDelaysMs = [0, 80, 220, 420];
+  let lastError: unknown = null;
+  for (const delay of retryDelaysMs) {
+    if (delay > 0) await sleep(delay);
+    try {
+      return (await browser.runtime.sendMessage({
+        type: "FRECENCY_LIST",
+      })) as FrecencyEntry[];
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("Failed to load open tabs list");
+}
 
 export async function openSearchOpenTabs(
   config: KeybindingsConfig,
@@ -50,11 +77,11 @@ export async function openSearchOpenTabs(
 
     // Input row
     const inputWrap = document.createElement("div");
-    inputWrap.className = "ht-open-tabs-input-wrap";
-    inputWrap.innerHTML = `<span class="ht-open-tabs-prompt">&gt;</span>`;
+    inputWrap.className = "ht-open-tabs-input-wrap ht-ui-input-wrap";
+    inputWrap.innerHTML = `<span class="ht-open-tabs-prompt ht-ui-input-prompt">&gt;</span>`;
     const input = document.createElement("input");
     input.type = "text";
-    input.className = "ht-open-tabs-input";
+    input.className = "ht-open-tabs-input ht-ui-input-field";
     input.placeholder = "Filter tabs...";
     inputWrap.appendChild(input);
     panel.appendChild(inputWrap);
@@ -453,9 +480,7 @@ export async function openSearchOpenTabs(
     });
 
     // Fetch frecency list and render
-    allEntries = (await browser.runtime.sendMessage({
-      type: "FRECENCY_LIST",
-    })) as FrecencyEntry[];
+    allEntries = await fetchFrecencyListWithRetry();
     filtered = [...allEntries];
 
     document.addEventListener("keydown", keyHandler, true);
@@ -464,5 +489,6 @@ export async function openSearchOpenTabs(
     input.focus();
   } catch (err) {
     console.error("[Harpoon Telescope] Failed to open search open tabs:", err);
+    dismissPanel();
   }
 }

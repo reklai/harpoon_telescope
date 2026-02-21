@@ -14,14 +14,24 @@
 }
 .ht-search-page-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .ht-search-page-input-wrap {
-  display: flex; align-items: center; padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  padding: var(--ht-input-row-pad-y) var(--ht-input-row-pad-x);
   border-bottom: 1px solid var(--ht-color-border-soft); background: var(--ht-color-bg-elevated);
 }
-.ht-prompt { color: var(--ht-color-accent); margin-right: 8px; font-weight: 600; font-size: 14px; }
+.ht-prompt {
+  color: var(--ht-color-accent);
+  margin-right: var(--ht-input-prompt-gap);
+  font-weight: var(--ht-input-prompt-weight);
+  font-size: var(--ht-input-prompt-size);
+}
 .ht-search-page-input {
   flex: 1; background: transparent; border: none; outline: none;
-  color: var(--ht-color-text); font-family: inherit; font-size: 13px;
-  caret-color: var(--ht-color-text-strong); caret-shape: block;
+  color: var(--ht-color-text);
+  font-family: inherit;
+  font-size: var(--ht-input-font-size);
+  caret-color: var(--ht-input-caret-color);
+  caret-shape: block;
 }
 .ht-search-page-input::placeholder { color: var(--ht-color-text-dim); }
 .ht-search-page-columns { flex: 1; display: flex; overflow: hidden; }
@@ -64,9 +74,14 @@
   width: 60%; display: flex; flex-direction: column; overflow: hidden;
 }
 .ht-preview-header {
-  padding: 5px 14px; font-size: 11px; color: var(--ht-color-text-muted);
+  padding: var(--ht-pane-header-pad-y) var(--ht-pane-header-pad-x);
+  font-size: var(--ht-pane-header-font-size);
+  color: var(--ht-color-text-muted);
   background: var(--ht-color-bg-elevated); border-bottom: 1px solid var(--ht-color-border-faint);
-  font-weight: 500;
+  font-weight: var(--ht-pane-header-weight);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .ht-preview-content {
   flex: 1; overflow-y: auto; padding: 12px 14px;
@@ -174,7 +189,9 @@
 
 @media (max-width: 520px) {
   .ht-search-page-container { border-radius: 8px; }
-  .ht-search-page-input-wrap { padding: 8px 10px; }
+  .ht-search-page-input-wrap {
+    padding: var(--ht-input-row-pad-y) var(--ht-input-row-pad-x-compact);
+  }
   .ht-result-item { padding: 5px 10px; }
   .ht-preview-content { padding: 10px; }
 }

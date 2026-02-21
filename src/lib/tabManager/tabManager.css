@@ -67,15 +67,75 @@
 
 /* Session sub-views (save, list, replace) — rendered inside Tab Manager */
 .ht-session-input-wrap {
-  display: flex; align-items: center; padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  padding: var(--ht-input-row-pad-y) var(--ht-input-row-pad-x);
   border-bottom: 1px solid var(--ht-color-border-soft); background: var(--ht-color-bg-elevated);
 }
-.ht-session-prompt { color: var(--ht-color-accent); margin-right: 8px; font-weight: 600; font-size: 13px; }
+.ht-session-prompt {
+  color: var(--ht-color-accent);
+  margin-right: var(--ht-input-prompt-gap);
+  font-weight: var(--ht-input-prompt-weight);
+  font-size: var(--ht-input-prompt-size);
+}
 .ht-session-input {
   flex: 1; background: transparent; border: none; outline: none;
-  color: var(--ht-color-text); font-family: inherit; font-size: 13px; caret-color: var(--ht-color-accent);
+  color: var(--ht-color-text);
+  font-family: inherit;
+  font-size: var(--ht-input-font-size);
+  caret-color: var(--ht-input-caret-color);
 }
 .ht-session-input::placeholder { color: var(--ht-color-text-dim); }
+.ht-session-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ht-color-bg);
+}
+.ht-session-pane-header {
+  padding: var(--ht-pane-header-pad-y) var(--ht-pane-header-pad-x);
+  font-size: var(--ht-pane-header-font-size);
+  color: var(--ht-color-text-muted);
+  background: var(--ht-color-bg-elevated);
+  border-bottom: 1px solid var(--ht-color-border-faint);
+  font-weight: var(--ht-pane-header-weight);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ht-session-pane-header-text {
+  flex: 1;
+}
+.ht-session-pane-header-meta {
+  font-size: 10px;
+  color: var(--ht-color-text-dim);
+  flex-shrink: 0;
+}
+.ht-session-filter-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--ht-input-row-pad-y) var(--ht-input-row-pad-x);
+  border-bottom: 1px solid var(--ht-color-border-soft);
+  background: var(--ht-color-bg-elevated);
+}
+.ht-session-filter-prompt {
+  color: var(--ht-color-text-muted);
+  font-weight: var(--ht-input-prompt-weight);
+  font-size: var(--ht-input-prompt-size);
+}
+.ht-session-filter-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--ht-color-text);
+  font-family: inherit;
+  font-size: var(--ht-input-font-size);
+  caret-color: var(--ht-input-caret-color);
+}
+.ht-session-filter-input::placeholder { color: var(--ht-color-text-dim); }
 .ht-session-item {
   display: flex; align-items: center; padding: 8px 14px; gap: 10px;
   cursor: pointer; border-bottom: 1px solid var(--ht-color-border-faint);
@@ -86,6 +146,12 @@
 .ht-session-name {
   flex: 1; font-size: 12px; color: var(--ht-color-text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ht-session-name mark {
+  background: var(--ht-color-mark-bg);
+  color: var(--ht-color-bg);
+  border-radius: 2px;
+  padding: 0 1px;
 }
 .ht-session-meta {
   font-size: 10px; color: var(--ht-color-text-muted); flex-shrink: 0;
@@ -105,8 +171,157 @@
   caret-color: var(--ht-color-accent); padding: 0 2px;
 }
 
+.ht-session-list-container {
+  width: min(94vw, 860px);
+}
+.ht-session-columns {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  background: var(--ht-color-bg);
+  min-height: min(360px, 56vh);
+  max-height: min(420px, 60vh);
+}
+.ht-session-list-pane {
+  width: 40%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--ht-color-border-soft);
+  background: var(--ht-color-bg);
+}
+.ht-session-list-scroll {
+  flex: 1;
+  max-height: none;
+  overflow-y: auto;
+}
+.ht-session-preview-pane {
+  width: 60%;
+  display: flex;
+  flex-direction: column;
+  background: var(--ht-color-bg);
+}
+.ht-session-detail-content {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--ht-color-bg);
+}
+.ht-session-preview-list {
+  overflow-y: auto;
+  padding: 6px 0;
+}
+.ht-session-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--ht-color-border-ultra-faint);
+}
+.ht-session-preview-slot {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--ht-color-surface);
+  color: var(--ht-color-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ht-session-preview-info {
+  min-width: 0;
+  flex: 1;
+}
+.ht-session-preview-title {
+  font-size: 11px;
+  color: var(--ht-color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ht-session-preview-url {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--ht-color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ht-session-preview-empty {
+  margin: auto;
+  padding: 20px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--ht-color-text-muted);
+}
+.ht-session-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--ht-color-border-faint);
+  background: var(--ht-color-bg-soft);
+}
+.ht-session-confirm-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+.ht-session-confirm-msg {
+  text-align: center;
+  font-size: 13px;
+  color: var(--ht-color-text);
+  line-height: 1.5;
+}
+.ht-session-confirm-title {
+  color: var(--ht-color-text-strong);
+  font-weight: 600;
+}
+.ht-session-confirm-path {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ht-color-text-muted);
+}
+.ht-session-confirm-details {
+  width: 100%;
+  max-width: 420px;
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ht-color-text-muted);
+}
+.ht-session-confirm-hint {
+  font-size: 11px;
+  color: var(--ht-color-text-faint);
+}
+
 @media (max-width: 520px), (max-height: 560px) {
   .ht-tab-manager-container { border-radius: 8px; }
   .ht-tab-manager-list { max-height: min(58vh, 380px); }
+  .ht-session-input-wrap,
+  .ht-session-filter-wrap {
+    padding: var(--ht-input-row-pad-y) var(--ht-input-row-pad-x-compact);
+  }
   .ht-tab-manager-item { padding: 8px 10px; }
+}
+
+@media (max-width: 860px), (max-height: 620px) {
+  .ht-session-list-container {
+    width: 96vw;
+  }
+  .ht-session-columns {
+    flex-direction: column;
+    max-height: min(66vh, 520px);
+  }
+  .ht-session-list-pane {
+    width: 100%;
+    max-height: min(250px, 36vh);
+    border-right: none;
+    border-bottom: 1px solid var(--ht-color-border-soft);
+  }
+  .ht-session-preview-pane {
+    width: 100%;
+  }
 }

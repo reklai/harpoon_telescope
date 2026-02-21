@@ -22,7 +22,7 @@ This data never leaves your browser. It is not sent to any server, API, or third
 None. The extension:
 
 - Does not collect analytics or telemetry
-- Does not track browsing history beyond the frecency scores stored locally
+- Does not access browser history APIs
 - Does not use cookies
 - Does not make network requests (no remote servers, no APIs, no pings)
 - Does not load remote code or scripts
@@ -36,7 +36,6 @@ None. The extension:
 | `tabs` | Read tab titles and URLs to display in harpoon and frecency lists, and to switch between tabs |
 | `activeTab` | Access the current page's content for in-page search (Telescope) |
 | `bookmarks` | Read, create, move, and delete bookmarks from the bookmark overlays |
-| `history` | Read and remove history entries from the history overlay |
 | `storage` | Save your harpoon list, sessions, frecency data, and keybinding preferences locally |
 | `<all_urls>` | Inject the content script that provides keyboard shortcuts and search overlays on any page |
 

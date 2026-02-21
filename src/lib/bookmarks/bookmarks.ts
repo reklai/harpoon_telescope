@@ -9,7 +9,14 @@
 
 import browser from "webextension-polyfill";
 import { matchesAction, keyToDisplay } from "../shared/keybindings";
-import { createPanelHost, removePanelHost, registerPanelCleanup, getBaseStyles, vimBadgeHtml } from "../shared/panelHost";
+import {
+  createPanelHost,
+  removePanelHost,
+  registerPanelCleanup,
+  getBaseStyles,
+  vimBadgeHtml,
+  dismissPanel,
+} from "../shared/panelHost";
 import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../shared/helpers";
 import { parseSlashFilterQuery } from "../shared/filterInput";
 import { showFeedback } from "../shared/feedback";
@@ -93,9 +100,9 @@ export async function openBookmarkOverlay(
           ${vimBadgeHtml(config)}
         </div>
         <div class="ht-bookmark-body">
-          <div class="ht-bookmark-input-wrap">
-            <span class="ht-bookmark-prompt">&gt;</span>
-            <input type="text" class="ht-bookmark-input" placeholder="Filter bookmarks..." />
+          <div class="ht-bookmark-input-wrap ht-ui-input-wrap">
+            <span class="ht-bookmark-prompt ht-ui-input-prompt">&gt;</span>
+            <input type="text" class="ht-bookmark-input ht-ui-input-field" placeholder="Filter bookmarks..." />
           </div>
           <div class="ht-bm-filter-pills"></div>
           <div class="ht-bookmark-columns">
@@ -104,7 +111,7 @@ export async function openBookmarkOverlay(
               <div class="ht-bm-results-list"></div>
             </div>
             <div class="ht-bm-detail-pane">
-              <div class="ht-bm-detail-header"><span class="ht-bm-detail-header-text">Bookmark Tree</span><button class="ht-bm-detail-header-close" title="Back">&times;</button></div>
+              <div class="ht-bm-detail-header ht-ui-pane-header"><span class="ht-bm-detail-header-text ht-ui-pane-header-text">Bookmark Tree</span><button class="ht-bm-detail-header-close" title="Back">&times;</button></div>
               <div class="ht-bm-detail-placeholder">No bookmarks</div>
               <div class="ht-bm-detail-content" style="display:none;"></div>
             </div>
@@ -1673,5 +1680,6 @@ export async function openBookmarkOverlay(
     renderResults();
   } catch (err) {
     console.error("[Harpoon Telescope] Failed to open bookmark overlay:", err);
+    dismissPanel();
   }
 }

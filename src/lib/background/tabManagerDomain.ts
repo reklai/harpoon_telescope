@@ -1,6 +1,7 @@
 import browser, { Tabs } from "webextension-polyfill";
 import { MAX_TAB_MANAGER_SLOTS } from "../shared/keybindings";
 import { TabManagerState } from "../shared/sessions";
+import { normalizeUrlForMatch } from "../shared/helpers";
 
 export interface TabManagerDomainHooks {
   onTabClosed(tabId: number): Promise<void>;
@@ -29,9 +30,11 @@ export function createTabManagerDomain(): TabManagerDomain {
   let tabManagerLoaded = false;
   let lastActiveTabId: number | null = null;
   let onUpdatedSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  let scrollRestoreSeq = 0;
 
   // Pending scroll restores are consumed once a content script confirms readiness.
   const pendingScrollRestore = new Map<number, { scrollX: number; scrollY: number }>();
+  const pendingScrollRestoreTokens = new Map<number, number>();
 
   async function ensureTabManagerLoaded(): Promise<void> {
     if (!tabManagerLoaded) {
@@ -45,6 +48,10 @@ export function createTabManagerDomain(): TabManagerDomain {
     await browser.storage.local.set({ tabManagerList });
   }
 
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   function recompactSlots(): void {
     tabManagerList.forEach((entry, index) => {
       entry.slot = index + 1;
@@ -55,11 +62,22 @@ export function createTabManagerDomain(): TabManagerDomain {
     await ensureTabManagerLoaded();
     const tabs = await browser.tabs.query({});
     const tabIds = new Set(tabs.map((tab) => tab.id));
+    let changed = false;
     for (const entry of tabManagerList) {
-      entry.closed = !tabIds.has(entry.tabId);
+      const shouldBeClosed = !tabIds.has(entry.tabId);
+      if (entry.closed !== shouldBeClosed) {
+        entry.closed = shouldBeClosed;
+        changed = true;
+      }
     }
-    recompactSlots();
-    await saveTabManager();
+    for (let i = 0; i < tabManagerList.length; i++) {
+      const nextSlot = i + 1;
+      if (tabManagerList[i].slot !== nextSlot) {
+        tabManagerList[i].slot = nextSlot;
+        changed = true;
+      }
+    }
+    if (changed) await saveTabManager();
   }
 
   async function tabManagerAdd(
@@ -82,9 +100,15 @@ export function createTabManagerDomain(): TabManagerDomain {
       return { ok: false, reason: `Tab Manager list is full (max ${MAX_TAB_MANAGER_SLOTS}).` };
     }
 
-    const existing = tabManagerList.find((entry) => entry.tabId === tab.id || entry.url === tab.url);
+    const normalizedTabUrl = normalizeUrlForMatch(tab.url || "");
+    const existing = tabManagerList.find((entry) =>
+      entry.tabId === tab.id
+      || (
+        normalizedTabUrl.length > 0
+        && normalizeUrlForMatch(entry.url) === normalizedTabUrl
+      ));
     if (existing) {
-      if (existing.closed && existing.url === tab.url) {
+      if (existing.closed && normalizedTabUrl.length > 0 && normalizeUrlForMatch(existing.url) === normalizedTabUrl) {
         existing.tabId = tab.id;
         existing.closed = false;
         existing.title = tab.title || existing.title;
@@ -142,28 +166,71 @@ export function createTabManagerDomain(): TabManagerDomain {
   async function tabManagerRemove(tabId: number): Promise<void> {
     await ensureTabManagerLoaded();
     tabManagerList = tabManagerList.filter((entry) => entry.tabId !== tabId);
+    pendingScrollRestore.delete(tabId);
+    pendingScrollRestoreTokens.delete(tabId);
     recompactSlots();
     await saveTabManager();
+  }
+
+  async function captureManagedTabScroll(tabId: number): Promise<boolean> {
+    const entry = tabManagerList.find((candidate) => candidate.tabId === tabId);
+    if (!entry || entry.closed) return false;
+
+    try {
+      const response = (await browser.tabs.sendMessage(tabId, {
+        type: "GET_SCROLL",
+      })) as ScrollData;
+      const nextX = response.scrollX || 0;
+      const nextY = response.scrollY || 0;
+      if (entry.scrollX === nextX && entry.scrollY === nextY) return false;
+      entry.scrollX = nextX;
+      entry.scrollY = nextY;
+      return true;
+    } catch (_) {
+      // Content script may be unavailable on restricted pages.
+      return false;
+    }
   }
 
   async function saveCurrentTabScroll(): Promise<void> {
     await ensureTabManagerLoaded();
     const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
     if (!activeTab || activeTab.id == null) return;
+    if (await captureManagedTabScroll(activeTab.id)) await saveTabManager();
+  }
 
-    const entry = tabManagerList.find((candidate) => candidate.tabId === activeTab.id);
-    if (!entry || entry.closed) return;
-
-    try {
-      const response = (await browser.tabs.sendMessage(activeTab.id, {
-        type: "GET_SCROLL",
-      })) as ScrollData;
-      entry.scrollX = response.scrollX || 0;
-      entry.scrollY = response.scrollY || 0;
-      await saveTabManager();
-    } catch (_) {
-      // Content script may be unavailable on restricted pages.
+  function scheduleScrollRestore(tabId: number, scrollX: number, scrollY: number): void {
+    if (!scrollX && !scrollY) {
+      pendingScrollRestore.delete(tabId);
+      pendingScrollRestoreTokens.delete(tabId);
+      return;
     }
+
+    pendingScrollRestore.set(tabId, { scrollX, scrollY });
+    const token = ++scrollRestoreSeq;
+    pendingScrollRestoreTokens.set(tabId, token);
+    const retryDelaysMs = [0, 80, 220, 420];
+
+    void (async () => {
+      for (const delay of retryDelaysMs) {
+        if (pendingScrollRestoreTokens.get(tabId) !== token) return;
+        if (delay > 0) await sleep(delay);
+
+        try {
+          await browser.tabs.sendMessage(tabId, {
+            type: "SET_SCROLL",
+            scrollX,
+            scrollY,
+          });
+          if (pendingScrollRestoreTokens.get(tabId) !== token) return;
+          pendingScrollRestore.delete(tabId);
+          pendingScrollRestoreTokens.delete(tabId);
+          return;
+        } catch (_) {
+          // Content script may not be ready yet; keep retrying.
+        }
+      }
+    })();
   }
 
   async function tabManagerJump(slot: number): Promise<void> {
@@ -171,21 +238,20 @@ export function createTabManagerDomain(): TabManagerDomain {
     const entry = tabManagerList.find((candidate) => candidate.slot === slot);
     if (!entry) return;
 
+    const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
+    const previousTabId = activeTab?.id;
+    if (previousTabId != null && previousTabId !== entry.tabId) {
+      if (await captureManagedTabScroll(previousTabId)) await saveTabManager();
+    }
+
     if (entry.closed) {
-      await saveCurrentTabScroll();
       try {
         const newTab = await browser.tabs.create({ url: entry.url, active: true });
         if (newTab.id == null) return;
         entry.tabId = newTab.id;
         entry.closed = false;
         await saveTabManager();
-
-        if (entry.scrollX || entry.scrollY) {
-          pendingScrollRestore.set(newTab.id, {
-            scrollX: entry.scrollX,
-            scrollY: entry.scrollY,
-          });
-        }
+        scheduleScrollRestore(newTab.id, entry.scrollX, entry.scrollY);
       } catch (_) {
         tabManagerList = tabManagerList.filter((candidate) => candidate.slot !== slot);
         recompactSlots();
@@ -194,10 +260,7 @@ export function createTabManagerDomain(): TabManagerDomain {
       return;
     }
 
-    const [, switched] = await Promise.all([
-      saveCurrentTabScroll(),
-      browser.tabs.update(entry.tabId, { active: true }).catch(() => null),
-    ]);
+    const switched = await browser.tabs.update(entry.tabId, { active: true }).catch(() => null);
 
     if (!switched) {
       entry.closed = true;
@@ -206,11 +269,7 @@ export function createTabManagerDomain(): TabManagerDomain {
       return;
     }
 
-    browser.tabs.sendMessage(entry.tabId, {
-      type: "SET_SCROLL",
-      scrollX: entry.scrollX,
-      scrollY: entry.scrollY,
-    }).catch(() => {});
+    scheduleScrollRestore(entry.tabId, entry.scrollX, entry.scrollY);
   }
 
   async function tabManagerCycle(direction: "prev" | "next"): Promise<{ ok: boolean }> {
@@ -245,7 +304,10 @@ export function createTabManagerDomain(): TabManagerDomain {
 
   function consumePendingScrollRestore(tabId: number): { scrollX: number; scrollY: number } | null {
     const pending = pendingScrollRestore.get(tabId) || null;
-    if (pending) pendingScrollRestore.delete(tabId);
+    if (pending) {
+      pendingScrollRestore.delete(tabId);
+      pendingScrollRestoreTokens.delete(tabId);
+    }
     return pending;
   }
 
@@ -267,6 +329,8 @@ export function createTabManagerDomain(): TabManagerDomain {
   function registerLifecycleListeners(hooks: TabManagerDomainHooks): void {
     browser.tabs.onRemoved.addListener(async (tabId: number) => {
       await ensureTabManagerLoaded();
+      pendingScrollRestore.delete(tabId);
+      pendingScrollRestoreTokens.delete(tabId);
       const entry = tabManagerList.find((candidate) => candidate.tabId === tabId);
       if (entry) {
         entry.closed = true;
@@ -306,20 +370,7 @@ export function createTabManagerDomain(): TabManagerDomain {
 
       if (previousTabId == null) return;
       await ensureTabManagerLoaded();
-
-      const entry = tabManagerList.find((candidate) => candidate.tabId === previousTabId);
-      if (!entry || entry.closed) return;
-
-      try {
-        const response = (await browser.tabs.sendMessage(previousTabId, {
-          type: "GET_SCROLL",
-        })) as ScrollData;
-        entry.scrollX = response.scrollX || 0;
-        entry.scrollY = response.scrollY || 0;
-        await saveTabManager();
-      } catch (_) {
-        // Content script may be unavailable.
-      }
+      if (await captureManagedTabScroll(previousTabId)) await saveTabManager();
     });
   }
 
@@ -330,7 +381,7 @@ export function createTabManagerDomain(): TabManagerDomain {
     save: saveTabManager,
     ensureLoaded: ensureTabManagerLoaded,
     queueScrollRestore: (tabId, scrollX, scrollY) => {
-      pendingScrollRestore.set(tabId, { scrollX, scrollY });
+      scheduleScrollRestore(tabId, scrollX, scrollY);
     },
   };
 

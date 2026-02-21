@@ -16,7 +16,6 @@
     "activeTab",
     "storage",
     "bookmarks",
-    "history",
     "<all_urls>"
   ],
   "background": {

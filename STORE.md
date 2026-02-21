@@ -1,5 +1,19 @@
 # Store Listing — Harpoon Telescope
 
+## Release To-Do (Top Priority First)
+
+1. Tab Manager and Session Manager reliability sign-off (release gate).
+2. Validate rapid-switch stability: repeated slot jumps (`Alt+1..4`) and cycle keys (`Alt+-`, `Alt+=`) must not freeze, lock input, or miss jumps.
+3. Validate scroll-location fidelity: jump, reopen-closed-tab, and session load (reused and newly opened tabs) must restore saved `scrollX/scrollY` reliably.
+4. Validate panel-open reliability after focus changes (switch browser <-> IDE repeatedly): every panel must open instantly without requiring tab swaps.
+5. Run full verification suite before packaging: `npm run ci`.
+6. Build both store targets: `npm run build:firefox`, then `npm run build:chrome`.
+7. Run store-policy and manifest consistency checks: `npm run verify:store`, then `npm run verify:compat`.
+8. Finalize store assets and metadata (icons, screenshots, promo text, privacy links, support URL).
+9. Submit Firefox package to AMO with `STORE.md` copy + permissions rationale + privacy policy.
+10. Submit Chrome package to Chrome Web Store with same listing copy adapted to CWS form fields.
+11. Post-submission smoke test on production listing builds in both browsers.
+
 Use this content when submitting to Firefox Add-ons (AMO) and Chrome Web Store.
 Category: **Productivity**
 
@@ -61,6 +75,5 @@ tabs, productivity, keyboard, navigation, search, vim, harpoon, telescope, tab m
 - **tabs**: Read tab titles and URLs so the extension can display them in the tab manager and frecency list, and switch between tabs on your behalf.
 - **activeTab**: Access the current page content to power the in-page search feature (Telescope).
 - **bookmarks**: Browse, create, move, and remove bookmarks from the extension overlays.
-- **history**: Read and remove history entries from the extension history panel.
 - **storage**: Save your pinned tabs, sessions, frecency data, and keyboard shortcut preferences locally in the browser.
 - **host_permissions (<all_urls>)**: Inject the content script on every page so keyboard shortcuts and search overlays work everywhere.

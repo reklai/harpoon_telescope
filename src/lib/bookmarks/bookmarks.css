@@ -14,14 +14,24 @@
 }
 .ht-bookmark-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--ht-color-bg); }
 .ht-bookmark-input-wrap {
-  display: flex; align-items: center; padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  padding: var(--ht-input-row-pad-y) var(--ht-input-row-pad-x);
   border-bottom: 1px solid var(--ht-color-border-soft); background: var(--ht-color-bg-elevated);
 }
-.ht-bookmark-prompt { color: var(--ht-color-accent); margin-right: 8px; font-weight: 600; font-size: 14px; }
+.ht-bookmark-prompt {
+  color: var(--ht-color-accent);
+  margin-right: var(--ht-input-prompt-gap);
+  font-weight: var(--ht-input-prompt-weight);
+  font-size: var(--ht-input-prompt-size);
+}
 .ht-bookmark-input {
   flex: 1; background: transparent; border: none; outline: none;
-  color: var(--ht-color-text); font-family: inherit; font-size: 13px;
-  caret-color: var(--ht-color-text-strong); caret-shape: block;
+  color: var(--ht-color-text);
+  font-family: inherit;
+  font-size: var(--ht-input-font-size);
+  caret-color: var(--ht-input-caret-color);
+  caret-shape: block;
 }
 .ht-bookmark-input::placeholder { color: var(--ht-color-text-dim); }
 
@@ -126,9 +136,14 @@
   background: var(--ht-color-bg-detail-focus);
 }
 .ht-bm-detail-header {
-  padding: 5px 14px; font-size: 11px; color: var(--ht-color-text-muted);
+  padding: var(--ht-pane-header-pad-y) var(--ht-pane-header-pad-x);
+  font-size: var(--ht-pane-header-font-size);
+  color: var(--ht-color-text-muted);
   background: var(--ht-color-bg-elevated); border-bottom: 1px solid var(--ht-color-border-faint);
-  font-weight: 500; display: flex; align-items: center;
+  font-weight: var(--ht-pane-header-weight);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .ht-bm-detail-header-text { flex: 1; }
 .ht-bm-detail-header-close {
@@ -280,7 +295,9 @@
 
 @media (max-width: 520px) {
   .ht-bookmark-container { border-radius: 8px; }
-  .ht-bookmark-input-wrap { padding: 8px 10px; }
+  .ht-bookmark-input-wrap {
+    padding: var(--ht-input-row-pad-y) var(--ht-input-row-pad-x-compact);
+  }
   .ht-bm-item { padding: 4px 8px; }
   .ht-bm-detail-content { padding: 12px; }
 }

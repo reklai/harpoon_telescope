@@ -2,12 +2,12 @@
 
 This file exists so I can grow from junior -> mid -> senior by mastering how this codebase actually works. It is a full rebuildable walkthrough, not a tutorial. It is meant to make me confident explaining every subsystem in an interview, because this product is mine and I can defend every tradeoff.
 
-## Current Product Priority (Non-Negotiable)
+## Current Focus (System-Wide)
 
-- The core value of this product is Tab Manager + Session Manager reliability.
-- Rapid tab switching must stay stable: no freeze, no input lock, no missed jumps.
-- Scroll restore must be consistent for jump, reopen, and session load, including reused tabs.
-- Store release work (AMO/CWS packaging and submission) is secondary until this reliability gate is proven in Firefox and Chrome.
+- Treat the product as one integrated system: search, tab manager, sessions, bookmarks, help, shared runtime contracts, and build/release tooling.
+- Current engineering focus is Tab Manager + Session behavior, but only as part of the whole architecture and UX.
+- Reliability and performance work should preserve cross-panel consistency, clean data flow, and maintainable module boundaries.
+- Store release work (AMO/CWS) follows system-level correctness, not just one feature area.
 
 What I want to get out of this:
 
@@ -16,6 +16,8 @@ What I want to get out of this:
 - I can extend or refactor the code without fear because I understand the flow.
 - I can transfer these patterns to any other project (framework or no framework).
 - I build critical thinking and problem-solving skill by reasoning about tradeoffs.
+- I can explain algorithmic complexity, failure modes, and why each solution was chosen.
+- I can defend vanilla TypeScript architecture decisions against framework alternatives.
 
 How I use this guide:
 
@@ -25,6 +27,7 @@ How I use this guide:
 4. Explain the system out loud as if I am teaching it.
 5. Ask: why this approach, what tradeoff, what failure mode?
 6. Capture one reusable engineering pattern in my own words.
+7. Reproduce one real bug path, patch it, verify it, and document the lesson.
 
 This guide is self-contained: no prerequisite docs are required to learn the system end-to-end.
 
@@ -51,8 +54,13 @@ This guide is self-contained: no prerequisite docs are required to learn the sys
 17. [Performance Patterns](#performance-patterns)
 18. [UI Conventions (Footers, Vim, Filters)](#ui-conventions-footers-vim-filters)
 19. [Patterns Worth Reusing](#patterns-worth-reusing)
-20. [Interview Prep + Codebase Walkthrough](#interview-prep--codebase-walkthrough)
-21. [Final Thought](#final-thought)
+20. [Maintainer Operating Mode](#maintainer-operating-mode)
+21. [System Invariants](#system-invariants)
+22. [Algorithm + Complexity Ledger](#algorithm--complexity-ledger)
+23. [Bug Triage + Patch Runbook](#bug-triage--patch-runbook)
+24. [Incident Playbooks](#incident-playbooks)
+25. [Interview Prep + Codebase Walkthrough](#interview-prep--codebase-walkthrough)
+26. [Final Thought](#final-thought)
 
 ---
 
@@ -90,7 +98,7 @@ How to naturally walk these chapters:
 
 User presses `Alt+F` on any page. The content script's global keydown handler in `src/lib/appInit/appInit.ts` catches the event, and `matchesAction(e, config, "global", "searchInPage")` returns true. The handler calls `openSearchCurrentPage(config)` from `src/lib/searchCurrentPage/searchCurrentPage.ts`, which creates a Shadow DOM host (`#ht-panel-host`) and builds the search UI inside it.
 
-The content script owns DOM access because the background cannot touch page DOM — this is a fundamental browser security boundary. The panel guard (`if (document.getElementById("ht-panel-host")) return;`) prevents global shortcuts from fighting overlay controls; without it, pressing `Alt+F` while the panel is open would try to open another panel.
+The content script owns DOM access because the background cannot touch page DOM — this is a fundamental browser security boundary. Panel lifecycle is one layer of this architecture: host integrity is validated before open, and open paths fail closed (`dismissPanel()`) on sync or async initialization failures, so stale host state does not poison later feature flows.
 
 When the user types a query, the `input` event fires and updates the closure-scoped state — `currentQuery` holds what the user typed, `activeFilters` holds structural filters like `/code` or `/headings`. Then `applyFilter()` runs `grepPage()` from `src/lib/searchCurrentPage/grep.ts`, which populates `results`. Finally `renderResults()` updates the DOM and `updatePreview()` shows context for the highlighted item.
 
@@ -108,7 +116,8 @@ Concepts to internalize from this flow:
 
 1. **Pipeline thinking:** input event -> query parse -> ranked filtering -> render -> side effect.
 2. **Separation of concerns:** search algorithm is in `grep.ts`, UI orchestration in `searchCurrentPage.ts`.
-3. **Performance budget mindset:** optimize for keystroke latency first, not theoretical elegance.
+3. **Lifecycle safety:** panel open paths must fail closed so stale UI state never blocks future opens.
+4. **Performance budget mindset:** optimize for keystroke latency first, not theoretical elegance.
 
 Algorithm lens (step-by-step):
 
@@ -132,7 +141,7 @@ Interview articulation:
 2. "I kept algorithm and UI layers separate so changes stay low-risk."
 3. "I used lazy enrichment to avoid upfront cost on non-active rows."
 
-**Files to trace:** `src/lib/appInit/appInit.ts` (global key handler), `src/lib/searchCurrentPage/searchCurrentPage.ts` (overlay UI + state), `src/lib/searchCurrentPage/grep.ts` (DOM walking + fuzzy scoring), `src/lib/shared/scroll.ts` (scroll-to-text).
+**Files to trace:** `src/lib/appInit/appInit.ts` (global key handler + host integrity guard), `src/lib/searchCurrentPage/searchCurrentPage.ts` (overlay UI + state), `src/lib/searchCurrentPage/grep.ts` (DOM walking + fuzzy scoring), `src/lib/shared/panelHost.ts` (host lifecycle + dismiss), `src/lib/shared/scroll.ts` (scroll-to-text).
 
 Visual map (Flow A):
 
@@ -187,6 +196,8 @@ The background bootstrap in `src/entryPoints/background/background.ts` delegates
 
 Later, the user presses `Alt+1` to jump. The content script sends `{ type: "TAB_MANAGER_JUMP", slot: 1 }`. The background finds the entry and either activates the existing tab or, if it was closed, re-opens the URL in a new tab and restores scroll.
 
+There are two open paths in the full system: page-level keydown in the content script (normal path) and browser command shortcuts routed through `src/lib/background/commandRouter.ts` (command-declared actions). The command router uses bounded retries when delivering `OPEN_*` messages, and selected panel-open data fetches use retries too. This is readiness policy, not business logic: it protects all feature flows from transient context startup gaps.
+
 The core challenge is that tab IDs are ephemeral — when the browser restarts, all tab IDs change. If we stored tab IDs naively, the list would become useless after restart. The solution is to store URL + scroll position alongside the tab ID. When jumping to a "closed" entry, we re-open the URL in a new tab and restore scroll. The tradeoff: the re-opened tab is a fresh page load, not the original session state with form inputs and history.
 
 To keep the list accurate, the background reconciles on every list access. Before returning the tab manager list, it queries all open tabs and marks entries as `closed` if their tab ID no longer exists. This is O(n) where n = tab count, but n is typically under 100 so it's fast.
@@ -210,6 +221,7 @@ Algorithm lens (step-by-step):
 3. Read current scroll via content script message.
 4. Insert/compact/save entry.
 5. On jump, switch or recreate tab and restore scroll.
+6. On command-triggered panel opens, retry content message delivery with bounded backoff.
 
 Extension path (how to safely add capability):
 
@@ -224,7 +236,7 @@ Interview articulation:
 2. "I used explicit message contracts to separate page and browser responsibilities."
 3. "I guarded state access for MV3 worker restarts."
 
-**Files to trace:** `src/lib/appInit/appInit.ts` (keybind handler), `src/entryPoints/background/background.ts` (router composition), `src/lib/background/tabManagerDomain.ts` (state + commands), `src/lib/background/tabManagerMessageHandler.ts` (runtime API surface), `src/lib/shared/feedback.ts` (toast).
+**Files to trace:** `src/lib/appInit/appInit.ts` (keybind handler), `src/entryPoints/background/background.ts` (router composition), `src/lib/background/commandRouter.ts` (command delivery retries), `src/lib/background/tabManagerDomain.ts` (state + commands), `src/lib/background/tabManagerMessageHandler.ts` (runtime API surface), `src/lib/tabManager/tabManager.ts` (open-list retry), `src/lib/shared/feedback.ts` (toast).
 
 Visual map (Flow B):
 
@@ -699,6 +711,8 @@ Manages list UI + sessions UI.
 - slots are compacted to 1..N
 - closed tabs persist and re-open on jump
 - sessions stored in `tabManagerSessions` (max 4)
+- session load uses preview + pre-load confirmation summary (replace/reuse/open counts)
+- load/save session panes support keyboard focus cycling (`Tab` / `Shift+Tab`)
 
 **Why max 4 slots?**
 
@@ -724,6 +738,9 @@ Context matters. Seeing the folder tree while filtering helps users understand w
 ## Help — src/lib/help
 
 Help overlay builds sections from live keybinding config. It documents the panel controls and filters.
+
+- includes session-specific controls (focus toggle, filter focus, load confirm/cancel)
+- key labels mirror current keybinding config instead of hard-coded defaults
 
 **Why live keybindings?**
 
@@ -766,12 +783,26 @@ Growth checkpoint:
 ## Panel Lifecycle + Guards
 
 - panels are isolated Shadow DOM trees
-- global keybinds are blocked while a panel is open
-- `dismissPanel()` tears down the host
+- global keybinds are blocked while a live panel is open
+- host integrity is checked before open; stale/empty host is dismissed automatically
+- `openPanel()` is fail-closed (sync + async errors both call `dismissPanel()`)
+- panel openers fail-closed too (top-level catch calls `dismissPanel()`)
+- command-triggered open messages use bounded retries for content-script readiness
+- `dismissPanel()` tears down the host and registered panel cleanup
+
+This layer is cross-cutting infrastructure for every feature module. It should stay generic and reusable, with feature-specific logic remaining in each panel/domain module.
 
 **Why block global keybinds when panel is open?**
 
 Prevents conflicts. `Alt+F` opens the panel; once open, pressing `Alt+F` should not try to open another. The panel guard ensures only the panel's key handler responds.
+
+**Failure recovery path (must be second nature):**
+
+1. Trigger arrives (keydown or runtime command message).
+2. Validate host integrity (clear stale host if needed).
+3. Attempt open through guarded `openPanel(...)`.
+4. If init fails at any point, fail closed via `dismissPanel()`.
+5. Next shortcut can open immediately (no ghost host lockout).
 
 ---
 
@@ -831,6 +862,144 @@ Consistency across panels. Users learn the pattern once and can predict where ke
 
 ---
 
+## Maintainer Operating Mode
+
+Definition: I am not only shipping features. I am preserving system behavior, invariants, and developer velocity.
+
+Release-quality checklist for every change:
+
+1. Identify the owning layer first (content UI, background domain, shared contract, build/release).
+2. State the invariant being changed or preserved before coding.
+3. Implement the smallest coherent patch that keeps module boundaries intact.
+4. Prove behavior with one happy-path check and one failure-path check.
+5. Add regression coverage (test and/or documented manual repro).
+6. Update docs where behavior contracts changed (`learn.md`, `README.md`, `STORE.md`, `PRIVACY.md` when relevant).
+7. Run quality gates: lint, tests, and compatibility/store checks as appropriate.
+
+What "ownership" means in this repo:
+
+1. I can explain any runtime message from sender to handler to side effect.
+2. I can explain why state belongs to background vs content script.
+3. I can explain one tradeoff per subsystem (performance, complexity, UX, reliability).
+4. I can debug failures without relying on framework abstractions.
+
+---
+
+## System Invariants
+
+These are non-negotiable truths. If one breaks, behavior drifts.
+
+Global/runtime invariants:
+
+1. Background owns canonical browser state (`tabs`, `sessions`, `bookmarks`, frecency persistence).
+2. Content overlays are ephemeral views driven by runtime messages and local UI state.
+3. Runtime message shapes stay explicit and synchronized across sender/receiver.
+4. Only one live panel host may exist at a time.
+
+Tab Manager invariants:
+
+1. Slots remain compacted and ordered from 1..N.
+2. Closed entries stay representable and recoverable by URL.
+3. Scroll coordinates are captured/restored as part of tab/session workflow.
+4. Session capacity and slot capacity constraints are enforced consistently.
+
+Session invariants:
+
+1. Session names are unique case-insensitively.
+2. Session list ordering is deterministic (recent-first when listed).
+3. Load planning and load execution are consistent (reuse/open counts align with actual action).
+4. Confirmation flows must be explicit and reversible.
+
+Search/bookmark invariants:
+
+1. Query -> filter -> rank -> render pipeline is deterministic for the same input state.
+2. Focus behavior is explicit (`input`, `results`, tree/detail modes) and keyboard-safe.
+3. Virtualized lists only render visible windows plus buffer.
+
+Build/release invariants:
+
+1. MV2/MV3 manifests remain policy-compatible with behavior and docs.
+2. Storage migrations are forward-compatible and test-gated.
+3. Store claims and privacy claims match actual permissions and persisted data.
+
+---
+
+## Algorithm + Complexity Ledger
+
+This is the quick reference I should be able to explain in interviews and design reviews.
+
+| Subsystem | Core operation | Complexity (high-level) | Main challenge | Mitigation used |
+|---|---|---|---|---|
+| Search Current Page | Cached line extraction + query ranking | Cache build `O(N)` over candidate nodes; query pass approximately `O(C * Q)` + sort cap | Large DOM + keystroke latency | Cached extraction, capped results, virtual scrolling, lazy preview enrichment |
+| Search Open Tabs | Title/URL match + ranked sort | `O(T)` matching + `O(T log T)` sort | Fast ranking without UI jank | Ranked match tiers, bounded rendering, rAF scheduling |
+| Bookmarks Panel | Filter + tree/detail state transitions | `O(B)` filtering + virtualized rendering | Multi-mode keyboard UX complexity | Explicit mode/state machine + pooled rendering |
+| Tab Manager Jump | Slot lookup + tab activate/reopen | `O(S)` where `S <= 4` | Unstable tab IDs across lifecycle/restart | Persist URL + scroll, closed-entry recovery, reconcile against open tabs |
+| Session Load Plan | Reuse/open computation | `O(O + E)` where `O` open tabs, `E` session entries | Duplicate URL handling and predictable summary | URL normalization + reusable tab pools |
+| Session Load Execute | Reuse existing or open new tabs | `O(E)` plus tab API latency | Consistent restore with partial failures | Per-entry fallback (reuse -> open), queued scroll restore, graceful skip on open failure |
+| Panel Lifecycle | Open/close/focus/error handling | `O(1)` control flow | Ghost host and readiness race conditions | Host-integrity checks, fail-closed open paths, bounded retries |
+
+When discussing complexity, always include:
+
+1. Data size variable (`N`, `T`, `B`, `E`) and where it comes from.
+2. Practical cap/guardrail used in product behavior.
+3. The dominant user-facing risk (latency, stale state, focus confusion).
+
+---
+
+## Bug Triage + Patch Runbook
+
+Use this every time before coding a fix.
+
+1. Reproduce precisely.
+2. Classify the layer: UI state, runtime messaging, background domain, storage/migration, or build/release.
+3. Capture expected invariant and observed invariant break.
+4. Isolate minimal failing path in code (function + message + state transition).
+5. Patch minimally at the owning layer (avoid cross-layer band-aids first).
+6. Verify with:
+   - one direct repro replay,
+   - one adjacent regression check,
+   - one failure-path check.
+7. Add or update tests/guardrails where practical.
+8. Update docs that define behavior contracts.
+
+Patch quality questions:
+
+1. Does this fix preserve existing contracts in other panels/flows?
+2. Does this introduce hidden coupling between modules?
+3. If this fails again, will it fail safe (recoverable) or fail dangerous (lock/freeze/data drift)?
+
+---
+
+## Incident Playbooks
+
+Incident: panel shortcut does nothing.
+
+1. Check panel host lifecycle (`createPanelHost`, `dismissPanel`, cleanup registration).
+2. Verify global keybinding path in `appInit.ts`.
+3. Verify runtime command path in `commandRouter.ts`.
+4. Confirm stale host recovery and retry paths are active.
+
+Incident: tab jump/session load restores wrong scroll location.
+
+1. Verify capture points (`GET_SCROLL` capture before switch/save).
+2. Verify saved session/tab entry contains expected `scrollX/scrollY`.
+3. Verify restore queue + delivery (`SET_SCROLL`, ready/retry path).
+4. Check restricted-page edge cases where content script messaging is blocked.
+
+Incident: session load summary differs from observed load.
+
+1. Compare load-plan computation vs load execution path.
+2. Verify URL normalization and reuse pool behavior.
+3. Confirm session list snapshot did not change between plan and confirm.
+
+Incident: cross-context drift (UI shows stale data).
+
+1. Verify background remains canonical source and list fetch occurs on open.
+2. Confirm message contract payloads match expected types.
+3. Verify no stale cached UI list survives mode transitions.
+
+---
+
 ## Interview Prep + Codebase Walkthrough
 
 Use this as the final section before interviews or live walkthroughs.
@@ -849,13 +1018,15 @@ Interview question drill:
 
 1. Why no framework?
 Answer frame: browser primitives reduce overhead, keep control over focus/latency, and map well to extension constraints.
-2. How do you prevent state drift between contexts?
+2. How do you replace framework conveniences in vanilla TypeScript?
+Answer frame: explicit state machines for UI modes, shared panel-host lifecycle contracts, typed runtime message contracts, virtualized lists, and deterministic keyboard/focus management.
+3. How do you prevent state drift between contexts?
 Answer frame: background is canonical source of truth, overlays request fresh state, message contracts are explicit.
-3. What was the hardest bug class?
+4. What was the hardest bug class?
 Answer frame: lifecycle and readiness races (MV3 worker restart, startup prompt delivery), solved with idempotent guards and bounded retries.
-4. How do you prove performance claims?
+5. How do you prove performance claims?
 Answer frame: virtualized rendering, rAF scheduling, perf traces, and CI budget tests.
-5. How is this extension store-ready?
+6. How is this extension store-ready?
 Answer frame: manifest/privacy/store docs are policy-checked; compatibility and migration gates run in CI.
 
 Proof-of-ownership checklist (run this per feature):

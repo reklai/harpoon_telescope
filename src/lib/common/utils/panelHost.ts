@@ -208,10 +208,11 @@ export function dismissPanel(): void {
   removePanelHost();
 }
 
-/** Generate the vim mode badge HTML for panel titlebars */
+/** Navigation badge placeholder; kept for template compatibility across panels. */
 export function vimBadgeHtml(config: KeybindingsConfig): string {
   const _ = config;
   void _;
+  // Intentionally disabled while standard mode is always-on.
   return "";
 }
 

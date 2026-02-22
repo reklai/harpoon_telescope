@@ -255,11 +255,16 @@ function checkUiGlitchBaseline() {
 function checkContributorDocs() {
   const readme = readText("README.md");
   const contributing = readText("CONTRIBUTING.md");
-  if (!readme.includes("docs/ARCHITECTURE.md")) {
-    errors.push("README.md must reference docs/ARCHITECTURE.md for contributor onboarding.");
+
+  const requiredReadmeDocs = ["RELEASE.md", "STORE.md", "PRIVACY.md"];
+  for (const docRef of requiredReadmeDocs) {
+    if (!readme.includes(docRef)) {
+      errors.push(`README.md must reference ${docRef} for contributor onboarding.`);
+    }
   }
-  if (!contributing.includes("docs/ARCHITECTURE.md")) {
-    errors.push("CONTRIBUTING.md must reference docs/ARCHITECTURE.md.");
+
+  if (!contributing.includes("README.md")) {
+    errors.push("CONTRIBUTING.md must reference README.md for contributor orientation.");
   }
 }
 

@@ -1,5 +1,4 @@
-// Popup script — browser action popup (toolbar icon click).
-// Lists tab manager entries with add/remove/jump actions.
+// Browser-action popup for quick tab-manager actions.
 
 import { escapeHtml, extractDomain } from "../../lib/common/utils/helpers";
 import {
@@ -40,7 +39,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       )
       .join("");
 
-    // Jump on click
+    // The list is tiny (<=4), so per-row listeners are simpler than delegation.
     listEl.querySelectorAll(".tab-manager-item").forEach((itemElement) => {
       itemElement.addEventListener("click", async (event) => {
         if ((event.target as HTMLElement).classList.contains("delete-btn")) return;
@@ -50,7 +49,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     });
 
-    // Delete buttons
     listEl.querySelectorAll(".delete-btn").forEach((deleteButton) => {
       deleteButton.addEventListener("click", async (event) => {
         event.stopPropagation();

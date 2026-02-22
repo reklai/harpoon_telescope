@@ -1,7 +1,6 @@
-// Search Current Page overlay — single-page search with structural filters.
-// Supports combinable slash-command filters: /code, /headings, /links.
-// Always uses fuzzy matching. Results show element type badges with
-// color coding. Match count displayed in title bar.
+// Search Current Page overlay — single-page fuzzy search with structural filters.
+// Supports combinable slash-command filters: /code, /headings, /img, /links.
+// Results include colored source-tag badges and a live preview pane.
 //
 // Performance:
 //  - Virtual scrolling: only ~25 DOM items rendered, recycled on scroll
@@ -45,7 +44,7 @@ import {
 import previewPaneStyles from "../../../common/utils/previewPane.css";
 import searchCurrentPageStyles from "./searchCurrentPage.css";
 
-// Ephemeral per-page state for resume
+// Preserves the previous query while the user stays on the page.
 let lastSearchState: { query: string } | null = null;
 
 export async function openSearchCurrentPage(
@@ -54,10 +53,10 @@ export async function openSearchCurrentPage(
   try {
     const closeKeyDisplay = keyToDisplay(config.bindings.search.close.key);
 
-    // Init line cache before building UI (starts MutationObserver)
+    // Start cache/observer before first query so repeated searches stay fast.
     initLineCache();
 
-    // Page size safety guard — bail on extremely large pages
+    // Hard guardrail: skip pages large enough to lock the tab on full text scan.
     const elementCount = document.body.querySelectorAll("*").length;
     const textLength = document.body.textContent?.length ?? 0;
     if (elementCount > MAX_DOM_ELEMENTS || textLength > MAX_TEXT_BYTES) {
@@ -107,24 +106,25 @@ export async function openSearchCurrentPage(
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let currentQuery = "";
     let activeFilters: SearchFilter[] = [];
-    let activeItemEl: HTMLElement | null = null; // direct ref, no querySelector
-    let focusedPane: "input" | "results" = "input"; // tracks which pane has focus
+    // Keep direct refs so keyboard navigation avoids repeated DOM queries.
+    let activeItemEl: HTMLElement | null = null;
+    let focusedPane: "input" | "results" = "input";
 
     function setFocusedPane(pane: "input" | "results"): void {
       focusedPane = pane;
       resultsPane.classList.toggle("focused", pane === "results");
     }
 
-    // rAF throttle for preview updates
+    // Coalesce rapid input/scroll/navigation into one render per frame.
     let previewRafId: number | null = null;
     let scrollRafId: number | null = null;
     let inputRafId: number | null = null;
     let pendingInputValue = "";
 
-    // Virtual scrolling state
-    let vsStart = 0;  // first visible result index
-    let vsEnd = 0;    // last visible result index (exclusive)
-    let itemPool: HTMLElement[] = []; // reusable DOM elements
+    // Virtual-list window + reusable row pool to keep DOM churn bounded.
+    let vsStart = 0;
+    let vsEnd = 0;
+    let itemPool: HTMLElement[] = [];
 
     function close(): void {
       panelOpen = false;
@@ -147,12 +147,10 @@ export async function openSearchCurrentPage(
     }
 
     function updateTitle(): void {
-      // Highlight active filter spans
       titleFilterSpans.forEach((span) => {
         const filter = span.dataset.filter as SearchFilter;
         span.classList.toggle("active", activeFilters.includes(filter));
       });
-      // Update match count
       titleCount.textContent = results.length > 0
         ? `${results.length} match${results.length !== 1 ? "es" : ""}`
         : "";
@@ -167,13 +165,11 @@ export async function openSearchCurrentPage(
       filterPills.innerHTML = activeFilters.map((filter) =>
         `<span class="ht-filter-pill" data-filter="${filter}">/${filter}<span class="ht-filter-pill-x">\u00d7</span></span>`
       ).join("");
-      // Click × to remove a filter from the input
       filterPills.querySelectorAll(".ht-filter-pill-x").forEach((removeButton) => {
         removeButton.addEventListener("click", (event) => {
           event.stopPropagation();
           const pill = (removeButton as HTMLElement).parentElement!;
           const filter = pill.dataset.filter!;
-          // Remove this filter's slash command from the input
           const tokens = input.value.trimStart().split(/\s+/);
           const remainingTokens = tokens.filter((token) => token !== `/${filter}`);
           input.value = remainingTokens.join(" ");
@@ -187,11 +183,7 @@ export async function openSearchCurrentPage(
       return parseSlashFilterQuery(raw, VALID_FILTERS);
     }
 
-    // -- Highlight --
-
     let highlightRegex: RegExp | null = null;
-
-    // -- Virtual scrolling --
 
     /** Get or create a pooled result item element */
     function getPoolItem(poolIdx: number): HTMLElement {
@@ -199,11 +191,9 @@ export async function openSearchCurrentPage(
       const item = document.createElement("div");
       item.className = "ht-result-item";
       item.tabIndex = -1;
-      // Badge span (reused, shown/hidden per item)
       const badge = document.createElement("span");
       badge.className = "ht-result-tag";
       item.appendChild(badge);
-      // Text span
       const span = document.createElement("span");
       span.className = "ht-result-text";
       item.appendChild(span);
@@ -220,7 +210,6 @@ export async function openSearchCurrentPage(
       }
       item.dataset.index = String(resultIdx);
 
-      // Update badge
       const badge = item.children[0] as HTMLElement;
       if (result.tag) {
         const colors = getTagBadgeColors(result.tag);
@@ -232,11 +221,9 @@ export async function openSearchCurrentPage(
         badge.style.display = "none";
       }
 
-      // Update text
       const span = item.children[1] as HTMLElement;
       span.innerHTML = highlightText(result.text, highlightRegex);
 
-      // Active state
       if (resultIdx === activeIndex) {
         item.classList.add("active");
         activeItemEl = item;
@@ -260,31 +247,26 @@ export async function openSearchCurrentPage(
             Math.min(results.length, Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT) + POOL_BUFFER),
           );
 
-          // Skip if range hasn't changed
+          // No-op when the visible window is unchanged.
           if (newStart === vsStart && newEnd === vsEnd) return;
           vsStart = newStart;
           vsEnd = newEnd;
 
-          // Position the results list at the correct offset
           resultsList.style.top = `${vsStart * ITEM_HEIGHT}px`;
-
-          // Ensure we have enough pool items
           const count = Math.max(0, vsEnd - vsStart);
 
-          // Detach excess items
           while (resultsList.children.length > count) {
             const last = resultsList.lastChild;
             if (!last) break;
             resultsList.removeChild(last);
           }
 
-          // Bind and attach items
+          // Reuse row elements and rebind data instead of rebuilding all rows.
           activeItemEl = null;
           for (let i = 0; i < count; i++) {
             const item = getPoolItem(i);
             bindPoolItem(item, vsStart + i);
             if (i < resultsList.children.length) {
-              // Item already in DOM at this slot — just re-bind (already done above)
               if (resultsList.children[i] !== item) {
                 resultsList.replaceChild(item, resultsList.children[i]);
               }
@@ -319,10 +301,7 @@ export async function openSearchCurrentPage(
             return;
           }
 
-          // Set sentinel height for correct scrollbar
           resultsSentinel.style.height = `${results.length * ITEM_HEIGHT}px`;
-
-          // Reset scroll and render visible window
           resultsPane.scrollTop = 0;
           vsStart = 0;
           vsEnd = 0;
@@ -342,7 +321,7 @@ export async function openSearchCurrentPage(
       });
     }
 
-    // Scroll listener for virtual scrolling (passive for perf)
+    // Passive scroll keeps the page thread responsive while browsing results.
     resultsPane.addEventListener("scroll", scheduleVisibleRender, { passive: true });
 
     function setActiveIndex(newIndex: number): void {
@@ -352,12 +331,10 @@ export async function openSearchCurrentPage(
         return;
       }
 
-      // Remove active from previous (direct ref, no querySelector)
       if (activeItemEl) activeItemEl.classList.remove("active");
 
       activeIndex = newIndex;
 
-      // Find new active in current virtual window
       activeItemEl = null;
       if (newIndex >= vsStart && newIndex < vsEnd) {
         const poolIdx = newIndex - vsStart;
@@ -373,7 +350,6 @@ export async function openSearchCurrentPage(
     }
 
     function scrollActiveIntoView(): void {
-      // Compute where the active item should be and scroll the pane
       const itemTop = activeIndex * ITEM_HEIGHT;
       const itemBottom = itemTop + ITEM_HEIGHT;
       const scrollTop = resultsPane.scrollTop;
@@ -384,10 +360,7 @@ export async function openSearchCurrentPage(
       } else if (itemBottom > scrollTop + viewHeight) {
         resultsPane.scrollTop = itemBottom - viewHeight;
       }
-      // scrollTop change will trigger the passive scroll listener -> renderVisibleItems
     }
-
-    // -- Preview with rAF throttle --
 
     function showPreviewPlaceholder(show: boolean): void {
       previewPlaceholder.style.display = show ? "flex" : "none";
@@ -396,7 +369,7 @@ export async function openSearchCurrentPage(
     }
 
     function schedulePreviewUpdate(): void {
-      if (previewRafId !== null) return; // already scheduled
+      if (previewRafId !== null) return;
       previewRafId = requestAnimationFrame(() => {
         previewRafId = null;
         updatePreview();
@@ -420,8 +393,6 @@ export async function openSearchCurrentPage(
       }
     }
 
-    // -- Event delegation on results list --
-
     resultsList.addEventListener("click", (event) => {
       const item = (event.target as HTMLElement).closest(".ht-result-item") as HTMLElement | null;
       if (!item || !item.dataset.index) return;
@@ -440,11 +411,8 @@ export async function openSearchCurrentPage(
     backdrop.addEventListener("click", close);
     backdrop.addEventListener("mousedown", (event) => event.preventDefault());
 
-    // Sync focusedPane on mouse clicks
     input.addEventListener("focus", () => { setFocusedPane("input"); });
     resultsList.addEventListener("focus", () => { setFocusedPane("results"); }, true);
-
-    // -- Search input --
 
     function processInputValue(rawValue: string): void {
       if (debounceTimer) clearTimeout(debounceTimer);
@@ -515,8 +483,6 @@ export async function openSearchCurrentPage(
       return Math.max(1, Math.floor(rows / 2));
     }
 
-    // -- Keyboard handler --
-
     function keyHandler(event: KeyboardEvent): void {
       if (!panelOpen) {
         document.removeEventListener("keydown", keyHandler, true);
@@ -582,19 +548,17 @@ export async function openSearchCurrentPage(
         return;
       }
 
-      // Backspace on empty input removes the last active filter pill
+      // Mirrors command-line UX: backspace on empty query removes last filter token.
       if (event.key === "Backspace" && focusedPane === "input"
           && input.value === "" && activeFilters.length > 0) {
         event.preventDefault();
         activeFilters.pop();
-        // Rebuild input text from remaining filters
         input.value = activeFilters
           .map((filter) => `/${filter}`)
           .join(" ")
           + (activeFilters.length ? " " : "");
         updateTitle();
         updateFilterPills();
-        // Re-trigger search with no query
         results = [];
         currentQuery = "";
         renderResults();
@@ -652,7 +616,7 @@ export async function openSearchCurrentPage(
     window.addEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
     registerPanelCleanup(close);
 
-    // Mouse wheel on results pane: navigate items, block page scroll
+    // Keep wheel navigation inside the panel instead of scrolling the host page.
     resultsPane.addEventListener("wheel", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -660,11 +624,10 @@ export async function openSearchCurrentPage(
       setActiveIndex(movePanelListIndexFromWheel(results.length, activeIndex, event.deltaY));
     });
 
-    // Focus input
     input.focus();
     setTimeout(() => { if (panelOpen) input.focus(); }, 50);
 
-    // Restore previous search state
+    // Restore previous query when reopening within the same page session.
     if (lastSearchState && lastSearchState.query) {
       input.value = lastSearchState.query;
       const { filters, query } = parseInput(lastSearchState.query);

@@ -1,3 +1,6 @@
+// Session menu shell — wires session views (load/save/replace) to shared panel lifecycle.
+// View-specific rendering and key handling live in session.ts.
+
 import {
   createPanelHost,
   removePanelHost,
@@ -42,6 +45,7 @@ export async function openSessionMenu(
   initialView: SessionPanelMode = "sessionList",
 ): Promise<void> {
   try {
+    // Pre-guard save mode: skip opening when tab-manager state already matches a saved session.
     if (initialView === "saveSession") {
       try {
         const [tabManagerEntries, savedSessions] = await Promise.all([

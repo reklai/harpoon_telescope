@@ -28,7 +28,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const resetAllBtn = document.getElementById("resetAllBtn")!;
   const statusBar = document.getElementById("statusBar")!;
 
-  // Render all keybinding rows grouped by scope
   function renderBindings(): void {
     container.innerHTML = "";
 
@@ -71,7 +70,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // Enter recording mode for a specific keybinding
   function startRecording(
     scope: BindingScope,
     action: string,
@@ -102,7 +100,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderBindings();
   }
 
-  // Capture keydown while recording to assign new keybinding
+  // Capture phase prevents page-level handlers from stealing the recording key.
   document.addEventListener(
     "keydown",
     async (event: KeyboardEvent) => {
@@ -112,7 +110,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       event.stopPropagation();
 
       const keyStr = keyEventToString(event);
-      if (!keyStr) return; // modifier-only press
+      if (!keyStr) return;
 
       const { scope, action } = recordingState;
 
@@ -136,7 +134,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     true,
   );
 
-  // Reset a single binding back to its default
   async function resetBinding(
     scope: BindingScope,
     action: string,
@@ -162,7 +159,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderBindings();
   }
 
-  // Reset all bindings to defaults
   resetAllBtn.addEventListener("click", async () => {
     config = JSON.parse(JSON.stringify(DEFAULT_KEYBINDINGS));
     await saveKeybindings(config);
@@ -170,7 +166,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderBindings();
   });
 
-  // Temporary status message at the bottom of the settings panel
+  // Ephemeral status so successful rebinding does not leave stale UI state.
   let statusTimeout: ReturnType<typeof setTimeout> | null = null;
   function showStatus(message: string, type: "success" | "error"): void {
     if (statusTimeout) clearTimeout(statusTimeout);

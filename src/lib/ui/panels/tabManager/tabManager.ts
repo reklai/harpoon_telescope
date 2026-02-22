@@ -1,6 +1,5 @@
 // Tab Manager overlay — curated list of up to 4 tabs with scroll memory.
-// Supports keyboard nav (arrows, vim j/k), number keys 1-4 to jump,
-// "w" key to enter swap mode, and "d" to delete.
+// Supports arrow and built-in j/k navigation, numeric jumps, swap mode, and undo.
 
 import { MAX_TAB_MANAGER_SLOTS, matchesAction, keyToDisplay } from "../../../common/contracts/keybindings";
 import {
@@ -46,11 +45,11 @@ export async function openTabManager(
     let list = await listTabManagerEntriesWithRetry();
     let activeIndex = 0;
 
-    // Swap mode state (toggled by "w" key)
+    // Swap mode keeps the source slot selected until a target is chosen.
     let swapMode = false;
     let swapSourceIndex: number | null = null;
 
-    // Undo buffer — stores the last removed entry for single-slot undo
+    // Single-step undo for the most recent delete action.
     let undoEntry: { entry: TabManagerEntry; index: number } | null = null;
 
     const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
@@ -115,7 +114,6 @@ export async function openTabManager(
       refreshTabManagerFooter();
     }
 
-    // -- Tab Manager view render --
     function renderTabManager(): void {
       const titleText = !swapMode
         ? "Tab Manager"
@@ -162,7 +160,6 @@ export async function openTabManager(
 
       container.innerHTML = html;
 
-      // -- Bind events --
       const backdrop = shadow.querySelector(".ht-backdrop") as HTMLElement;
       const closeBtn = shadow.querySelector(".ht-dot-close") as HTMLElement;
 
@@ -177,7 +174,6 @@ export async function openTabManager(
       backdrop.addEventListener("mousedown", (event) => event.preventDefault());
       closeBtn.addEventListener("click", close);
 
-      // Item click: normal mode -> jump, swap mode -> pick
       shadow.querySelectorAll(".ht-tab-manager-item").forEach((el) => {
         el.addEventListener("click", (event) => {
           const target = (event as MouseEvent).target as HTMLElement;
@@ -193,7 +189,6 @@ export async function openTabManager(
         });
       });
 
-      // Delete buttons
       shadow.querySelectorAll(".ht-tab-manager-delete").forEach((el) => {
         el.addEventListener("click", async (event) => {
           event.stopPropagation();
@@ -212,7 +207,6 @@ export async function openTabManager(
         });
       });
 
-      // Scroll active into view
       const activeEl = shadow.querySelector(".ht-tab-manager-item.active");
       if (activeEl) activeEl.scrollIntoView({ block: "nearest" });
 
@@ -233,7 +227,6 @@ export async function openTabManager(
       }
     }
 
-    // -- Render --
     function render(): void {
       renderTabManager();
     }
@@ -256,7 +249,7 @@ export async function openTabManager(
       }
     }
 
-    // Swap mode: pick source, then target
+    // Swap mode is two-phase: first keypress sets source, second sets target.
     function performSwapPick(idx: number): void {
       if (swapSourceIndex === null) {
         swapSourceIndex = idx;
@@ -270,7 +263,8 @@ export async function openTabManager(
         list[srcIdx] = list[idx];
         list[idx] = temp;
         activeIndex = idx;
-        swapSourceIndex = null; // Stay in swap mode, ready for next pick
+        // Remain in swap mode for repeated reordering without re-entering mode.
+        swapSourceIndex = null;
         reorderTabManagerEntries(list)
           .then(() => listTabManagerEntries())
           .then((fresh) => {
@@ -314,14 +308,11 @@ export async function openTabManager(
       }
     }
 
-    // -- Keyboard handler --
     function keyHandler(event: KeyboardEvent): void {
       if (!document.getElementById("ht-panel-host")) {
         document.removeEventListener("keydown", keyHandler, true);
         return;
       }
-
-      // -- Tab Manager mode key handling --
 
       if (
         config.navigationMode === "standard"
@@ -346,7 +337,7 @@ export async function openTabManager(
         }
       }
 
-      // Number keys 1-4: instant jump to slot
+      // Numeric shortcuts jump directly by stable slot number, not row index.
       if (!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
         const num = parseInt(event.key);
         if (num >= 1 && num <= MAX_TAB_MANAGER_SLOTS) {
@@ -358,7 +349,6 @@ export async function openTabManager(
         }
       }
 
-      // Swap mode toggle ("w" key)
       if (matchesAction(event, config, "tabManager", "swap")) {
         event.preventDefault();
         event.stopPropagation();
@@ -433,7 +423,6 @@ export async function openTabManager(
           })();
         }
       } else if (matchesAction(event, config, "tabManager", "undo")) {
-        // Undo last remove
         event.preventDefault();
         event.stopPropagation();
         if (!undoEntry) return;
@@ -456,7 +445,7 @@ export async function openTabManager(
           }
         })();
       } else {
-        // Block all other keys from reaching the page
+        // Keep host-page shortcuts from firing while panel key handler is active.
         event.stopPropagation();
       }
     }

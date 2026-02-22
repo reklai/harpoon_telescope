@@ -1,5 +1,5 @@
-// Session save/load views for the tab manager overlay.
-// Renders the save-session input and session-list views inside the tab manager panel.
+// Session save/load views rendered inside the shared panel shell.
+// Keeps view-specific keyboard semantics in one place to avoid mode drift.
 
 import { keyToDisplay, matchesAction, MAX_SESSIONS } from "../../../common/contracts/keybindings";
 import { vimBadgeHtml } from "../../../common/utils/panelHost";
@@ -139,14 +139,12 @@ export function refreshSessionViewFooter(ctx: SessionContext, viewMode: SessionP
   footerEl.innerHTML = buildReplaceSessionFooterHtml(ctx.config);
 }
 
-// -- Save session view --
-
 export async function renderSaveSession(ctx: SessionContext): Promise<void> {
   const { shadow, container } = ctx;
   const saveKey = keyToDisplay(ctx.config.bindings.tabManager.jump.key);
   const closeKey = keyToDisplay(ctx.config.bindings.tabManager.close.key);
 
-  // Fetch current sessions for name collision context + tab-manager list for live save preview.
+  // Load both datasets upfront so validation and preview are consistent in one render.
   const [currentSessions, tabManagerEntries] = await Promise.all([
     listSessions(),
     listTabManagerEntries(),
@@ -204,8 +202,6 @@ export async function renderSaveSession(ctx: SessionContext): Promise<void> {
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
 }
-
-// -- Session list view --
 
 export function renderSessionList(ctx: SessionContext): void {
   const { shadow, container, config, sessions } = ctx;
@@ -348,7 +344,7 @@ export function renderSessionList(ctx: SessionContext): void {
     }
   });
 
-  // Click to start pre-load confirmation (skip if clicking delete button)
+  // Click row to open load confirmation; destructive actions are guarded separately.
   shadow.querySelectorAll(".ht-session-item").forEach((el) => {
     el.addEventListener("click", (event) => {
       if ((event.target as HTMLElement).closest(".ht-session-delete")) return;
@@ -365,7 +361,7 @@ export function renderSessionList(ctx: SessionContext): void {
     });
   });
 
-  // Click x to delete
+  // Delete button enters confirmation mode in preview pane.
   shadow.querySelectorAll(".ht-session-delete").forEach((el) => {
     el.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -386,7 +382,7 @@ export function renderSessionList(ctx: SessionContext): void {
     });
   });
 
-  // Keep inline rename input mouse-native (cursor placement, selection, drag-select).
+  // Keep inline rename input mouse-native (selection, caret, drag) inside the panel.
   shadow.querySelectorAll(".ht-session-rename-input").forEach((el) => {
     const renameInput = el as HTMLInputElement;
     renameInput.addEventListener("mousedown", (event) => event.stopPropagation());
@@ -682,8 +678,6 @@ function showSaveSessionInlineError(ctx: SessionContext, message: string): boole
   return true;
 }
 
-// -- Session keyboard handlers --
-
 /** Handle keydown events in saveSession view. Returns true if handled. */
 export function handleSaveSessionKey(ctx: SessionContext, event: KeyboardEvent): boolean {
   const input = ctx.shadow.querySelector(".ht-session-input") as HTMLInputElement | null;
@@ -708,7 +702,7 @@ export function handleSaveSessionKey(ctx: SessionContext, event: KeyboardEvent):
     }
     return true;
   }
-  // Let typing through to the input
+  // Save view keeps text editing local to the input.
   event.stopPropagation();
   return true;
 }
@@ -726,7 +720,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     return ctx.sessions[ctx.sessionIndex];
   };
 
-  // During rename mode, only handle jump/close — let all other keys through to the input
+  // Rename mode is intentionally narrow: submit/cancel are handled; text keys pass through.
   if (sessionTransientState.isRenameModeActive) {
     if (matchesAction(event, ctx.config, "tabManager", "close")) {
       event.preventDefault();
@@ -768,12 +762,11 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
       }
       return true;
     }
-    // Let typing reach the input (don't preventDefault)
     event.stopPropagation();
     return true;
   }
 
-  // During overwrite confirmation, only accept configured confirm/cancel keys.
+  // Confirmation modes lock interaction to explicit confirm/cancel bindings.
   if (sessionTransientState.isOverwriteConfirmationActive) {
     event.preventDefault();
     event.stopPropagation();
@@ -802,7 +795,6 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     return true;
   }
 
-  // During delete confirmation, only accept configured confirm/cancel keys.
   if (sessionTransientState.isDeleteConfirmationActive) {
     event.preventDefault();
     event.stopPropagation();
@@ -815,7 +807,6 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     return true;
   }
 
-  // Pre-load confirmation: confirm/cancel only
   if (sessionTransientState.isLoadConfirmationActive) {
     event.preventDefault();
     event.stopPropagation();
@@ -869,7 +860,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
       return true;
     }
 
-    // One-way list focus; use session.focusSearch to return to filter.
+    // List focus is one-way from this key; focusSearch returns to input.
     return true;
   }
 
@@ -892,7 +883,6 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
       return true;
     }
     if (!matchesAction(event, ctx.config, "tabManager", "close")) {
-      // Let text editing keys flow to the focused input.
       event.stopPropagation();
       return true;
     }
@@ -981,13 +971,12 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     return true;
   }
 
-  // Rename session
   if (matchesAction(event, ctx.config, "session", "rename")) {
     event.preventDefault();
     event.stopPropagation();
     if (!getVisibleSelectedSession()) return true;
     setSessionTransientState(startSessionRenameMode(sessionTransientState));
-    // Re-render to show inline input, then focus it
+    // Re-render first so the rename input exists, then place caret at end.
     ctx.render();
     const input = ctx.shadow.querySelector(".ht-session-rename-input") as HTMLInputElement;
     if (input) {
@@ -998,7 +987,6 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     return true;
   }
 
-  // Overwrite session — show confirmation prompt
   if (matchesAction(event, ctx.config, "session", "overwrite")) {
     event.preventDefault();
     event.stopPropagation();

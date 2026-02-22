@@ -11,7 +11,7 @@
 7. `npm run verify:store`
 8. `npm run build:firefox` or `npm run build:chrome`
 
-Architecture reference: `docs/ARCHITECTURE.md`
+Contributor orientation: `README.md`
 
 ## Release Flow
 
@@ -55,9 +55,10 @@ Architecture reference: `docs/ARCHITECTURE.md`
 ## Module Boundaries
 
 - `src/entryPoints/*`: thin startup/adaptor layers only.
-- `src/lib/shared/*`: cross-feature utilities and shared state helpers.
-- Feature modules should depend on `shared`, not on other feature internals unless necessary.
-- Runtime message contract changes must go through `src/lib/shared/runtimeMessages.ts`.
+- `src/lib/common/*`: cross-feature contracts and utility helpers.
+- `src/lib/backgroundRuntime/*`: background-only handlers, domains, and lifecycle flows.
+- Feature modules should depend on `common`, not on other feature internals unless necessary.
+- Runtime message contract changes must go through `src/lib/common/contracts/runtimeMessages.ts`.
 
 ## Engineering Promise Guardrails
 
@@ -65,7 +66,7 @@ Architecture reference: `docs/ARCHITECTURE.md`
 - New overlays must compose from `createPanelHost()`, `getBaseStyles()`, and `registerPanelCleanup()`.
 - Overlay CSS should consume shared `panelHost` tokens (`var(--ht-color-*)`) instead of hardcoded palette values.
 - Treat UI smoothness as a default requirement: avoid full-list rerenders, prefer rAF-throttled work, and keep compositor-friendly panel containers.
-- Keep perf budgets explicit: update `src/lib/shared/perfBudgets.json` + instrumentation/tests together when hot paths change.
+- Keep perf budgets explicit: update `src/lib/common/utils/perfBudgets.json` + instrumentation/tests together when hot paths change.
 - Preserve Firefox/Chrome parity when touching commands, permissions, or manifests.
 
 ## Pull Request Checklist
@@ -79,4 +80,4 @@ Architecture reference: `docs/ARCHITECTURE.md`
 - `npm run verify:upgrade` passes.
 - `npm run verify:store` passes.
 - `npm run build:firefox` and `npm run build:chrome` pass.
-- `README.md`, `learn.md`, and/or this file updated if contributor-facing release flow changed.
+- `README.md` and/or this file updated if contributor-facing release flow changed.

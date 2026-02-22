@@ -1,5 +1,5 @@
-// Help overlay — read-only scrollable reference for all keybindings and features.
-// Alt+M to open, scroll with wheel / j/k / arrows, Esc to close.
+// Help overlay — read-only keymap/reference view.
+// Reflects live keybinding changes while it is open.
 
 import browser from "webextension-polyfill";
 import { keyToDisplay } from "../../../common/contracts/keybindings";
@@ -16,16 +16,13 @@ import {
 } from "../../../common/utils/panelHost";
 import styles from "./help.css";
 
-/** Section definition for the help content */
 interface HelpSection {
   title: string;
   items: { label: string; key: string }[];
 }
 
-// Scroll step in pixels for keyboard navigation
 const SCROLL_STEP = 80;
 
-/** Build help sections from the live keybinding config */
 function buildSections(config: KeybindingsConfig): HelpSection[] {
   const g = config.bindings.global;
   const h = config.bindings.tabManager;
@@ -141,17 +138,14 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
     style.textContent = getBaseStyles() + styles;
     shadow.appendChild(style);
 
-    // Backdrop
     const backdrop = document.createElement("div");
     backdrop.className = "ht-backdrop";
     shadow.appendChild(backdrop);
 
-    // Panel container
     const panel = document.createElement("div");
     panel.className = "ht-help-container";
     shadow.appendChild(panel);
 
-    // Titlebar
     const titlebar = document.createElement("div");
     titlebar.className = "ht-titlebar";
     titlebar.innerHTML = `
@@ -164,7 +158,6 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
       ${vimBadgeHtml(liveConfig)}`;
     panel.appendChild(titlebar);
 
-    // Body (scrollable)
     const body = document.createElement("div");
     body.className = "ht-help-body";
     panel.appendChild(body);
@@ -172,7 +165,6 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
     const sectionsHost = document.createElement("div");
     body.appendChild(sectionsHost);
 
-    // Footer
     const footer = document.createElement("div");
     footer.className = "ht-footer";
 
@@ -249,6 +241,7 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
       renderFooter();
     }
 
+    // Live-update labels when options-page keybindings change.
     const onStorageChanged = (
       changes: Record<string, browser.Storage.StorageChange>,
       area: string,
@@ -265,8 +258,6 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
     renderSections();
     renderFooter();
     panel.appendChild(footer);
-
-    // --- Event handlers ---
 
     function close(): void {
       document.removeEventListener("keydown", keyHandler, true);
@@ -288,7 +279,6 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
         return;
       }
 
-      // Arrow keys or j/k aliases scroll the body
       const isDown = matchesAction(event, liveConfig, "search", "moveDown");
       const isUp = matchesAction(event, liveConfig, "search", "moveUp");
 
@@ -306,11 +296,10 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
         return;
       }
 
-      // Block all other keys from reaching the page
+      // Keep host-page handlers from receiving keystrokes while help is open.
       event.stopPropagation();
     }
 
-    // Bind events
     backdrop.addEventListener("click", close);
     backdrop.addEventListener("mousedown", (event) => event.preventDefault());
     titlebar.querySelector(".ht-dot-close")!.addEventListener("click", close);

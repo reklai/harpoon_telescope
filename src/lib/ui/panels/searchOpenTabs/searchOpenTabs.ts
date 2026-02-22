@@ -1,5 +1,5 @@
-// Search Open Tabs overlay — sorted list of all open tabs with fuzzy filter.
-// Alt+Shift+F to open, type to filter, Tab to cycle input/results, Enter to jump.
+// Search Open Tabs overlay — fuzzy tab switcher ranked by frecency.
+// Uses staged matching and frame-batched rendering to stay responsive while typing.
 
 import { matchesAction, keyToDisplay } from "../../../common/contracts/keybindings";
 import {
@@ -28,7 +28,6 @@ export async function openSearchOpenTabs(
     const { host, shadow } = createPanelHost();
     let panelOpen = true;
 
-    // --- Keybind display strings ---
     const upKey = keyToDisplay(config.bindings.search.moveUp.key);
     const downKey = keyToDisplay(config.bindings.search.moveDown.key);
     const switchPaneKey = keyToDisplay(config.bindings.search.switchPane.key);
@@ -64,7 +63,7 @@ export async function openSearchOpenTabs(
     style.textContent = getBaseStyles() + searchOpenTabsStyles;
     shadow.appendChild(style);
 
-    // --- Build static shell (only once) ---
+    // Build static shell once; only the list content is rerendered.
     const backdrop = document.createElement("div");
     backdrop.className = "ht-backdrop";
     shadow.appendChild(backdrop);
@@ -73,7 +72,6 @@ export async function openSearchOpenTabs(
     panel.className = "ht-open-tabs-container";
     shadow.appendChild(panel);
 
-    // Title bar
     const titlebar = document.createElement("div");
     titlebar.className = "ht-titlebar";
     titlebar.innerHTML = `
@@ -86,7 +84,6 @@ export async function openSearchOpenTabs(
 
     const titleText = titlebar.querySelector(".ht-titlebar-text") as HTMLElement;
 
-    // Input row
     const inputWrap = document.createElement("div");
     inputWrap.className = "ht-open-tabs-input-wrap ht-ui-input-wrap";
     inputWrap.innerHTML = `<span class="ht-open-tabs-prompt ht-ui-input-prompt">&gt;</span>`;
@@ -97,12 +94,10 @@ export async function openSearchOpenTabs(
     inputWrap.appendChild(input);
     panel.appendChild(inputWrap);
 
-    // Results list
     const listEl = document.createElement("div");
     listEl.className = "ht-open-tabs-list";
     panel.appendChild(listEl);
 
-    // Footer
     const footer = document.createElement("div");
     footer.className = "ht-footer";
     renderFooter();
@@ -147,7 +142,7 @@ export async function openSearchOpenTabs(
       }
     }
 
-    /** Highlight fuzzy query matches in text */
+    /** Highlight visible query terms in title text for quick scan. */
     function highlightMatch(text: string): string {
       const escaped = escapeHtml(text);
       if (!highlightRegex) return escaped;
@@ -179,7 +174,7 @@ export async function openSearchOpenTabs(
       });
     }
 
-    /** Build list items into a DocumentFragment */
+    /** Build rows into a fragment so list updates commit as one DOM write. */
     function buildListFragment(): DocumentFragment {
       const frag = document.createDocumentFragment();
       for (let i = 0; i < filtered.length; i++) {
@@ -215,7 +210,7 @@ export async function openSearchOpenTabs(
       return frag;
     }
 
-    /** Flush fragment into the list and update activeItemEl */
+    /** Swap list DOM in one operation and retain the active-row ref. */
     function commitList(frag: DocumentFragment): void {
       listEl.textContent = "";
       listEl.appendChild(frag);
@@ -223,7 +218,7 @@ export async function openSearchOpenTabs(
       if (activeItemEl) activeItemEl.scrollIntoView({ block: "nearest" });
     }
 
-    /** Full rebuild of the results list (called when filtered data changes) */
+    /** Rebuild visible rows whenever filter output changes. */
     function renderList(): void {
       try {
         titleText.textContent = query
@@ -245,7 +240,7 @@ export async function openSearchOpenTabs(
           return;
         }
 
-        // Debounce subsequent renders to one paint via rAF
+        // Keep rapid keystrokes to one list commit per frame.
         cancelAnimationFrame(renderRafId);
         renderRafId = requestAnimationFrame(() => {
           if (!panelOpen) return;
@@ -260,13 +255,11 @@ export async function openSearchOpenTabs(
       }
     }
 
-    /** Move active highlight without rebuilding DOM */
+    /** Move selection state without regenerating the row list. */
     function updateActiveHighlight(newIndex: number): void {
       if (newIndex === activeIndex && activeItemEl) return;
-      // Remove old highlight
       if (activeItemEl) activeItemEl.classList.remove("active");
       activeIndex = newIndex;
-      // Apply new highlight
       activeItemEl = (listEl.children[activeIndex] as HTMLElement) || null;
       if (activeItemEl) {
         activeItemEl.classList.add("active");
@@ -281,9 +274,8 @@ export async function openSearchOpenTabs(
       if (filtered[idx]) jumpToTab(filtered[idx]);
     }
 
-    // --- Filtering ---
-    // 4-tier match scoring: exact (0) > starts-with (1) > substring (2) > fuzzy (3)
-    // Returns -1 for no match.
+    // 4-tier scoring keeps the most obvious matches near the top.
+    // Lower score is better: exact (0), prefix (1), substring (2), fuzzy-only (3).
     function scoreMatch(
       lowerText: string,
       rawText: string,
@@ -326,7 +318,7 @@ export async function openSearchOpenTabs(
             urlHit: boolean;
           }> = [];
 
-          // Two-pass: substring first, fuzzy as fallback
+          // Fast reject: only keep entries with any substring or fuzzy signal.
           for (const entry of allEntries) {
             const title = entry.title || "";
             const url = entry.url || "";
@@ -346,7 +338,7 @@ export async function openSearchOpenTabs(
             });
           }
 
-          // Rank by: title score > title length (shorter = tighter) > url score
+          // Prefer title hits over URL hits, then tighter title matches.
           ranked.sort((a, b) => {
             if (a.titleHit !== b.titleHit) return a.titleHit ? -1 : 1;
             if (a.titleHit && b.titleHit) {
@@ -408,7 +400,7 @@ export async function openSearchOpenTabs(
         return;
       }
 
-      // Switch-pane key cycles between input and results list (only if results exist).
+      // Pane-switch only moves input -> list; focusSearch key returns to input.
       if (matchesAction(event, config, "search", "switchPane")) {
         event.preventDefault();
         event.stopPropagation();
@@ -489,17 +481,16 @@ export async function openSearchOpenTabs(
         return;
       }
 
-      // Block all other keys from reaching the page
+      // Prevent host-page shortcuts from firing while the panel owns focus.
       event.stopPropagation();
     }
 
-    // Bind static events
     backdrop.addEventListener("click", close);
     backdrop.addEventListener("mousedown", (event) => event.preventDefault());
     titlebar.querySelector(".ht-dot-close")!.addEventListener("click", close);
     listEl.addEventListener("click", onListClick);
 
-    // Mouse wheel on results list: navigate items, block page scroll
+    // Wheel drives list selection and never leaks scroll to the host page.
     listEl.addEventListener("wheel", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -507,7 +498,6 @@ export async function openSearchOpenTabs(
       updateActiveHighlight(movePanelListIndexFromWheel(filtered.length, activeIndex, event.deltaY));
     });
 
-    // Sync focused state on mouse clicks
     input.addEventListener("focus", () => { listEl.classList.remove("focused"); });
     listEl.addEventListener("focus", () => { listEl.classList.add("focused"); }, true);
 
@@ -517,7 +507,7 @@ export async function openSearchOpenTabs(
 
     window.addEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
 
-    // Fetch frecency list and render
+    // Load once on open; in-panel search is local and synchronous after this.
     allEntries = await listFrecencyEntriesWithRetry();
     filtered = [...allEntries];
 

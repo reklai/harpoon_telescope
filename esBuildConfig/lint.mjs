@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "fs";
-import { extname, resolve, relative } from "path";
+import { dirname, extname, resolve, relative } from "path";
 
 const ROOT = process.cwd();
 
@@ -19,7 +19,7 @@ const OVERLAY_TS_FILES = [
   "src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts",
   "src/lib/ui/panels/searchOpenTabs/searchOpenTabs.ts",
   "src/lib/ui/panels/sessionMenu/sessionMenu.ts",
-  "src/lib/ui/panels/sessionMenu/session.ts",
+  "src/lib/ui/panels/sessionMenu/sessionRestoreOverlay.ts",
   "src/lib/ui/panels/tabManager/tabManager.ts",
 ];
 
@@ -138,6 +138,67 @@ function checkSourceImports() {
   }
 }
 
+function toUnixPath(pathValue) {
+  return pathValue.replaceAll("\\", "/");
+}
+
+function checkLayerBoundaries() {
+  const tsFiles = walkFiles(resolve(ROOT, "src"), new Set([".ts"]));
+  const importPattern =
+    /(?:import|export)\s[^"']*?\sfrom\s*["']([^"']+)["']|require\(\s*["']([^"']+)["']\s*\)|import\(\s*["']([^"']+)["']\s*\)/g;
+
+  for (const fullPath of tsFiles) {
+    const relPath = toUnixPath(relative(ROOT, fullPath));
+    const source = readFileSync(fullPath, "utf8");
+    let match;
+
+    while ((match = importPattern.exec(source)) !== null) {
+      const imported = match[1] || match[2] || match[3];
+      if (!imported || (!imported.startsWith(".") && !imported.startsWith("/"))) continue;
+
+      const resolvedImport = toUnixPath(relative(
+        ROOT,
+        resolve(dirname(fullPath), imported),
+      ));
+
+      if (relPath.startsWith("src/lib/ui/") && resolvedImport.startsWith("src/lib/backgroundRuntime/")) {
+        errors.push(`${relPath} must not import backgroundRuntime modules directly (${imported}).`);
+      }
+
+      if (relPath.startsWith("src/lib/backgroundRuntime/") && resolvedImport.startsWith("src/lib/ui/")) {
+        errors.push(`${relPath} must not import UI-layer modules (${imported}).`);
+      }
+
+      if (relPath.startsWith("src/lib/common/contracts/")) {
+        if (resolvedImport.startsWith("src/lib/common/utils/")) {
+          errors.push(`${relPath} must not import common/utils (${imported}); keep contracts dependency-light.`);
+        }
+        if (resolvedImport.startsWith("src/lib/backgroundRuntime/") || resolvedImport.startsWith("src/lib/ui/")) {
+          errors.push(`${relPath} must not import feature/runtime layers (${imported}); contracts must stay cross-cutting.`);
+        }
+      }
+
+      if (relPath.startsWith("src/lib/common/utils/")) {
+        if (resolvedImport.startsWith("src/lib/backgroundRuntime/") || resolvedImport.startsWith("src/lib/ui/")) {
+          errors.push(`${relPath} must not import runtime/UI layers (${imported}); utils must stay reusable.`);
+        }
+      }
+
+      if (relPath.startsWith("src/lib/core/")) {
+        if (resolvedImport.startsWith("src/lib/backgroundRuntime/") || resolvedImport.startsWith("src/lib/ui/")) {
+          errors.push(`${relPath} must not import UI/runtime layers (${imported}); core must stay pure.`);
+        }
+      }
+
+      if (relPath.startsWith("src/lib/adapters/runtime/")) {
+        if (resolvedImport.startsWith("src/lib/ui/") || resolvedImport.startsWith("src/lib/backgroundRuntime/")) {
+          errors.push(`${relPath} must not import UI/backgroundRuntime layers (${imported}); adapters are boundary clients.`);
+        }
+      }
+    }
+  }
+}
+
 function checkOverlayContracts() {
   for (const file of OVERLAY_TS_FILES) {
     const source = readText(file);
@@ -176,18 +237,18 @@ function checkUiGlitchBaseline() {
     }
   }
 
-  const panelHost = readText("src/lib/ui/shared/panelHost.ts");
+  const panelHost = readText("src/lib/common/utils/panelHost.ts");
   if (!panelHost.includes("requestAnimationFrame")) {
-    errors.push("src/lib/ui/shared/panelHost.ts must reclaim focus through requestAnimationFrame.");
+    errors.push("src/lib/common/utils/panelHost.ts must reclaim focus through requestAnimationFrame.");
   }
   if (!panelHost.includes("activePanelCleanup")) {
-    errors.push("src/lib/ui/shared/panelHost.ts must keep single-panel cleanup state.");
+    errors.push("src/lib/common/utils/panelHost.ts must keep single-panel cleanup state.");
   }
   if (!panelHost.includes("100dvh") || !panelHost.includes("100dvw")) {
-    errors.push("src/lib/ui/shared/panelHost.ts must use dynamic viewport units (100dvw/100dvh).");
+    errors.push("src/lib/common/utils/panelHost.ts must use dynamic viewport units (100dvw/100dvh).");
   }
   if (!panelHost.includes("--ht-color-bg") || !panelHost.includes("--ht-color-accent")) {
-    errors.push("src/lib/ui/shared/panelHost.ts must define shared color tokens.");
+    errors.push("src/lib/common/utils/panelHost.ts must define shared color tokens.");
   }
 }
 
@@ -203,15 +264,15 @@ function checkContributorDocs() {
 }
 
 function checkPerfGuardrails() {
-  const perfShared = readText("src/lib/shared/perf.ts");
+  const perfShared = readText("src/lib/common/utils/perf.ts");
   if (!perfShared.includes("export function withPerfTrace")) {
-    errors.push("src/lib/shared/perf.ts must expose withPerfTrace().");
+    errors.push("src/lib/common/utils/perf.ts must expose withPerfTrace().");
   }
 
-  const perfBudgets = JSON.parse(readText("src/lib/shared/perfBudgets.json"));
+  const perfBudgets = JSON.parse(readText("src/lib/common/utils/perfBudgets.json"));
   for (const key of REQUIRED_PERF_BUDGET_KEYS) {
     if (typeof perfBudgets[key] !== "number" || perfBudgets[key] <= 0) {
-      errors.push(`src/lib/shared/perfBudgets.json must define a positive budget for "${key}".`);
+      errors.push(`src/lib/common/utils/perfBudgets.json must define a positive budget for "${key}".`);
     }
   }
 
@@ -289,6 +350,7 @@ function checkNamingConsistency() {
 
 checkPackageDependencies();
 checkSourceImports();
+checkLayerBoundaries();
 checkOverlayContracts();
 checkUiGlitchBaseline();
 checkContributorDocs();

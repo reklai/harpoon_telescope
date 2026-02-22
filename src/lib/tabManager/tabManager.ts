@@ -2,7 +2,6 @@
 // Supports keyboard nav (arrows, vim j/k), number keys 1-4 to jump,
 // "w" key to enter swap mode, and "d" to delete.
 
-import browser from "webextension-polyfill";
 import { MAX_TAB_MANAGER_SLOTS, matchesAction, keyToDisplay } from "../shared/keybindings";
 import {
   createPanelHost,
@@ -17,26 +16,19 @@ import { escapeHtml, extractDomain } from "../shared/helpers";
 import { showFeedback } from "../shared/feedback";
 import { toastMessages } from "../shared/toastMessages";
 import tabManagerStyles from "./tabManager.css";
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function fetchTabManagerListWithRetry(): Promise<TabManagerEntry[]> {
-  const retryDelaysMs = [0, 90, 240, 450];
-  let lastError: unknown = null;
-  for (const delay of retryDelaysMs) {
-    if (delay > 0) await sleep(delay);
-    try {
-      return (await browser.runtime.sendMessage({
-        type: "TAB_MANAGER_LIST",
-      })) as TabManagerEntry[];
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError || new Error("Failed to load Tab Manager list");
-}
+import {
+  jumpToTabManagerSlot,
+  listTabManagerEntries,
+  listTabManagerEntriesWithRetry,
+  removeTabManagerEntry,
+  reorderTabManagerEntries,
+} from "../adapters/runtime/tabManagerApi";
+import {
+  movePanelListIndex,
+  movePanelListIndexByDirection,
+  movePanelListIndexFromWheel,
+  movePanelListIndexHalfPage,
+} from "../core/panel/panelListController";
 
 export async function openTabManager(
   config: KeybindingsConfig,
@@ -51,7 +43,7 @@ export async function openTabManager(
     const container = document.createElement("div");
     shadow.appendChild(container);
 
-    let list = await fetchTabManagerListWithRetry();
+    let list = await listTabManagerEntriesWithRetry();
     let activeIndex = 0;
 
     // Swap mode state (toggled by "w" key)
@@ -209,10 +201,8 @@ export async function openTabManager(
             const tabId = parseInt((el as HTMLElement).dataset.tabId!);
             const idx = list.findIndex((item) => item.tabId === tabId);
             if (idx !== -1) undoEntry = { entry: { ...list[idx] }, index: idx };
-            await browser.runtime.sendMessage({ type: "TAB_MANAGER_REMOVE", tabId });
-            list = (await browser.runtime.sendMessage({
-              type: "TAB_MANAGER_LIST",
-            })) as TabManagerEntry[];
+            await removeTabManagerEntry(tabId);
+            list = await listTabManagerEntries();
             activeIndex = Math.min(activeIndex, Math.max(list.length - 1, 0));
             if (swapMode) exitSwapMode();
             render();
@@ -232,8 +222,7 @@ export async function openTabManager(
           event.preventDefault();
           event.stopPropagation();
           if (list.length === 0) return;
-          const delta = event.deltaY > 0 ? 1 : -1;
-          const next = Math.max(0, Math.min(list.length - 1, activeIndex + delta));
+          const next = movePanelListIndexFromWheel(list.length, activeIndex, event.deltaY);
           if (swapMode) {
             activeIndex = next;
             render();
@@ -282,11 +271,10 @@ export async function openTabManager(
         list[idx] = temp;
         activeIndex = idx;
         swapSourceIndex = null; // Stay in swap mode, ready for next pick
-        browser.runtime
-          .sendMessage({ type: "TAB_MANAGER_REORDER", list })
-          .then(() => browser.runtime.sendMessage({ type: "TAB_MANAGER_LIST" }))
+        reorderTabManagerEntries(list)
+          .then(() => listTabManagerEntries())
           .then((fresh) => {
-            list = fresh as TabManagerEntry[];
+            list = fresh;
             render();
           })
           .catch(() => {
@@ -301,10 +289,7 @@ export async function openTabManager(
       if (!item) return;
       close();
       try {
-        await browser.runtime.sendMessage({
-          type: "TAB_MANAGER_JUMP",
-          slot: item.slot,
-        });
+        await jumpToTabManagerSlot(item.slot);
       } catch (error) {
         console.error("[Harpoon Telescope] Jump to tab-manager slot failed:", error);
         showFeedback(toastMessages.tabManagerJumpFailed);
@@ -320,7 +305,7 @@ export async function openTabManager(
     }
 
     function setIndexWithMode(newIdx: number): void {
-      const bounded = Math.max(0, Math.min(Math.max(list.length - 1, 0), newIdx));
+      const bounded = movePanelListIndex(list.length, newIdx, 0);
       if (swapMode) {
         activeIndex = bounded;
         render();
@@ -348,8 +333,15 @@ export async function openTabManager(
         if (lowerKey === "d" || lowerKey === "u") {
           event.preventDefault();
           event.stopPropagation();
-          const delta = getHalfPageStep() * (lowerKey === "d" ? 1 : -1);
-          if (list.length > 0) setIndexWithMode(activeIndex + delta);
+          if (list.length > 0) {
+            const nextIndex = movePanelListIndexHalfPage(
+              list.length,
+              activeIndex,
+              getHalfPageStep(),
+              lowerKey === "d" ? "down" : "up",
+            );
+            setIndexWithMode(nextIndex);
+          }
           return;
         }
       }
@@ -393,7 +385,7 @@ export async function openTabManager(
         event.preventDefault();
         event.stopPropagation();
         if (list.length > 0) {
-          const newIdx = Math.min(activeIndex + 1, list.length - 1);
+          const newIdx = movePanelListIndexByDirection(list.length, activeIndex, "down");
           if (swapMode) {
             activeIndex = newIdx;
             render();
@@ -405,7 +397,7 @@ export async function openTabManager(
         event.preventDefault();
         event.stopPropagation();
         if (list.length > 0) {
-          const newIdx = Math.max(activeIndex - 1, 0);
+          const newIdx = movePanelListIndexByDirection(list.length, activeIndex, "up");
           if (swapMode) {
             activeIndex = newIdx;
             render();
@@ -428,13 +420,8 @@ export async function openTabManager(
           (async () => {
             try {
               undoEntry = { entry: { ...list[activeIndex] }, index: activeIndex };
-              await browser.runtime.sendMessage({
-                type: "TAB_MANAGER_REMOVE",
-                tabId: list[activeIndex].tabId,
-              });
-              list = (await browser.runtime.sendMessage({
-                type: "TAB_MANAGER_LIST",
-              })) as TabManagerEntry[];
+              await removeTabManagerEntry(list[activeIndex].tabId);
+              list = await listTabManagerEntries();
               activeIndex = Math.min(
                 activeIndex,
                 Math.max(list.length - 1, 0),
@@ -460,10 +447,8 @@ export async function openTabManager(
             const restoreIdx = Math.min(undoEntry!.index, list.length);
             list.splice(restoreIdx, 0, undoEntry!.entry);
             undoEntry = null;
-            await browser.runtime.sendMessage({ type: "TAB_MANAGER_REORDER", list });
-            list = (await browser.runtime.sendMessage({
-              type: "TAB_MANAGER_LIST",
-            })) as TabManagerEntry[];
+            await reorderTabManagerEntries(list);
+            list = await listTabManagerEntries();
             activeIndex = restoreIdx;
             render();
           } catch (error) {

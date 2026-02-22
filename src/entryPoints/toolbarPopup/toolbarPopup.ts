@@ -1,17 +1,20 @@
 // Popup script — browser action popup (toolbar icon click).
 // Lists tab manager entries with add/remove/jump actions.
 
-import browser from "webextension-polyfill";
 import { escapeHtml, extractDomain } from "../../lib/shared/helpers";
+import {
+  addCurrentTabToTabManager,
+  jumpToTabManagerSlot,
+  listTabManagerEntries,
+  removeTabManagerEntry,
+} from "../../lib/adapters/runtime/tabManagerApi";
 
 document.addEventListener("DOMContentLoaded", async () => {
   const listEl = document.getElementById("tabManagerList")!;
   const addBtn = document.getElementById("addBtn") as HTMLButtonElement;
 
   async function loadTabManagerEntries(): Promise<void> {
-    const tabManagerEntries = (await browser.runtime.sendMessage({
-      type: "TAB_MANAGER_LIST",
-    })) as TabManagerEntry[];
+    const tabManagerEntries = await listTabManagerEntries();
     renderList(tabManagerEntries);
   }
 
@@ -42,7 +45,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       itemElement.addEventListener("click", async (event) => {
         if ((event.target as HTMLElement).classList.contains("delete-btn")) return;
         const slot = parseInt((itemElement as HTMLElement).dataset.slot!);
-        await browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot });
+        await jumpToTabManagerSlot(slot);
         window.close();
       });
     });
@@ -52,19 +55,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       deleteButton.addEventListener("click", async (event) => {
         event.stopPropagation();
         const tabId = parseInt((deleteButton as HTMLElement).dataset.tabId!);
-        await browser.runtime.sendMessage({
-          type: "TAB_MANAGER_REMOVE",
-          tabId,
-        });
+        await removeTabManagerEntry(tabId);
         await loadTabManagerEntries();
       });
     });
   }
 
   addBtn.addEventListener("click", async () => {
-    const result = (await browser.runtime.sendMessage({
-      type: "TAB_MANAGER_ADD",
-    })) as { ok: boolean; reason?: string };
+    const result = await addCurrentTabToTabManager();
     if (!result.ok) {
       addBtn.textContent = result.reason || "Error";
       addBtn.disabled = true;

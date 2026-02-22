@@ -1,7 +1,6 @@
 // Search Open Tabs overlay — sorted list of all open tabs with fuzzy filter.
 // Alt+Shift+F to open, type to filter, Tab to cycle input/results, Enter to jump.
 
-import browser from "webextension-polyfill";
 import { matchesAction, keyToDisplay } from "../shared/keybindings";
 import {
   createPanelHost,
@@ -15,26 +14,12 @@ import {
 import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../shared/helpers";
 import { withPerfTrace } from "../shared/perf";
 import searchOpenTabsStyles from "./searchOpenTabs.css";
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function fetchFrecencyListWithRetry(): Promise<FrecencyEntry[]> {
-  const retryDelaysMs = [0, 80, 220, 420];
-  let lastError: unknown = null;
-  for (const delay of retryDelaysMs) {
-    if (delay > 0) await sleep(delay);
-    try {
-      return (await browser.runtime.sendMessage({
-        type: "FRECENCY_LIST",
-      })) as FrecencyEntry[];
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError || new Error("Failed to load open tabs list");
-}
+import { listFrecencyEntriesWithRetry, switchToTabById } from "../adapters/runtime/openTabsApi";
+import {
+  movePanelListIndexByDirection,
+  movePanelListIndexFromWheel,
+  movePanelListIndexHalfPage,
+} from "../core/panel/panelListController";
 
 export async function openSearchOpenTabs(
   config: KeybindingsConfig,
@@ -384,10 +369,7 @@ export async function openSearchOpenTabs(
     async function jumpToTab(entry: FrecencyEntry): Promise<void> {
       if (!entry) return;
       close();
-      await browser.runtime.sendMessage({
-        type: "SWITCH_TO_TAB",
-        tabId: entry.tabId,
-      });
+      await switchToTabById(entry.tabId);
     }
 
     function getHalfPageStep(): number {
@@ -454,9 +436,14 @@ export async function openSearchOpenTabs(
         if (lowerKey === "d" || lowerKey === "u") {
           event.preventDefault();
           event.stopPropagation();
-          const delta = getHalfPageStep() * (lowerKey === "d" ? 1 : -1);
           if (filtered.length > 0) {
-            updateActiveHighlight(Math.max(0, Math.min(filtered.length - 1, activeIndex + delta)));
+            const nextIndex = movePanelListIndexHalfPage(
+              filtered.length,
+              activeIndex,
+              getHalfPageStep(),
+              lowerKey === "d" ? "down" : "up",
+            );
+            updateActiveHighlight(nextIndex);
             if (activeItemEl) activeItemEl.focus();
           }
           return;
@@ -484,7 +471,7 @@ export async function openSearchOpenTabs(
         event.preventDefault();
         event.stopPropagation();
         if (filtered.length > 0) {
-          updateActiveHighlight(Math.min(activeIndex + 1, filtered.length - 1));
+          updateActiveHighlight(movePanelListIndexByDirection(filtered.length, activeIndex, "down"));
           if (!inputFocused && activeItemEl) activeItemEl.focus();
         }
         return;
@@ -496,7 +483,7 @@ export async function openSearchOpenTabs(
         event.preventDefault();
         event.stopPropagation();
         if (filtered.length > 0) {
-          updateActiveHighlight(Math.max(activeIndex - 1, 0));
+          updateActiveHighlight(movePanelListIndexByDirection(filtered.length, activeIndex, "up"));
           if (!inputFocused && activeItemEl) activeItemEl.focus();
         }
         return;
@@ -517,11 +504,7 @@ export async function openSearchOpenTabs(
       event.preventDefault();
       event.stopPropagation();
       if (filtered.length === 0) return;
-      if (event.deltaY > 0) {
-        updateActiveHighlight(Math.min(activeIndex + 1, filtered.length - 1));
-      } else {
-        updateActiveHighlight(Math.max(activeIndex - 1, 0));
-      }
+      updateActiveHighlight(movePanelListIndexFromWheel(filtered.length, activeIndex, event.deltaY));
     });
 
     // Sync focused state on mouse clicks
@@ -535,7 +518,7 @@ export async function openSearchOpenTabs(
     window.addEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
 
     // Fetch frecency list and render
-    allEntries = await fetchFrecencyListWithRetry();
+    allEntries = await listFrecencyEntriesWithRetry();
     filtered = [...allEntries];
 
     document.addEventListener("keydown", keyHandler, true);

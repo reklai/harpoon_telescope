@@ -27,6 +27,11 @@ import { scrollToText } from "../shared/scroll";
 import { showFeedback } from "../shared/feedback";
 import { toastMessages } from "../shared/toastMessages";
 import { withPerfTrace } from "../shared/perf";
+import {
+  movePanelListIndexByDirection,
+  movePanelListIndexFromWheel,
+  movePanelListIndexHalfPage,
+} from "../core/panel/panelListController";
 import previewPaneStyles from "../shared/previewPane.css";
 import searchCurrentPageStyles from "./searchCurrentPage.css";
 
@@ -751,9 +756,14 @@ export async function openSearchCurrentPage(
         if (lowerKey === "d" || lowerKey === "u") {
           event.preventDefault();
           event.stopPropagation();
-          const delta = getHalfPageStep() * (lowerKey === "d" ? 1 : -1);
           if (results.length > 0) {
-            setActiveIndex(Math.max(0, Math.min(results.length - 1, activeIndex + delta)));
+            const nextIndex = movePanelListIndexHalfPage(
+              results.length,
+              activeIndex,
+              getHalfPageStep(),
+              lowerKey === "d" ? "down" : "up",
+            );
+            setActiveIndex(nextIndex);
           }
           return;
         }
@@ -815,7 +825,7 @@ export async function openSearchCurrentPage(
         event.preventDefault();
         event.stopPropagation();
         if (results.length > 0) {
-          setActiveIndex(Math.min(activeIndex + 1, results.length - 1));
+          setActiveIndex(movePanelListIndexByDirection(results.length, activeIndex, "down"));
         }
         return;
       }
@@ -825,7 +835,7 @@ export async function openSearchCurrentPage(
         event.preventDefault();
         event.stopPropagation();
         if (results.length > 0) {
-          setActiveIndex(Math.max(activeIndex - 1, 0));
+          setActiveIndex(movePanelListIndexByDirection(results.length, activeIndex, "up"));
         }
         return;
       }
@@ -842,11 +852,7 @@ export async function openSearchCurrentPage(
       event.preventDefault();
       event.stopPropagation();
       if (results.length === 0) return;
-      if (event.deltaY > 0) {
-        setActiveIndex(Math.min(activeIndex + 1, results.length - 1));
-      } else {
-        setActiveIndex(Math.max(activeIndex - 1, 0));
-      }
+      setActiveIndex(movePanelListIndexFromWheel(results.length, activeIndex, event.deltaY));
     });
 
     // Focus input

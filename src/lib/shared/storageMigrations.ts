@@ -116,23 +116,6 @@ function normalizeSessions(rawValue: unknown): TabManagerSession[] | null {
   return normalized;
 }
 
-function normalizeBookmarkUsage(rawValue: unknown): Record<string, BookmarkUsage> | null {
-  if (typeof rawValue !== "object" || rawValue === null || Array.isArray(rawValue)) return null;
-  const normalized: Record<string, BookmarkUsage> = {};
-
-  for (const [url, rawUsage] of Object.entries(rawValue as Record<string, unknown>)) {
-    if (!url) continue;
-    if (typeof rawUsage !== "object" || rawUsage === null) continue;
-    const usage = rawUsage as Partial<BookmarkUsage>;
-    normalized[url] = {
-      visitCount: Math.max(1, toPositiveInteger(usage.visitCount) || 1),
-      lastVisit: toNonNegativeNumber(usage.lastVisit, 0),
-    };
-  }
-
-  return normalized;
-}
-
 function normalizeFrecencyData(rawValue: unknown): FrecencyEntry[] | null {
   if (!Array.isArray(rawValue)) return null;
   const normalized: FrecencyEntry[] = [];
@@ -173,7 +156,6 @@ function migrateV0ToV1(storage: StorageSnapshot): boolean {
   let changed = false;
   changed = normalizeKey(storage, "tabManagerList", normalizeTabManagerList) || changed;
   changed = normalizeKey(storage, "tabManagerSessions", normalizeSessions) || changed;
-  changed = normalizeKey(storage, "bookmarkUsage", normalizeBookmarkUsage) || changed;
   changed = normalizeKey(storage, "frecencyData", normalizeFrecencyData) || changed;
   return changed;
 }

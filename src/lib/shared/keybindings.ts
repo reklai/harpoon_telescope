@@ -7,7 +7,7 @@ export const MAX_TAB_MANAGER_SLOTS = 4;
 export const MAX_SESSIONS = 4;
 
 export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
-  navigationMode: "vim",
+  navigationMode: "standard",
   bindings: {
     global: {
       openTabManager:    { key: "Alt+T",       default: "Alt+T"       },
@@ -23,7 +23,6 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
       openSessions:   { key: "Alt+S",       default: "Alt+S"       },
       openSessionSave: { key: "Alt+Shift+S", default: "Alt+Shift+S" },
       openHelp:       { key: "Alt+M",       default: "Alt+M"       },
-      toggleVim:      { key: "Alt+V",       default: "Alt+V"       },
     },
     tabManager: {
       moveUp:         { key: "ArrowUp",     default: "ArrowUp"     },
@@ -31,20 +30,32 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
       jump:           { key: "Enter",       default: "Enter"       },
       remove:         { key: "D",           default: "D"           },
       swap:           { key: "W",           default: "W"           },
+      undo:           { key: "U",           default: "U"           },
       close:          { key: "Escape",      default: "Escape"      },
     },
     search: {
       moveUp:            { key: "ArrowUp",     default: "ArrowUp"     },
       moveDown:          { key: "ArrowDown",   default: "ArrowDown"   },
       switchPane:        { key: "Tab",         default: "Tab"         },
+      focusSearch:       { key: "F",           default: "F"           },
+      clearSearch:       { key: "Shift+Space", default: "Shift+Space" },
       accept:            { key: "Enter",       default: "Enter"       },
       close:             { key: "Escape",      default: "Escape"      },
+    },
+    session: {
+      focusList:         { key: "Tab",         default: "Tab"         },
+      focusSearch:       { key: "F",           default: "F"           },
+      clearSearch:       { key: "Shift+Space", default: "Shift+Space" },
+      rename:            { key: "R",           default: "R"           },
+      overwrite:         { key: "O",           default: "O"           },
+      confirmYes:        { key: "Y",           default: "Y"           },
+      confirmNo:         { key: "N",           default: "N"           },
     },
   },
 };
 
-// Vim aliases layered on top of basic bindings when vim mode is active
-const VIM_ENHANCED_ALIASES: Record<string, Record<string, string[]>> = {
+// Standard-navigation aliases layered on top of base bindings.
+const STANDARD_NAV_ALIASES: Record<string, Record<string, string[]>> = {
   tabManager: {
     moveUp:   ["K"],
     moveDown: ["J"],
@@ -71,7 +82,6 @@ export const ACTION_LABELS: Record<string, Record<string, string>> = {
     openSessions:  "Session menu",
     openSessionSave: "Save session",
     openHelp:      "Help menu",
-    toggleVim:    "Toggle vim motions",
   },
   tabManager: {
     moveUp:   "Move up",
@@ -79,14 +89,26 @@ export const ACTION_LABELS: Record<string, Record<string, string>> = {
     jump:     "Jump to tab",
     remove:   "Remove entry",
     swap:     "Swap mode",
+    undo:     "Undo remove",
     close:    "Close",
   },
   search: {
     moveUp:            "Move up",
     moveDown:          "Move down",
     switchPane:        "Switch pane",
+    focusSearch:       "Focus search",
+    clearSearch:       "Clear search",
     accept:            "Accept / jump",
     close:             "Close",
+  },
+  session: {
+    focusList:         "Focus list",
+    focusSearch:       "Focus search",
+    clearSearch:       "Clear search",
+    rename:            "Rename session",
+    overwrite:         "Overwrite session",
+    confirmYes:        "Confirm",
+    confirmNo:         "Cancel",
   },
 };
 
@@ -94,6 +116,7 @@ export const SCOPE_LABELS: Record<string, string> = {
   global:  "Global Commands",
   tabManager: "Tab Manager Panel",
   search:  "Search Panel",
+  session: "Session Panel",
 };
 
 // -- Load / Save --
@@ -120,7 +143,7 @@ function mergeWithDefaults(stored: Partial<KeybindingsConfig>): KeybindingsConfi
   const merged: KeybindingsConfig = JSON.parse(
     JSON.stringify(DEFAULT_KEYBINDINGS),
   );
-  merged.navigationMode = "vim";
+  merged.navigationMode = "standard";
   for (const scope of Object.keys(merged.bindings) as Array<
     keyof KeybindingsConfig["bindings"]
   >) {
@@ -251,7 +274,7 @@ export function matchesKey(event: KeyboardEvent, keyString: string): boolean {
   return normalizeKeyName(event.key) === parsed.key;
 }
 
-/** Get all keys that trigger an action, including vim aliases when vim mode is on */
+/** Get all keys that trigger an action, including standard-navigation aliases. */
 export function getKeysForAction(
   config: KeybindingsConfig,
   scope: string,
@@ -259,13 +282,13 @@ export function getKeysForAction(
 ): string[] {
   const scopeBindings = config.bindings[scope as keyof KeybindingsConfig["bindings"]];
   const keys = [scopeBindings[action].key];
-  if (config.navigationMode === "vim" && VIM_ENHANCED_ALIASES[scope]?.[action]) {
-    keys.push(...VIM_ENHANCED_ALIASES[scope][action]);
+  if (config.navigationMode === "standard" && STANDARD_NAV_ALIASES[scope]?.[action]) {
+    keys.push(...STANDARD_NAV_ALIASES[scope][action]);
   }
   return keys;
 }
 
-/** Check if a KeyboardEvent matches any key for an action (primary + vim aliases) */
+/** Check if a KeyboardEvent matches any key for an action (primary + standard aliases). */
 export function matchesAction(
   event: KeyboardEvent,
   config: KeybindingsConfig,
@@ -278,10 +301,10 @@ export function matchesAction(
 
   if (matchesKey(event, binding.key)) return true;
 
-  if (config.navigationMode !== "vim") return false;
-  const vimAliases = VIM_ENHANCED_ALIASES[scope]?.[action];
-  if (!vimAliases) return false;
-  for (const alias of vimAliases) {
+  if (config.navigationMode !== "standard") return false;
+  const standardAliases = STANDARD_NAV_ALIASES[scope]?.[action];
+  if (!standardAliases) return false;
+  for (const alias of standardAliases) {
     if (matchesKey(event, alias)) return true;
   }
   return false;

@@ -9,6 +9,7 @@ import {
   removePanelHost,
   registerPanelCleanup,
   getBaseStyles,
+  footerRowHtml,
   vimBadgeHtml,
   dismissPanel,
 } from "../shared/panelHost";
@@ -22,18 +23,22 @@ let isRenameModeActive = false;
 
 // Overwrite confirmation — when true, titlebar shows y/n prompt
 let isOverwriteConfirmationActive = false;
+let isDeleteConfirmationActive = false;
 
 let isLoadConfirmationActive = false;
 let pendingLoadSummary: SessionLoadSummary | null = null;
 let pendingLoadSessionName = "";
+let pendingDeleteSessionName = "";
 let sessionListFocusTarget: "filter" | "list" = "filter";
 
 export function resetSessionTransientState(): void {
   isRenameModeActive = false;
   isOverwriteConfirmationActive = false;
+  isDeleteConfirmationActive = false;
   isLoadConfirmationActive = false;
   pendingLoadSummary = null;
   pendingLoadSessionName = "";
+  pendingDeleteSessionName = "";
   sessionListFocusTarget = "filter";
 }
 
@@ -136,7 +141,11 @@ function getSessionListHalfPageStep(shadow: ShadowRoot): number {
   return Math.max(1, Math.floor(rows / 2));
 }
 
-function buildLoadSummaryHtml(summary: SessionLoadSummary): string {
+function buildLoadSummaryHtml(
+  summary: SessionLoadSummary,
+  confirmKey: string,
+  cancelKey: string,
+): string {
   const slotDiffs = Array.isArray(summary.slotDiffs)
     ? [...summary.slotDiffs].sort((a, b) => a.slot - b.slot)
     : [];
@@ -199,14 +208,18 @@ function buildLoadSummaryHtml(summary: SessionLoadSummary): string {
       </div>
       <div class="ht-session-plan-list">${planRowsHtml}</div>
       <div class="ht-session-confirm-hint">
-        <span class="ht-confirm-key ht-confirm-key-yes">Y</span> confirm
+        <span class="ht-confirm-key ht-confirm-key-yes">${escapeHtml(confirmKey)}</span> confirm
         &middot;
-        <span class="ht-confirm-key ht-confirm-key-no">N</span> cancel
+        <span class="ht-confirm-key ht-confirm-key-no">${escapeHtml(cancelKey)}</span> cancel
       </div>
     </div>`;
 }
 
-function buildOverwriteConfirmationHtml(session: TabManagerSession | undefined): string {
+function buildOverwriteConfirmationHtml(
+  session: TabManagerSession | undefined,
+  confirmKey: string,
+  cancelKey: string,
+): string {
   const sessionName = session?.name || "session";
   const savedCount = session?.entries.length ?? 0;
   return `<div class="ht-session-confirm">
@@ -216,9 +229,30 @@ function buildOverwriteConfirmationHtml(session: TabManagerSession | undefined):
         <div class="ht-session-confirm-path">${savedCount} saved ${pluralize(savedCount, "tab")} will be replaced</div>
       </div>
       <div class="ht-session-confirm-hint">
-        <span class="ht-confirm-key ht-confirm-key-yes">Y</span> overwrite
+        <span class="ht-confirm-key ht-confirm-key-yes">${escapeHtml(confirmKey)}</span> overwrite
         &middot;
-        <span class="ht-confirm-key ht-confirm-key-no">N</span> cancel
+        <span class="ht-confirm-key ht-confirm-key-no">${escapeHtml(cancelKey)}</span> cancel
+      </div>
+    </div>`;
+}
+
+function buildDeleteConfirmationHtml(
+  session: TabManagerSession | undefined,
+  confirmKey: string,
+  cancelKey: string,
+): string {
+  const sessionName = session?.name || "session";
+  const savedCount = session?.entries.length ?? 0;
+  return `<div class="ht-session-confirm">
+      <div class="ht-session-confirm-icon">\u26A0</div>
+      <div class="ht-session-confirm-msg">
+        Delete <span class="ht-session-confirm-title">&ldquo;${escapeHtml(sessionName)}&rdquo;</span>?
+        <div class="ht-session-confirm-path">${savedCount} saved ${pluralize(savedCount, "tab")} will be removed</div>
+      </div>
+      <div class="ht-session-confirm-hint">
+        <span class="ht-confirm-key ht-confirm-key-yes">${escapeHtml(confirmKey)}</span> delete
+        &middot;
+        <span class="ht-confirm-key ht-confirm-key-no">${escapeHtml(cancelKey)}</span> cancel
       </div>
     </div>`;
 }
@@ -313,14 +347,13 @@ async function confirmLoadSession(ctx: SessionContext): Promise<void> {
 export type SessionPanelMode = "saveSession" | "sessionList" | "replaceSession";
 
 function buildSaveSessionFooterHtml(config: KeybindingsConfig, saveKey: string, closeKey: string): string {
-  const closeHint = config.navigationMode === "vim" ? "Esc close" : `${closeKey} close`;
-  return `<div class="ht-footer-row">
-      <span>${saveKey} save</span>
-      <span>${closeHint}</span>
-    </div>`;
+  return footerRowHtml([
+    { key: saveKey, desc: "save" },
+    { key: closeKey, desc: "close" },
+  ]);
 }
 
-function buildSessionListFooterHtml(config: KeybindingsConfig, selectedSessionName?: string): string {
+function buildSessionListFooterHtml(config: KeybindingsConfig): string {
   if (isLoadConfirmationActive) {
     return "";
   }
@@ -329,38 +362,61 @@ function buildSessionListFooterHtml(config: KeybindingsConfig, selectedSessionNa
     return "";
   }
 
+  if (isDeleteConfirmationActive) {
+    return "";
+  }
+
   const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
   const moveDownKey = keyToDisplay(config.bindings.tabManager.moveDown.key);
+  const focusListKey = keyToDisplay(config.bindings.session.focusList.key);
+  const focusSearchKey = keyToDisplay(config.bindings.session.focusSearch.key);
+  const clearSearchKey = keyToDisplay(config.bindings.session.clearSearch.key);
+  const renameKey = keyToDisplay(config.bindings.session.rename.key);
+  const overwriteKey = keyToDisplay(config.bindings.session.overwrite.key);
   const removeKey = keyToDisplay(config.bindings.tabManager.remove.key);
-  const navHint = config.navigationMode === "vim"
-    ? `j/k nav · ${moveUpKey}/${moveDownKey} nav`
-    : `${moveUpKey}/${moveDownKey} nav`;
-  const focusHint = "Tab list F search";
-  const vimHalfPageHint = config.navigationMode === "vim" ? "<span>Ctrl+D/U half-page</span>" : "";
+  const loadKey = keyToDisplay(config.bindings.tabManager.jump.key);
+  const closeKey = keyToDisplay(config.bindings.tabManager.close.key);
+  const navHints = config.navigationMode === "standard"
+    ? [
+      { key: "j/k", desc: "nav" },
+      { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
+      { key: "Ctrl+D/U", desc: "half-page" },
+    ]
+    : [
+      { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
+    ];
 
-  return `<div class="ht-footer-row">
-      <span>${navHint}</span>
-      ${vimHalfPageHint}
-    </div>
-    <div class="ht-footer-row">
-      <span>${focusHint}</span>
-      <span>Shift+Space clear-search</span>
-      <span>R rename</span>
-      <span>O overwrite</span>
-      <span>${removeKey} del</span>
-      <span>Enter load</span>
-      <span>Esc close</span>
-    </div>`;
+  return `${footerRowHtml(navHints)}
+    ${footerRowHtml([
+      { key: focusListKey, desc: "list" },
+      { key: focusSearchKey, desc: "search" },
+      { key: clearSearchKey, desc: "clear-search" },
+      { key: renameKey, desc: "rename" },
+      { key: overwriteKey, desc: "overwrite" },
+      { key: removeKey, desc: "del" },
+      { key: loadKey, desc: "load" },
+      { key: closeKey, desc: "close" },
+    ])}`;
 }
 
 function buildReplaceSessionFooterHtml(config: KeybindingsConfig): string {
-  return `<div class="ht-footer-row">
-      <span>${config.navigationMode === "vim" ? "j/k nav · ↑/↓ nav" : "↑/↓ nav"}</span>
-    </div>
-    <div class="ht-footer-row">
-      <span>Enter replace</span>
-      <span>Esc close</span>
-    </div>`;
+  const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
+  const moveDownKey = keyToDisplay(config.bindings.tabManager.moveDown.key);
+  const replaceKey = keyToDisplay(config.bindings.tabManager.jump.key);
+  const closeKey = keyToDisplay(config.bindings.tabManager.close.key);
+  const navHints = config.navigationMode === "standard"
+    ? [
+      { key: "j/k", desc: "nav" },
+      { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
+    ]
+    : [
+      { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
+    ];
+  return `${footerRowHtml(navHints)}
+    ${footerRowHtml([
+      { key: replaceKey, desc: "replace" },
+      { key: closeKey, desc: "close" },
+    ])}`;
 }
 
 export function refreshSessionViewFooter(ctx: SessionContext, viewMode: SessionPanelMode): void {
@@ -375,8 +431,7 @@ export function refreshSessionViewFooter(ctx: SessionContext, viewMode: SessionP
   }
 
   if (viewMode === "sessionList") {
-    const selectedSession = ctx.sessions[ctx.sessionIndex];
-    footerEl.innerHTML = buildSessionListFooterHtml(ctx.config, selectedSession?.name);
+    footerEl.innerHTML = buildSessionListFooterHtml(ctx.config);
     return;
   }
 
@@ -404,7 +459,7 @@ export async function renderSaveSession(ctx: SessionContext): Promise<void> {
     <div class="ht-tab-manager-container ht-session-list-container ht-session-save-container ht-session-shell">
       <div class="ht-titlebar">
         <div class="ht-traffic-lights">
-          <button class="ht-dot ht-dot-close" title="Close (Esc)"></button>
+          <button class="ht-dot ht-dot-close" title="Close (${escapeHtml(closeKey)})"></button>
         </div>
         <span class="ht-titlebar-text">${saveTitleText}</span>
         ${vimBadgeHtml(ctx.config)}
@@ -460,18 +515,27 @@ export function renderSessionList(ctx: SessionContext): void {
     : (visibleIndices[0] ?? -1);
   if (selectedSessionIndex !== -1 && selectedSessionIndex !== ctx.sessionIndex) {
     ctx.setSessionIndex(selectedSessionIndex);
+  } else if (selectedSessionIndex === -1 && ctx.sessionIndex !== -1) {
+    ctx.setSessionIndex(-1);
   }
   const selectedSession = selectedSessionIndex === -1 ? undefined : sessions[selectedSessionIndex];
+  const pendingDeleteSession = isDeleteConfirmationActive
+    ? sessions.find((session) => session.name === pendingDeleteSessionName) || selectedSession
+    : undefined;
+  const previewTargetSession = pendingDeleteSession || selectedSession;
   const baseTitleText = ctx.sessionFilterQuery.trim()
     ? `Load Sessions (${visibleIndices.length})`
     : "Load Sessions";
   const titleText = baseTitleText;
+  const closeKey = keyToDisplay(config.bindings.tabManager.close.key);
+  const confirmYesKey = keyToDisplay(config.bindings.session.confirmYes.key);
+  const confirmNoKey = keyToDisplay(config.bindings.session.confirmNo.key);
 
   let html = `<div class="ht-backdrop"></div>
     <div class="ht-tab-manager-container ht-session-list-container ht-session-shell">
       <div class="ht-titlebar">
         <div class="ht-traffic-lights">
-          <button class="ht-dot ht-dot-close" title="Close (Esc)"></button>
+          <button class="ht-dot ht-dot-close" title="Close (${escapeHtml(closeKey)})"></button>
         </div>
         <span class="ht-titlebar-text">${titleText}</span>
         ${vimBadgeHtml(ctx.config)}
@@ -513,22 +577,24 @@ export function renderSessionList(ctx: SessionContext): void {
   }
 
   const previewContent = isLoadConfirmationActive && pendingLoadSummary
-    ? `${buildLoadSummaryHtml(pendingLoadSummary)}${buildSessionPreviewHtml(selectedSession)}`
+    ? `${buildLoadSummaryHtml(pendingLoadSummary, confirmYesKey, confirmNoKey)}${buildSessionPreviewHtml(selectedSession)}`
     : isOverwriteConfirmationActive
-      ? `${buildOverwriteConfirmationHtml(selectedSession)}${buildSessionPreviewHtml(selectedSession)}`
-      : buildSessionPreviewHtml(selectedSession);
+      ? `${buildOverwriteConfirmationHtml(selectedSession, confirmYesKey, confirmNoKey)}${buildSessionPreviewHtml(selectedSession)}`
+      : isDeleteConfirmationActive
+        ? `${buildDeleteConfirmationHtml(previewTargetSession, confirmYesKey, confirmNoKey)}${buildSessionPreviewHtml(previewTargetSession)}`
+        : buildSessionPreviewHtml(selectedSession);
 
   html += `</div>
           </div>
           ${buildSessionPreviewPaneHtml(
-            selectedSession?.entries.length ?? 0,
-            !!selectedSession,
+            previewTargetSession?.entries.length ?? 0,
+            !!previewTargetSession,
             previewContent,
             "Select a session to preview its tabs.",
           )}
         </div>`;
 
-  const footerHtml = buildSessionListFooterHtml(config, selectedSession?.name);
+  const footerHtml = buildSessionListFooterHtml(config);
   html += `${footerHtml
     ? `<div class="ht-footer">${footerHtml}</div>`
     : ""}
@@ -574,6 +640,8 @@ export function renderSessionList(ctx: SessionContext): void {
     ctx.setSessionFilterQuery(nextQuery);
     if (nextVisibleIndices.length > 0) {
       ctx.setSessionIndex(nextVisibleIndices[0]);
+    } else {
+      ctx.setSessionIndex(-1);
     }
     ctx.render();
     const restoredInput = ctx.shadow.querySelector(".ht-session-filter-input") as HTMLInputElement | null;
@@ -588,6 +656,12 @@ export function renderSessionList(ctx: SessionContext): void {
   shadow.querySelectorAll(".ht-session-item").forEach((el) => {
     el.addEventListener("click", (event) => {
       if ((event.target as HTMLElement).closest(".ht-session-delete")) return;
+      if (
+        isRenameModeActive
+        || isLoadConfirmationActive
+        || isOverwriteConfirmationActive
+        || isDeleteConfirmationActive
+      ) return;
       const idx = parseInt((el as HTMLElement).dataset.index!);
       if (Number.isNaN(idx)) return;
       setSessionListPaneFocus("list");
@@ -599,14 +673,28 @@ export function renderSessionList(ctx: SessionContext): void {
   shadow.querySelectorAll(".ht-session-delete").forEach((el) => {
     el.addEventListener("click", (event) => {
       event.stopPropagation();
+      if (isRenameModeActive) {
+        isRenameModeActive = false;
+        ctx.render();
+        return;
+      }
+      if (
+        isLoadConfirmationActive
+        || isOverwriteConfirmationActive
+        || isDeleteConfirmationActive
+      ) return;
       const idx = parseInt((el as HTMLElement).dataset.index!);
       if (Number.isNaN(idx)) return;
       setSessionListPaneFocus("list");
-      isLoadConfirmationActive = false;
-      pendingLoadSummary = null;
-      pendingLoadSessionName = "";
-      deleteSession(ctx, idx);
+      beginDeleteConfirmation(ctx, idx);
     });
+  });
+
+  // Keep inline rename input mouse-native (cursor placement, selection, drag-select).
+  shadow.querySelectorAll(".ht-session-rename-input").forEach((el) => {
+    const renameInput = el as HTMLInputElement;
+    renameInput.addEventListener("mousedown", (event) => event.stopPropagation());
+    renameInput.addEventListener("click", (event) => event.stopPropagation());
   });
 
   const activeEl = shadow.querySelector(".ht-session-item.active");
@@ -618,7 +706,13 @@ export function renderSessionList(ctx: SessionContext): void {
       setSessionListPaneFocus("list");
     });
   }
-  if (listScroll && !isRenameModeActive && !isOverwriteConfirmationActive && !isLoadConfirmationActive) {
+  if (
+    listScroll
+    && !isRenameModeActive
+    && !isOverwriteConfirmationActive
+    && !isDeleteConfirmationActive
+    && !isLoadConfirmationActive
+  ) {
     listScroll.addEventListener("wheel", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -640,6 +734,7 @@ export function renderSessionList(ctx: SessionContext): void {
     filterInput
     && !isRenameModeActive
     && !isOverwriteConfirmationActive
+    && !isDeleteConfirmationActive
     && !isLoadConfirmationActive
   ) {
     if (sessionListFocusTarget === "filter") {
@@ -671,7 +766,7 @@ export function renderReplaceSession(ctx: SessionContext): void {
     <div class="ht-tab-manager-container">
       <div class="ht-titlebar">
         <div class="ht-traffic-lights">
-          <button class="ht-dot ht-dot-close" title="Close (Esc)"></button>
+          <button class="ht-dot ht-dot-close" title="Close (${escapeHtml(keyToDisplay(ctx.config.bindings.tabManager.close.key))})"></button>
         </div>
         <span class="ht-titlebar-text">Replace which session?</span>
         ${vimBadgeHtml(ctx.config)}
@@ -754,13 +849,13 @@ async function replaceSession(ctx: SessionContext, idx: number): Promise<void> {
 
 /** Handle keydown events in replaceSession view. Returns true if handled. */
 export function handleReplaceSessionKey(ctx: SessionContext, event: KeyboardEvent): boolean {
-  if (event.key === "Escape") {
+  if (matchesAction(event, ctx.config, "tabManager", "close")) {
     event.preventDefault();
     event.stopPropagation();
     ctx.close();
     return true;
   }
-  if (event.key === "Enter") {
+  if (matchesAction(event, ctx.config, "tabManager", "jump")) {
     event.preventDefault();
     event.stopPropagation();
     if (ctx.sessions[ctx.sessionIndex]) replaceSession(ctx, ctx.sessionIndex);
@@ -810,6 +905,9 @@ export async function saveSession(ctx: SessionContext, name: string): Promise<vo
       ctx.setSessionIndex(0);
       ctx.setViewMode("replaceSession");
       ctx.render();
+    } else if (result.reason && result.reason.startsWith("Identical to ")) {
+      ctx.close();
+      showFeedback(toastMessages.sessionSaveReopenRequired);
     } else if (result.reason) {
       showSaveSessionInlineError(ctx, result.reason);
     } else {
@@ -849,8 +947,13 @@ export async function loadSession(ctx: SessionContext, session: TabManagerSessio
 }
 
 export async function deleteSession(ctx: SessionContext, idx: number): Promise<void> {
+  const session = ctx.sessions[idx];
+  if (!session) return;
+  await deleteSessionByName(ctx, session.name);
+}
+
+async function deleteSessionByName(ctx: SessionContext, name: string): Promise<void> {
   try {
-    const name = ctx.sessions[idx].name;
     await browser.runtime.sendMessage({
       type: "SESSION_DELETE",
       name,
@@ -858,13 +961,36 @@ export async function deleteSession(ctx: SessionContext, idx: number): Promise<v
     const sessions = (await browser.runtime.sendMessage({
       type: "SESSION_LIST",
     })) as TabManagerSession[];
+    isDeleteConfirmationActive = false;
+    pendingDeleteSessionName = "";
     ctx.setSessions(sessions);
     ctx.setSessionIndex(Math.min(ctx.sessionIndex, Math.max(sessions.length - 1, 0)));
     ctx.render();
   } catch (error) {
+    isDeleteConfirmationActive = false;
+    pendingDeleteSessionName = "";
     reportSessionError("Delete session failed", "Failed to delete session", error);
     ctx.render();
   }
+}
+
+function beginDeleteConfirmation(ctx: SessionContext, sessionIdx: number): void {
+  const target = ctx.sessions[sessionIdx];
+  if (!target) return;
+  isLoadConfirmationActive = false;
+  pendingLoadSummary = null;
+  pendingLoadSessionName = "";
+  isOverwriteConfirmationActive = false;
+  isDeleteConfirmationActive = true;
+  pendingDeleteSessionName = target.name;
+  ctx.setSessionIndex(sessionIdx);
+  ctx.render();
+}
+
+async function confirmDeleteSession(ctx: SessionContext): Promise<void> {
+  if (!pendingDeleteSessionName) return;
+  const targetName = pendingDeleteSessionName;
+  await deleteSessionByName(ctx, targetName);
 }
 
 function showSaveSessionInlineError(ctx: SessionContext, message: string): boolean {
@@ -887,13 +1013,13 @@ function showSaveSessionInlineError(ctx: SessionContext, message: string): boole
 export function handleSaveSessionKey(ctx: SessionContext, event: KeyboardEvent): boolean {
   const input = ctx.shadow.querySelector(".ht-session-input") as HTMLInputElement | null;
 
-  if (event.key === "Escape") {
+  if (matchesAction(event, ctx.config, "tabManager", "close")) {
     event.preventDefault();
     event.stopPropagation();
     ctx.close();
     return true;
   }
-  if (event.key === "Enter") {
+  if (matchesAction(event, ctx.config, "tabManager", "jump")) {
     event.preventDefault();
     event.stopPropagation();
     if (input && !input.value.trim()) {
@@ -914,25 +1040,38 @@ export function handleSaveSessionKey(ctx: SessionContext, event: KeyboardEvent):
 
 /** Handle keydown events in sessionList view. Returns true if handled. */
 export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent): boolean {
-  const vimNav = ctx.config.navigationMode === "vim";
+  const standardNav = ctx.config.navigationMode === "standard";
   const filterInput = ctx.shadow.querySelector(".ht-session-filter-input") as HTMLInputElement | null;
   const filterInputFocused = !!filterInput && ctx.shadow.activeElement === filterInput;
+  const isSessionConfirmYes = matchesAction(event, ctx.config, "session", "confirmYes");
+  const isSessionConfirmNo = matchesAction(event, ctx.config, "session", "confirmNo");
+  const getVisibleSelectedSession = (): TabManagerSession | undefined => {
+    const visibleIndices = getFilteredSessionIndices(ctx.sessions, ctx.sessionFilterQuery);
+    if (!visibleIndices.includes(ctx.sessionIndex)) return undefined;
+    return ctx.sessions[ctx.sessionIndex];
+  };
 
-  // During rename mode, only handle Enter/Escape — let all other keys through to the input
+  // During rename mode, only handle jump/close — let all other keys through to the input
   if (isRenameModeActive) {
-    if (event.key === "Escape") {
+    if (matchesAction(event, ctx.config, "tabManager", "close")) {
       event.preventDefault();
       event.stopPropagation();
       isRenameModeActive = false;
       ctx.render();
       return true;
     }
-    if (event.key === "Enter") {
+    if (matchesAction(event, ctx.config, "tabManager", "jump")) {
       event.preventDefault();
       event.stopPropagation();
       const input = ctx.shadow.querySelector(".ht-session-rename-input") as HTMLInputElement;
       if (input && input.value.trim()) {
-        const oldName = ctx.sessions[ctx.sessionIndex].name;
+        const target = ctx.sessions[ctx.sessionIndex];
+        if (!target) {
+          isRenameModeActive = false;
+          ctx.render();
+          return true;
+        }
+        const oldName = target.name;
         const newName = input.value.trim();
         (async () => {
           try {
@@ -965,12 +1104,11 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     return true;
   }
 
-  // During overwrite confirmation, only accept y or n.
+  // During overwrite confirmation, only accept configured confirm/cancel keys.
   if (isOverwriteConfirmationActive) {
     event.preventDefault();
     event.stopPropagation();
-    const key = event.key.toLowerCase();
-    if (key === "y") {
+    if (isSessionConfirmYes) {
       const session = ctx.sessions[ctx.sessionIndex];
       isOverwriteConfirmationActive = false;
       (async () => {
@@ -993,8 +1131,22 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
         }
         ctx.render();
       })();
-    } else if (key === "n") {
+    } else if (isSessionConfirmNo) {
       isOverwriteConfirmationActive = false;
+      ctx.render();
+    }
+    return true;
+  }
+
+  // During delete confirmation, only accept configured confirm/cancel keys.
+  if (isDeleteConfirmationActive) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (isSessionConfirmYes) {
+      void confirmDeleteSession(ctx);
+    } else if (isSessionConfirmNo) {
+      isDeleteConfirmationActive = false;
+      pendingDeleteSessionName = "";
       ctx.render();
     }
     return true;
@@ -1004,10 +1156,9 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
   if (isLoadConfirmationActive) {
     event.preventDefault();
     event.stopPropagation();
-    const key = event.key.toLowerCase();
-    if (key === "y") {
+    if (isSessionConfirmYes) {
       void confirmLoadSession(ctx);
-    } else if (key === "n") {
+    } else if (isSessionConfirmNo) {
       isLoadConfirmationActive = false;
       pendingLoadSummary = null;
       pendingLoadSessionName = "";
@@ -1016,13 +1167,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     return true;
   }
 
-  if (
-    event.code === "Space"
-    && event.shiftKey
-    && !event.ctrlKey
-    && !event.altKey
-    && !event.metaKey
-  ) {
+  if (matchesAction(event, ctx.config, "session", "clearSearch")) {
     event.preventDefault();
     event.stopPropagation();
     sessionListFocusTarget = "filter";
@@ -1040,7 +1185,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     return true;
   }
 
-  if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+  if (matchesAction(event, ctx.config, "session", "focusList")) {
     event.preventDefault();
     event.stopPropagation();
     const visibleIndices = getFilteredSessionIndices(ctx.sessions, ctx.sessionFilterQuery);
@@ -1063,29 +1208,29 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
       return true;
     }
 
-    // One-way Tab: keep list focus; use "f" to return to filter.
+    // One-way list focus; use session.focusSearch to return to filter.
     return true;
   }
 
   if (filterInputFocused) {
-    if (event.key === "Escape") {
-      if (!vimNav) {
+    if (matchesAction(event, ctx.config, "tabManager", "close")) {
+      if (!standardNav) {
         event.preventDefault();
         event.stopPropagation();
         filterInput.blur();
         return true;
       }
     }
-    if (event.key === "Enter") {
+    if (matchesAction(event, ctx.config, "tabManager", "jump")) {
       event.preventDefault();
       event.stopPropagation();
-      if (ctx.sessions[ctx.sessionIndex]) {
+      if (getVisibleSelectedSession()) {
         sessionListFocusTarget = "list";
         void beginLoadConfirmation(ctx, ctx.sessionIndex);
       }
       return true;
     }
-    if (event.key !== "Escape") {
+    if (!matchesAction(event, ctx.config, "tabManager", "close")) {
       // Let text editing keys flow to the focused input.
       event.stopPropagation();
       return true;
@@ -1093,7 +1238,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
   }
 
   if (
-    vimNav
+    standardNav
     && !filterInputFocused
     && event.ctrlKey
     && !event.altKey
@@ -1118,14 +1263,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     }
   }
 
-  if (
-    filterInput
-    && event.key.toLowerCase() === "f"
-    && !event.ctrlKey
-    && !event.altKey
-    && !event.metaKey
-    && !event.shiftKey
-  ) {
+  if (filterInput && matchesAction(event, ctx.config, "session", "focusSearch")) {
     event.preventDefault();
     event.stopPropagation();
     sessionListFocusTarget = "filter";
@@ -1134,7 +1272,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     return true;
   }
 
-  if (matchesAction(event, ctx.config, "tabManager", "close") || event.key === "Escape") {
+  if (matchesAction(event, ctx.config, "tabManager", "close")) {
     event.preventDefault();
     event.stopPropagation();
     ctx.close();
@@ -1169,7 +1307,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
   if (matchesAction(event, ctx.config, "tabManager", "jump")) {
     event.preventDefault();
     event.stopPropagation();
-    if (ctx.sessions[ctx.sessionIndex]) {
+    if (getVisibleSelectedSession()) {
       sessionListFocusTarget = "list";
       void beginLoadConfirmation(ctx, ctx.sessionIndex);
     }
@@ -1178,40 +1316,32 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
   if (matchesAction(event, ctx.config, "tabManager", "remove")) {
     event.preventDefault();
     event.stopPropagation();
-    if (ctx.sessions[ctx.sessionIndex]) deleteSession(ctx, ctx.sessionIndex);
+    if (getVisibleSelectedSession()) beginDeleteConfirmation(ctx, ctx.sessionIndex);
     return true;
   }
 
-  // Rename session ("r" key)
-  if (
-    event.key.toLowerCase() === "r"
-    && !event.ctrlKey
-    && !event.altKey
-    && !event.shiftKey
-    && !event.metaKey
-  ) {
+  // Rename session
+  if (matchesAction(event, ctx.config, "session", "rename")) {
     event.preventDefault();
     event.stopPropagation();
-    if (ctx.sessions.length === 0) return true;
+    if (!getVisibleSelectedSession()) return true;
     isRenameModeActive = true;
     // Re-render to show inline input, then focus it
     ctx.render();
     const input = ctx.shadow.querySelector(".ht-session-rename-input") as HTMLInputElement;
-    if (input) input.focus();
+    if (input) {
+      input.focus();
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+    }
     return true;
   }
 
-  // Overwrite session ("o" key) — show confirmation prompt
-  if (
-    event.key.toLowerCase() === "o"
-    && !event.ctrlKey
-    && !event.altKey
-    && !event.shiftKey
-    && !event.metaKey
-  ) {
+  // Overwrite session — show confirmation prompt
+  if (matchesAction(event, ctx.config, "session", "overwrite")) {
     event.preventDefault();
     event.stopPropagation();
-    if (ctx.sessions.length === 0) return true;
+    if (!getVisibleSelectedSession()) return true;
     isOverwriteConfirmationActive = true;
     ctx.render();
     return true;
@@ -1244,23 +1374,33 @@ export async function openSessionRestoreOverlay(): Promise<void> {
 
     function close(): void {
       document.removeEventListener("keydown", keyHandler, true);
-      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
+      window.removeEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
       removePanelHost();
     }
 
     function renderRestoreFooter(): void {
       const footer = shadow.querySelector(".ht-footer") as HTMLElement | null;
       if (!footer) return;
-      footer.innerHTML = `<div class="ht-footer-row">
-        <span>${config.navigationMode === "vim" ? "j/k nav · ↑/↓ nav" : "↑/↓ nav"}</span>
-      </div>
-      <div class="ht-footer-row">
-        <span>Enter restore</span>
-        <span>Esc decline</span>
-      </div>`;
+      const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
+      const moveDownKey = keyToDisplay(config.bindings.tabManager.moveDown.key);
+      const restoreKey = keyToDisplay(config.bindings.tabManager.jump.key);
+      const closeKey = keyToDisplay(config.bindings.tabManager.close.key);
+      const navHints = config.navigationMode === "standard"
+        ? [
+          { key: "j/k", desc: "nav" },
+          { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
+        ]
+        : [
+          { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
+        ];
+      footer.innerHTML = `${footerRowHtml(navHints)}
+      ${footerRowHtml([
+        { key: restoreKey, desc: "restore" },
+        { key: closeKey, desc: "decline" },
+      ])}`;
     }
 
-    function onVimModeChanged(): void {
+    function onNavigationModeChanged(): void {
       renderRestoreFooter();
     }
 
@@ -1269,7 +1409,7 @@ export async function openSessionRestoreOverlay(): Promise<void> {
         <div class="ht-session-restore-container">
           <div class="ht-titlebar">
             <div class="ht-traffic-lights">
-              <button class="ht-dot ht-dot-close" title="Decline (Esc)"></button>
+              <button class="ht-dot ht-dot-close" title="Decline (${escapeHtml(keyToDisplay(config.bindings.tabManager.close.key))})"></button>
             </div>
             <span class="ht-titlebar-text">Restore Session?</span>
             ${vimBadgeHtml(config)}
@@ -1346,15 +1486,13 @@ export async function openSessionRestoreOverlay(): Promise<void> {
         return;
       }
 
-      const vimNav = config.navigationMode === "vim";
-
-      if (event.key === "Escape") {
+      if (matchesAction(event, config, "tabManager", "close")) {
         event.preventDefault();
         event.stopPropagation();
         close();
         return;
       }
-      if (event.key === "Enter") {
+      if (matchesAction(event, config, "tabManager", "jump")) {
         event.preventDefault();
         event.stopPropagation();
         if (sessions[activeIndex]) restoreSession(sessions[activeIndex]);
@@ -1378,7 +1516,7 @@ export async function openSessionRestoreOverlay(): Promise<void> {
     }
 
     document.addEventListener("keydown", keyHandler, true);
-    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
+    window.addEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
     registerPanelCleanup(close);
     render();
     host.focus();

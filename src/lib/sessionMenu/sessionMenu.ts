@@ -10,7 +10,7 @@ import { showFeedback } from "../shared/feedback";
 import { toastMessages } from "../shared/toastMessages";
 import previewPaneStyles from "../shared/previewPane.css";
 import tabManagerStyles from "../tabManager/tabManager.css";
-import sessionStyles from "../tabManager/session.css";
+import sessionStyles from "./session.css";
 import sessionMenuStyles from "./sessionMenu.css";
 import {
   SessionContext,
@@ -23,7 +23,8 @@ import {
   handleSessionListKey,
   handleReplaceSessionKey,
   resetSessionTransientState,
-} from "../tabManager/session";
+} from "./session";
+import { normalizeUrlForMatch } from "../shared/helpers";
 
 type SessionMenuView = SessionPanelMode;
 
@@ -43,11 +44,51 @@ async function fetchSessionsWithRetry(): Promise<TabManagerSession[]> {
   throw lastError || new Error("Failed to load sessions");
 }
 
+async function fetchTabManagerEntriesWithRetry(): Promise<TabManagerEntry[]> {
+  const retryDelaysMs = [0, 90, 240, 450];
+  let lastError: unknown = null;
+  for (const delay of retryDelaysMs) {
+    if (delay > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    }
+    try {
+      return (await browser.runtime.sendMessage({ type: "TAB_MANAGER_LIST" })) as TabManagerEntry[];
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("Failed to load tab manager list");
+}
+
 export async function openSessionMenu(
   config: KeybindingsConfig,
   initialView: SessionPanelMode = "sessionList",
 ): Promise<void> {
   try {
+    if (initialView === "saveSession") {
+      try {
+        const [tabManagerEntries, savedSessions] = await Promise.all([
+          fetchTabManagerEntriesWithRetry(),
+          fetchSessionsWithRetry(),
+        ]);
+        const currentUrls = tabManagerEntries
+          .map((entry) => normalizeUrlForMatch(entry.url))
+          .join("\n");
+        const identicalSession = savedSessions.find((session) => {
+          const sessionUrls = session.entries
+            .map((entry) => normalizeUrlForMatch(entry.url))
+            .join("\n");
+          return sessionUrls === currentUrls;
+        });
+        if (identicalSession) {
+          showFeedback(toastMessages.alreadyUsingSavedSessionFromList(identicalSession.name));
+          return;
+        }
+      } catch (error) {
+        console.error("[Harpoon Telescope] Pre-save identical-session guard failed; continuing.", error);
+      }
+    }
+
     const { host, shadow } = createPanelHost();
 
     const style = document.createElement("style");
@@ -66,7 +107,7 @@ export async function openSessionMenu(
 
     function close(): void {
       document.removeEventListener("keydown", keyHandler, true);
-      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
+      window.removeEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
       resetSessionTransientState();
       removePanelHost();
     }
@@ -105,7 +146,7 @@ export async function openSessionMenu(
       close,
     };
 
-    function onVimModeChanged(): void {
+    function onNavigationModeChanged(): void {
       refreshSessionViewFooter(sessionCtx, viewMode);
     }
 
@@ -153,7 +194,7 @@ export async function openSessionMenu(
     }
 
     document.addEventListener("keydown", keyHandler, true);
-    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
+    window.addEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
     registerPanelCleanup(close);
     render();
 

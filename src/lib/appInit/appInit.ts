@@ -14,7 +14,7 @@ import { openSearchOpenTabs } from "../searchOpenTabs/searchOpenTabs";
 import { openHelpOverlay } from "../help/help";
 import { dismissPanel } from "../shared/panelHost";
 import { ContentRuntimeMessage } from "../shared/runtimeMessages";
-import { openSessionRestoreOverlay } from "../tabManager/session";
+import { openSessionRestoreOverlay } from "../sessionMenu/session";
 
 // Extend Window to track injection state
 declare global {
@@ -41,7 +41,7 @@ export function initApp(): void {
     configLoadPromise = browser.runtime.sendMessage({ type: "GET_KEYBINDINGS" })
       .then((loadedConfig) => {
         cachedConfig = loadedConfig as KeybindingsConfig;
-        cachedConfig.navigationMode = "vim";
+        cachedConfig.navigationMode = "standard";
         return cachedConfig;
       })
       .finally(() => {
@@ -63,7 +63,7 @@ export function initApp(): void {
     if (changes.keybindings) {
       const nextConfig = changes.keybindings.newValue as KeybindingsConfig | undefined;
       if (nextConfig && typeof nextConfig === "object") {
-        nextConfig.navigationMode = "vim";
+        nextConfig.navigationMode = "standard";
         cachedConfig = nextConfig;
       } else {
         cachedConfig = null;

@@ -2,10 +2,17 @@
 // trapping so keyboard input stays in the panel (not the address bar).
 
 import browser from "webextension-polyfill";
+import { escapeHtml } from "./helpers";
 
 export interface PanelHost {
   host: HTMLDivElement;
   shadow: ShadowRoot;
+}
+
+interface FooterHintSpec {
+  key: string;
+  desc: string;
+  active?: boolean;
 }
 
 // Active panel cleanup — called before opening a new panel so the previous
@@ -13,10 +20,22 @@ export interface PanelHost {
 let activePanelCleanup: (() => void) | null = null;
 let activePanelFailSafeCleanup: (() => void) | null = null;
 
+function invokeCleanupSafely(
+  label: string,
+  cleanup: (() => void) | null,
+): void {
+  if (!cleanup) return;
+  try {
+    cleanup();
+  } catch (error) {
+    console.error(`[Harpoon Telescope] ${label}:`, error);
+  }
+}
+
 function cleanupPanelFailSafe(): void {
-  if (!activePanelFailSafeCleanup) return;
-  activePanelFailSafeCleanup();
+  const cleanup = activePanelFailSafeCleanup;
   activePanelFailSafeCleanup = null;
+  invokeCleanupSafely("Panel fail-safe cleanup failed", cleanup);
 }
 
 function handlePanelRuntimeFault(label: string, reason: unknown): void {
@@ -61,8 +80,9 @@ export function registerPanelCleanup(fn: () => void): void {
 export function createPanelHost(): PanelHost {
   // Clean up previous panel's event listeners before removing DOM
   if (activePanelCleanup) {
-    activePanelCleanup();
+    const cleanup = activePanelCleanup;
     activePanelCleanup = null;
+    invokeCleanupSafely("Panel cleanup failed while opening a new panel", cleanup);
   }
   cleanupPanelFailSafe();
   const existing = document.getElementById("ht-panel-host");
@@ -182,10 +202,9 @@ export function removePanelHost(): void {
 
 /** Fully dismiss the active panel — cleanup listeners + remove DOM. */
 export function dismissPanel(): void {
-  if (activePanelCleanup) {
-    activePanelCleanup();
-    activePanelCleanup = null;
-  }
+  const cleanup = activePanelCleanup;
+  activePanelCleanup = null;
+  invokeCleanupSafely("Panel cleanup failed during dismiss", cleanup);
   removePanelHost();
 }
 
@@ -194,6 +213,26 @@ export function vimBadgeHtml(config: KeybindingsConfig): string {
   const _ = config;
   void _;
   return "";
+}
+
+function footerHintHtml(hint: FooterHintSpec): string {
+  const activeClass = hint.active ? " ht-footer-hint-active" : "";
+  return `<span class="ht-footer-hint${activeClass}">
+    <strong class="ht-footer-key">${escapeHtml(hint.key)}</strong>
+    <span class="ht-footer-desc">${escapeHtml(hint.desc)}</span>
+  </span>`;
+}
+
+export function footerRowHtml(hints: FooterHintSpec[]): string {
+  if (hints.length === 0) return `<div class="ht-footer-row"></div>`;
+  const pieces: string[] = [];
+  for (let i = 0; i < hints.length; i++) {
+    if (i > 0) {
+      pieces.push(`<span class="ht-footer-sep" aria-hidden="true">|</span>`);
+    }
+    pieces.push(footerHintHtml(hints[i]));
+  }
+  return `<div class="ht-footer-row">${pieces.join("")}</div>`;
 }
 
 /** Shared overlay shell styles used by all panels */
@@ -275,9 +314,7 @@ export function getBaseStyles(): string {
     .ht-tab-manager-container,
     .ht-open-tabs-container,
     .ht-search-page-container,
-    .ht-bookmark-container,
-    .ht-help-container,
-    .ht-addbm-container {
+    .ht-help-container {
       position: fixed !important;
       top: 50% !important;
       left: 50% !important;
@@ -380,7 +417,23 @@ export function getBaseStyles(): string {
       border-radius: 0 0 var(--ht-radius) var(--ht-radius); justify-content: center;
     }
     .ht-footer-row {
-      display: flex; gap: 16px; justify-content: center; width: 100%; flex-wrap: wrap;
+      display: flex; gap: 8px; justify-content: center; width: 100%; flex-wrap: wrap;
+      align-items: center;
+    }
+    .ht-footer-hint {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      white-space: nowrap;
+      color: var(--ht-color-text-muted);
+    }
+    .ht-footer-key {
+      color: var(--ht-color-text-soft);
+      font-weight: 700;
+    }
+    .ht-footer-sep {
+      color: var(--ht-color-text-dim);
+      font-weight: 600;
     }
 
     ::-webkit-scrollbar { width: 6px; }

@@ -41,7 +41,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       container.appendChild(header);
 
       for (const [action, binding] of Object.entries(actions)) {
-        if (scope === "global" && action === "toggleVim") continue;
         const label = ACTION_LABELS[scope]?.[action] || action;
         const isModified = binding.key !== binding.default;
 

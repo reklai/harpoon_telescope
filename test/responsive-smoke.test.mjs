@@ -17,7 +17,7 @@ const SINGLE_PANEL_FILES = [
   "src/lib/searchOpenTabs/searchOpenTabs.css",
   "src/lib/sessionMenu/sessionMenu.css",
   "src/lib/tabManager/tabManager.css",
-  "src/lib/tabManager/session.css",
+  "src/lib/sessionMenu/session.css",
   "src/lib/help/help.css",
 ];
 

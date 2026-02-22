@@ -24,11 +24,12 @@ interface KeyBinding {
 }
 
 interface KeybindingsConfig {
-  navigationMode: "basic" | "vim";
+  navigationMode: "standard";
   bindings: {
     global: Record<string, KeyBinding>;
     tabManager: Record<string, KeyBinding>;
     search: Record<string, KeyBinding>;
+    session: Record<string, KeyBinding>;
   };
 }
 
@@ -73,24 +74,6 @@ interface FrecencyEntry {
   visitCount: number;
   lastVisit: number;  // timestamp
   frecencyScore: number;
-}
-
-// Browser bookmark entry for the bookmarks overlay
-interface BookmarkEntry {
-  id: string;
-  url: string;
-  title: string;
-  dateAdded?: number;      // timestamp when bookmark was created
-  parentId?: string;       // folder ID the bookmark belongs to
-  parentTitle?: string;    // folder name the bookmark belongs to
-  folderPath?: string;     // full path: "Bookmarks Menu › Work › Projects"
-  usageScore?: number;     // computed from bookmark usage tracking
-}
-
-// Bookmark usage tracking data (persisted per URL)
-interface BookmarkUsage {
-  visitCount: number;
-  lastVisit: number;  // timestamp
 }
 
 // Saved tab manager session (detach/attach)

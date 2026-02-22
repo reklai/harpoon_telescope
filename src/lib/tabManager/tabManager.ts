@@ -9,6 +9,7 @@ import {
   removePanelHost,
   registerPanelCleanup,
   getBaseStyles,
+  footerRowHtml,
   vimBadgeHtml,
   dismissPanel,
 } from "../shared/panelHost";
@@ -65,11 +66,12 @@ export async function openTabManager(
     const jumpKey = keyToDisplay(config.bindings.tabManager.jump.key);
     const removeKey = keyToDisplay(config.bindings.tabManager.remove.key);
     const swapKey = keyToDisplay(config.bindings.tabManager.swap.key);
+    const undoKey = keyToDisplay(config.bindings.tabManager.undo.key);
     const closeKey = keyToDisplay(config.bindings.tabManager.close.key);
 
     function close(): void {
       document.removeEventListener("keydown", keyHandler, true);
-      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
+      window.removeEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
       removePanelHost();
     }
 
@@ -91,25 +93,24 @@ export async function openTabManager(
     }
 
     function buildTabManagerFooterHtml(): string {
-      const navHint = config.navigationMode === "vim"
-        ? `j/k nav · ${moveUpKey}/${moveDownKey} nav`
-        : `${moveUpKey}/${moveDownKey} nav`;
+      const navHints = config.navigationMode === "standard"
+        ? [
+          { key: "j/k", desc: "nav" },
+          { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
+          { key: "Ctrl+D/U", desc: "half-page" },
+        ]
+        : [
+          { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
+        ];
 
-      const vimExtraHints = config.navigationMode === "vim"
-        ? `<span>Ctrl+D/U half-page</span>`
-        : "";
-
-      return `<div class="ht-footer-row">
-        <span>${navHint}</span>
-        ${vimExtraHints}
-      </div>
-      <div class="ht-footer-row">
-        <span>U undo</span>
-        <span class="${swapMode ? "ht-footer-hint-active" : ""}">${swapKey} swap</span>
-        <span>${removeKey} del</span>
-        <span>${jumpKey} jump</span>
-        <span>${closeKey} close</span>
-      </div>`;
+      return `${footerRowHtml(navHints)}
+      ${footerRowHtml([
+        { key: undoKey, desc: "undo" },
+        { key: swapKey, desc: "swap", active: swapMode },
+        { key: removeKey, desc: "del" },
+        { key: jumpKey, desc: "jump" },
+        { key: closeKey, desc: "close" },
+      ])}`;
     }
 
     function refreshTabManagerFooter(): void {
@@ -118,7 +119,7 @@ export async function openTabManager(
       footerEl.innerHTML = buildTabManagerFooterHtml();
     }
 
-    function onVimModeChanged(): void {
+    function onNavigationModeChanged(): void {
       refreshTabManagerFooter();
     }
 
@@ -134,7 +135,7 @@ export async function openTabManager(
         <div class="ht-tab-manager-container">
           <div class="ht-titlebar">
             <div class="ht-traffic-lights">
-              <button class="ht-dot ht-dot-close" title="Close (Esc)"></button>
+              <button class="ht-dot ht-dot-close" title="Close (${escapeHtml(closeKey)})"></button>
             </div>
             <span class="ht-titlebar-text">${titleText}</span>
             ${vimBadgeHtml(config)}
@@ -338,7 +339,7 @@ export async function openTabManager(
       // -- Tab Manager mode key handling --
 
       if (
-        config.navigationMode === "vim"
+        config.navigationMode === "standard"
         && event.ctrlKey
         && !event.altKey
         && !event.metaKey
@@ -444,13 +445,7 @@ export async function openTabManager(
             }
           })();
         }
-      } else if (
-        event.key.toLowerCase() === "u"
-        && !event.ctrlKey
-        && !event.altKey
-        && !event.shiftKey
-        && !event.metaKey
-      ) {
+      } else if (matchesAction(event, config, "tabManager", "undo")) {
         // Undo last remove
         event.preventDefault();
         event.stopPropagation();
@@ -482,7 +477,7 @@ export async function openTabManager(
     }
 
     document.addEventListener("keydown", keyHandler, true);
-    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
+    window.addEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
     registerPanelCleanup(close);
     render();
     host.focus();

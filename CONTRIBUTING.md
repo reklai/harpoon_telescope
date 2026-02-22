@@ -43,7 +43,7 @@ Architecture reference: `docs/ARCHITECTURE.md`
 - Booleans: prefix with `is`, `has`, `can`, or `should`.
 - Arrays/collections: use plural nouns (`sessions`, `entries`, `filters`).
 - Message payload objects: prefer descriptive names (`receivedMessage` instead of `m`).
-- Runtime/request payload variables: avoid `msg`; use domain names like `bookmarkAddRequest` or `receivedMessage`.
+- Runtime/request payload variables: avoid `msg`; use domain names like `sessionSaveRequest` or `receivedMessage`.
 - DOM event parameters: prefer `event` over single-letter aliases.
 - Avoid one-letter variable names except short-lived loop indexes (`i`, `j`) in obvious loops.
 

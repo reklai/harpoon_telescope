@@ -8,6 +8,7 @@ import {
   removePanelHost,
   registerPanelCleanup,
   getBaseStyles,
+  footerRowHtml,
   vimBadgeHtml,
   dismissPanel,
 } from "../shared/panelHost";
@@ -45,29 +46,32 @@ export async function openSearchOpenTabs(
     // --- Keybind display strings ---
     const upKey = keyToDisplay(config.bindings.search.moveUp.key);
     const downKey = keyToDisplay(config.bindings.search.moveDown.key);
+    const switchPaneKey = keyToDisplay(config.bindings.search.switchPane.key);
+    const focusSearchKey = keyToDisplay(config.bindings.search.focusSearch.key);
+    const clearSearchKey = keyToDisplay(config.bindings.search.clearSearch.key);
     const acceptKey = keyToDisplay(config.bindings.search.accept.key);
     const closeKey = keyToDisplay(config.bindings.search.close.key);
     function renderFooter(): void {
-      const navHint = config.navigationMode === "vim"
-        ? `j/k nav · ${upKey}/${downKey} nav`
-        : `${upKey}/${downKey} nav`;
-      const paneHint = "Tab list F search";
-      const vimHalfPageHint = config.navigationMode === "vim"
-        ? "<span>Ctrl+D/U half-page</span>"
-        : "";
-      footer.innerHTML = `<div class="ht-footer-row">
-        <span>${navHint}</span>
-        ${vimHalfPageHint}
-      </div>
-      <div class="ht-footer-row">
-        <span>${paneHint}</span>
-        <span>Shift+Space clear-search</span>
-        <span>${acceptKey} jump</span>
-        <span>${closeKey} close</span>
-      </div>`;
+      const navHints = config.navigationMode === "standard"
+        ? [
+          { key: "j/k", desc: "nav" },
+          { key: `${upKey}/${downKey}`, desc: "nav" },
+          { key: "Ctrl+D/U", desc: "half-page" },
+        ]
+        : [
+          { key: `${upKey}/${downKey}`, desc: "nav" },
+        ];
+      footer.innerHTML = `${footerRowHtml(navHints)}
+      ${footerRowHtml([
+        { key: switchPaneKey, desc: "list" },
+        { key: focusSearchKey, desc: "search" },
+        { key: clearSearchKey, desc: "clear-search" },
+        { key: acceptKey, desc: "jump" },
+        { key: closeKey, desc: "close" },
+      ])}`;
     }
 
-    function onVimModeChanged(): void {
+    function onNavigationModeChanged(): void {
       renderFooter();
     }
 
@@ -89,7 +93,7 @@ export async function openSearchOpenTabs(
     titlebar.className = "ht-titlebar";
     titlebar.innerHTML = `
       <div class="ht-traffic-lights">
-        <button class="ht-dot ht-dot-close" title="Close (Esc)"></button>
+        <button class="ht-dot ht-dot-close" title="Close (${escapeHtml(closeKey)})"></button>
       </div>
       <span class="ht-titlebar-text">Search Open Tabs</span>
       ${vimBadgeHtml(config)}`;
@@ -131,7 +135,7 @@ export async function openSearchOpenTabs(
     function close(): void {
       panelOpen = false;
       document.removeEventListener("keydown", keyHandler, true);
-      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
+      window.removeEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
       if (inputRafId !== null) cancelAnimationFrame(inputRafId);
       cancelAnimationFrame(renderRafId);
       removePanelHost();
@@ -400,7 +404,7 @@ export async function openSearchOpenTabs(
       }
 
       const inputFocused = host.shadowRoot?.activeElement === input;
-      const vimNav = config.navigationMode === "vim";
+      const standardNav = config.navigationMode === "standard";
 
       if (matchesAction(event, config, "search", "close")) {
         event.preventDefault();
@@ -409,13 +413,7 @@ export async function openSearchOpenTabs(
         return;
       }
 
-      if (
-        event.code === "Space"
-        && event.shiftKey
-        && !event.ctrlKey
-        && !event.altKey
-        && !event.metaKey
-      ) {
+      if (matchesAction(event, config, "search", "clearSearch")) {
         event.preventDefault();
         event.stopPropagation();
         input.value = "";
@@ -428,8 +426,8 @@ export async function openSearchOpenTabs(
         return;
       }
 
-      // Tab cycles between input and results list (only if results exist)
-      if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      // Switch-pane key cycles between input and results list (only if results exist).
+      if (matchesAction(event, config, "search", "switchPane")) {
         event.preventDefault();
         event.stopPropagation();
         if (filtered.length === 0) return;
@@ -446,7 +444,7 @@ export async function openSearchOpenTabs(
       }
 
       if (
-        vimNav
+        standardNav
         && !inputFocused
         && event.ctrlKey
         && !event.altKey
@@ -465,14 +463,7 @@ export async function openSearchOpenTabs(
         }
       }
 
-      if (
-        event.key.toLowerCase() === "f"
-        && !event.ctrlKey
-        && !event.altKey
-        && !event.metaKey
-        && !event.shiftKey
-        && !inputFocused
-      ) {
+      if (matchesAction(event, config, "search", "focusSearch") && !inputFocused) {
         event.preventDefault();
         event.stopPropagation();
         input.focus();
@@ -541,7 +532,7 @@ export async function openSearchOpenTabs(
       scheduleInputProcessing(input.value);
     });
 
-    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
+    window.addEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
 
     // Fetch frecency list and render
     allEntries = await fetchFrecencyListWithRetry();

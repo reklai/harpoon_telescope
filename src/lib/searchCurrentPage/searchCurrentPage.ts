@@ -16,6 +16,7 @@ import {
   removePanelHost,
   registerPanelCleanup,
   getBaseStyles,
+  footerRowHtml,
   vimBadgeHtml,
   dismissPanel,
 } from "../shared/panelHost";
@@ -82,6 +83,8 @@ export async function openSearchCurrentPage(
   config: KeybindingsConfig,
 ): Promise<void> {
   try {
+    const closeKeyDisplay = keyToDisplay(config.bindings.search.close.key);
+
     // Init line cache before building UI (starts MutationObserver)
     initLineCache();
 
@@ -107,7 +110,7 @@ export async function openSearchCurrentPage(
       <div class="ht-search-page-container">
         <div class="ht-titlebar">
           <div class="ht-traffic-lights">
-            <button class="ht-dot ht-dot-close" title="Close (Esc)"></button>
+            <button class="ht-dot ht-dot-close" title="Close (${escapeHtml(closeKeyDisplay)})"></button>
           </div>
           <span class="ht-titlebar-text">
             <span class="ht-title-label">Search — Current Page</span>
@@ -150,31 +153,34 @@ export async function openSearchCurrentPage(
     const footer = shadow.querySelector(".ht-footer") as HTMLElement;
     const upKey = keyToDisplay(config.bindings.search.moveUp.key);
     const downKey = keyToDisplay(config.bindings.search.moveDown.key);
+    const switchPaneKey = keyToDisplay(config.bindings.search.switchPane.key);
+    const focusSearchKey = keyToDisplay(config.bindings.search.focusSearch.key);
+    const clearSearchKey = keyToDisplay(config.bindings.search.clearSearch.key);
     const acceptKey = keyToDisplay(config.bindings.search.accept.key);
     const closeKey = keyToDisplay(config.bindings.search.close.key);
     function renderFooter(): void {
-      const navHint = config.navigationMode === "vim"
-        ? `j/k nav · ${upKey}/${downKey} nav`
-        : `${upKey}/${downKey} nav`;
-      const paneHint = "Tab list F search";
-      const vimHalfPageHint = config.navigationMode === "vim"
-        ? "<span>Ctrl+D/U half-page</span>"
-        : "";
+      const navHints = config.navigationMode === "standard"
+        ? [
+          { key: "j/k", desc: "nav" },
+          { key: `${upKey}/${downKey}`, desc: "nav" },
+          { key: "Ctrl+D/U", desc: "half-page" },
+        ]
+        : [
+          { key: `${upKey}/${downKey}`, desc: "nav" },
+        ];
       footer.innerHTML = `
-        <div class="ht-footer-row">
-          <span>${navHint}</span>
-          ${vimHalfPageHint}
-        </div>
-        <div class="ht-footer-row">
-          <span>${paneHint}</span>
-          <span>Shift+Space clear-search</span>
-          <span>${acceptKey} jump</span>
-          <span>${closeKey} close</span>
-        </div>
+        ${footerRowHtml(navHints)}
+        ${footerRowHtml([
+          { key: switchPaneKey, desc: "list" },
+          { key: focusSearchKey, desc: "search" },
+          { key: clearSearchKey, desc: "clear-search" },
+          { key: acceptKey, desc: "jump" },
+          { key: closeKey, desc: "close" },
+        ])}
       `;
     }
 
-    function onVimModeChanged(): void {
+    function onNavigationModeChanged(): void {
       renderFooter();
     }
 
@@ -224,7 +230,7 @@ export async function openSearchCurrentPage(
       panelOpen = false;
       lastSearchState = { query: input.value };
       document.removeEventListener("keydown", keyHandler, true);
-      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
+      window.removeEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
       if (previewRafId !== null) cancelAnimationFrame(previewRafId);
       if (scrollRafId !== null) cancelAnimationFrame(scrollRafId);
       if (inputRafId !== null) cancelAnimationFrame(inputRafId);
@@ -708,7 +714,7 @@ export async function openSearchCurrentPage(
       }
 
       const inputFocused = focusedPane === "input";
-      const vimNav = config.navigationMode === "vim";
+      const standardNav = config.navigationMode === "standard";
 
       if (matchesAction(event, config, "search", "close")) {
         event.preventDefault();
@@ -717,13 +723,7 @@ export async function openSearchCurrentPage(
         return;
       }
 
-      if (
-        event.code === "Space"
-        && event.shiftKey
-        && !event.ctrlKey
-        && !event.altKey
-        && !event.metaKey
-      ) {
+      if (matchesAction(event, config, "search", "clearSearch")) {
         event.preventDefault();
         event.stopPropagation();
         input.value = "";
@@ -741,7 +741,7 @@ export async function openSearchCurrentPage(
       }
 
       if (
-        vimNav
+        standardNav
         && !inputFocused
         && event.ctrlKey
         && !event.altKey
@@ -759,14 +759,7 @@ export async function openSearchCurrentPage(
         }
       }
 
-      if (
-        event.key.toLowerCase() === "f"
-        && !event.ctrlKey
-        && !event.altKey
-        && !event.metaKey
-        && !event.shiftKey
-        && !inputFocused
-      ) {
+      if (matchesAction(event, config, "search", "focusSearch") && !inputFocused) {
         event.preventDefault();
         event.stopPropagation();
         input.focus();
@@ -841,7 +834,7 @@ export async function openSearchCurrentPage(
     }
 
     document.addEventListener("keydown", keyHandler, true);
-    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
+    window.addEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
     registerPanelCleanup(close);
 
     // Mouse wheel on results pane: navigate items, block page scroll

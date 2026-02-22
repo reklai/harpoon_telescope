@@ -25,7 +25,7 @@ Harpoon Telescope
 
 ## Summary (short — 132 characters max for AMO)
 
-Pin your most-used tabs, search any page instantly,  switch tabs by frequency. Optional vim motions. No data collection.
+Pin your most-used tabs, search any page instantly, switch tabs by frequency. Built-in j/k aliases. No data collection.
 
 ## Description
 
@@ -53,11 +53,11 @@ Press Alt+Shift+F to see your most-used tabs ranked by how often and how recentl
 **Fully customizable keyboard shortcuts**
 Every keybinding can be changed in the options page. Collision detection warns you before you create conflicts.
 
-**Optional vim motions**
-Toggle vim-enhanced navigation with Alt+V. This adds j/k movement on top of the standard arrow keys — it never replaces them. A badge in the panel titlebar shows whether vim mode is on or off.
+**Standard navigation aliases**
+j/k aliases are always available for up/down movement on top of the standard arrow keys. List views also support Ctrl+D / Ctrl+U half-page movement.
 
 **Sessions**
-Press Alt+S to open the session menu. Use S for save flow and L for load flow to restore your workspace quickly. Keep up to 4 sessions.
+Press Alt+S to open the session menu (load view). Press Alt+Shift+S to open save-session directly. Keep up to 4 sessions. Save flow prevents duplicate names and duplicate-content saves.
 
 **Privacy-first**
 No data leaves your browser. No analytics, no tracking, no network requests. Everything is stored locally. See the full privacy policy for details.

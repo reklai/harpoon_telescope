@@ -3,11 +3,13 @@
 
 import { keyToDisplay } from "../shared/keybindings";
 import { matchesAction } from "../shared/keybindings";
+import { escapeHtml } from "../shared/helpers";
 import {
   createPanelHost,
   removePanelHost,
   registerPanelCleanup,
   getBaseStyles,
+  footerRowHtml,
   vimBadgeHtml,
   dismissPanel,
 } from "../shared/panelHost";
@@ -27,10 +29,9 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
   const g = config.bindings.global;
   const h = config.bindings.tabManager;
   const s = config.bindings.search;
+  const p = config.bindings.session;
   const k = (b: KeyBinding) => keyToDisplay(b.key);
-  const paneSwitchHint = "Tab list F search";
-  const closeHint = k(s.close);
-  const escHint = "Esc close";
+  const searchPaneHint = `${k(s.switchPane)} list / ${k(s.focusSearch)} search`;
 
   return [
     {
@@ -45,9 +46,9 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
       ],
     },
     {
-      title: "Vim Mode",
+      title: "Navigation Mode",
       items: [
-        { label: "Vim mode", key: "always on" },
+        { label: "Standard mode", key: "always on" },
         { label: "Adds j / k for up / down", key: "in all panels" },
       ],
     },
@@ -55,11 +56,11 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
       title: "Inside Any Panel",
       items: [
         { label: "Navigate up / down", key: `${k(s.moveUp)} / ${k(s.moveDown)}` },
+        { label: "Built-in alias (always on)", key: "j / k" },
         { label: "Half-page jump (list-focused)", key: "Ctrl+D / Ctrl+U" },
-        { label: "Focus search/list", key: paneSwitchHint },
+        { label: "Search panels: focus list/search", key: searchPaneHint },
         { label: "Open / jump to selection", key: k(s.accept) },
-        { label: "Close panel", key: closeHint },
-        { label: "Esc behavior", key: escHint },
+        { label: "Close panel", key: k(s.close) },
         { label: "Click item to select or open", key: "mouse" },
         { label: "Scroll wheel to navigate", key: "mouse" },
       ],
@@ -70,9 +71,9 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
         { label: "Add current tab to Tab Manager", key: k(g.addTab) },
         { label: "Jump to slot 1 — 4", key: `${k(g.jumpSlot1)} — ${k(g.jumpSlot4)}` },
         { label: "Cycle prev / next slot", key: `${k(g.cyclePrev)} / ${k(g.cycleNext)}` },
-        { label: "Swap mode", key: k(h.swap).toLowerCase() },
-        { label: "Del entry", key: k(h.remove).toLowerCase() },
-        { label: "Undo remove", key: "u" },
+        { label: "Swap mode", key: k(h.swap) },
+        { label: "Del entry", key: k(h.remove) },
+        { label: "Undo remove", key: k(h.undo) },
       ],
     },
     {
@@ -81,29 +82,31 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
         { label: "Open session menu", key: k(g.openSessions) },
         { label: "Main view", key: "Load sessions list" },
         { label: "Open save session", key: k(g.openSessionSave) },
-        { label: "Load selected session", key: "Enter" },
+        { label: "Load selected session", key: k(h.jump) },
         { label: "Save mode preview", key: "current tab-manager tabs" },
-        { label: "Session list focus list", key: "Tab" },
-        { label: "Session search focus", key: "f" },
-        { label: "Session clear-search", key: "Shift+Space" },
+        { label: "Session list focus list", key: k(p.focusList) },
+        { label: "Session search focus", key: k(p.focusSearch) },
+        { label: "Session clear-search", key: k(p.clearSearch) },
         { label: "Session list half-page jump", key: "Ctrl+D / Ctrl+U" },
-        { label: "Start load confirmation", key: k(h.jump) },
+        { label: "Delete session (in session list)", key: k(h.remove) },
         { label: "Load plan symbols", key: "NEW (+) · DELETED (-) · REPLACED (~) · UNCHANGED (=)" },
-        { label: "Session load confirm / cancel", key: "Y / N" },
-        { label: "Rename session (in session list)", key: "r" },
-        { label: "Overwrite session (in session list)", key: "o" },
+        { label: "Session load confirm / cancel", key: `${k(p.confirmYes)} / ${k(p.confirmNo)}` },
+        { label: "Rename session (in session list)", key: k(p.rename) },
+        { label: "Overwrite session (in session list)", key: k(p.overwrite) },
       ],
     },
     {
       title: "Search Current Page",
       items: [
-        { label: "Clear-search", key: "Shift+Space" },
+        { label: "Focus list/search", key: searchPaneHint },
+        { label: "Clear-search", key: k(s.clearSearch) },
       ],
     },
     {
       title: "Search Open Tabs",
       items: [
-        { label: "Clear-search", key: "Shift+Space" },
+        { label: "Focus list/search", key: searchPaneHint },
+        { label: "Clear-search", key: k(s.clearSearch) },
       ],
     },
     {
@@ -124,6 +127,8 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
     const { host, shadow } = createPanelHost();
 
     const closeKey = keyToDisplay(config.bindings.search.close.key);
+    const moveUpKey = keyToDisplay(config.bindings.search.moveUp.key);
+    const moveDownKey = keyToDisplay(config.bindings.search.moveDown.key);
 
     const style = document.createElement("style");
     style.textContent = getBaseStyles() + styles;
@@ -144,7 +149,7 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
     titlebar.className = "ht-titlebar";
     titlebar.innerHTML = `
       <div class="ht-traffic-lights">
-        <button class="ht-dot ht-dot-close" title="Close (Esc)"></button>
+        <button class="ht-dot ht-dot-close" title="Close (${escapeHtml(closeKey)})"></button>
       </div>
       <span class="ht-help-titlebar-text">
         <span class="ht-help-title-label">Help</span>
@@ -161,19 +166,22 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
     const footer = document.createElement("div");
     footer.className = "ht-footer";
     function renderFooter(): void {
-      const scrollHint = config.navigationMode === "vim"
-        ? "j/k scroll · \u2191/\u2193 scroll"
-        : "\u2191/\u2193 scroll";
-      footer.innerHTML = `<div class="ht-footer-row">
-        <span>${scrollHint}</span>
-        <span>wheel scroll</span>
-      </div>
-      <div class="ht-footer-row">
-        <span>${closeKey} close</span>
-      </div>`;
+      const scrollHints = config.navigationMode === "standard"
+        ? [
+          { key: "j/k", desc: "scroll" },
+          { key: `${moveUpKey}/${moveDownKey}`, desc: "scroll" },
+        ]
+        : [
+          { key: `${moveUpKey}/${moveDownKey}`, desc: "scroll" },
+        ];
+      footer.innerHTML = `${footerRowHtml(scrollHints)}
+      ${footerRowHtml([
+        { key: "Wheel", desc: "scroll" },
+        { key: closeKey, desc: "close" },
+      ])}`;
     }
 
-    function onVimModeChanged(): void {
+    function onNavigationModeChanged(): void {
       renderFooter();
     }
 
@@ -229,7 +237,7 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
 
     function close(): void {
       document.removeEventListener("keydown", keyHandler, true);
-      window.removeEventListener("ht-vim-mode-changed", onVimModeChanged);
+      window.removeEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
       removePanelHost();
     }
 
@@ -239,7 +247,6 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
         return;
       }
 
-      const vimNav = config.navigationMode === "vim";
       if (matchesAction(event, config, "search", "close")) {
         event.preventDefault();
         event.stopPropagation();
@@ -247,7 +254,7 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
         return;
       }
 
-      // Arrow keys or j/k (vim mode) scroll the body
+      // Arrow keys or j/k aliases scroll the body
       const isDown = matchesAction(event, config, "search", "moveDown");
       const isUp = matchesAction(event, config, "search", "moveUp");
 
@@ -274,7 +281,7 @@ export function openHelpOverlay(config: KeybindingsConfig): void {
     backdrop.addEventListener("mousedown", (event) => event.preventDefault());
     titlebar.querySelector(".ht-dot-close")!.addEventListener("click", close);
     document.addEventListener("keydown", keyHandler, true);
-    window.addEventListener("ht-vim-mode-changed", onVimModeChanged);
+    window.addEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
     registerPanelCleanup(close);
     host.focus();
   } catch (err) {

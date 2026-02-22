@@ -147,11 +147,6 @@
         "savedAt": 100
       }
     ],
-    "bookmarkUsage": {
-      "https://one.com": { "visitCount": "3", "lastVisit": "1700000000000" },
-      "https://two.com": { "visitCount": 0, "lastVisit": "x" },
-      "broken": "nope"
-    },
     "frecencyData": [
       {
         "tabId": "11",
@@ -282,10 +277,6 @@
         "savedAt": 84
       }
     ],
-    "bookmarkUsage": {
-      "https://one.com": { "visitCount": 3, "lastVisit": 1700000000000 },
-      "https://two.com": { "visitCount": 1, "lastVisit": 0 }
-    },
     "frecencyData": [
       {
         "tabId": 11,

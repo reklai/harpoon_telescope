@@ -1,6 +1,6 @@
 # Harpoon Telescope — Browser Extension
 
-A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fast tab navigation with vim motions. Works on **Firefox**, **Chrome**, and **Zen** (Firefox fork).
+A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fast keyboard-first tab navigation. Works on **Firefox**, **Chrome**, and **Zen** (Firefox fork).
 
 ## Current Product Priority (Release Gate)
 
@@ -26,17 +26,25 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 ### Tab Manager (Harpoon)
 - **Anchor up to 4 tabs** to your harpoon list
 - **Remembers scroll position (X, Y)** — restores exactly where you left off
-- **Swap mode** (`w`) — stays active after a swap; press another slot to keep swapping, `w` or `Esc` to exit
+- **Swap mode** (`W` default) — stays active after a swap; press another slot to keep swapping, `W` or close key to exit
+- **Undo last remove** (`U` default) — restores the most recently removed slot when space is available
 - **Cycle through slots** with `Alt+-` (prev) and `Alt+=` (next)
 - **Closed tabs persist** — entries dim when a tab is closed, re-open on jump with scroll restore
+  - Tab Manager footer action hints: `U undo` · `W swap` · `D del` · `Enter jump` · `Esc close`
 
 ### Session Menu
 - **`Alt+S`** opens the dedicated session menu
-- **Main view is load sessions** — searchable list with preview and load confirmation
+- **Main view is load sessions** — searchable list with preview
 - **`Alt+Shift+S`** opens save-session flow directly
-- **`Enter`** loads the selected session
+- **`Enter`** loads the selected session (confirmation shown first)
   - Session list includes a preview pane showing tabs in the selected profile
+  - `D` (or `×`) prompts delete confirmation in preview (`Y` delete / `N` cancel)
+  - `O` prompts overwrite confirmation in preview (`Y` overwrite / `N` cancel)
+  - `R` renames the selected session inline
   - Session search uses `Search Sessions . . .` with `Shift+Space clear-search`
+  - Save-session view shows a name input and the current Tab Manager tab preview
+  - Duplicate-name validation is inline in the save panel
+  - Identical-content save attempts are pre-guarded before open with toast: `No changes to save, already saved as "<name>"`
   - Session load confirmation shows a minimal slot plan legend: `NEW (+)`, `DELETED (-)`, `REPLACED (~)`, `UNCHANGED (=)`
   - Duplicate session names rejected (case-insensitive)
   - Identical session content rejected (compares URL arrays)
@@ -56,9 +64,9 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 - Scroll to browse, Esc to close
 
 ### Navigation Mode
-- Vim navigation is always enabled
-- Arrow keys and mouse still work; vim adds j/k and related motions on top
-- List-focused overlays also support `Ctrl+D/U` half-page jumps
+- Standard navigation is always enabled
+- `j/k` up/down aliases are always on (additive with configured arrow bindings)
+- List-focused overlays support fixed `Ctrl+D/U` half-page jumps
 
 ### Keyboard Shortcuts
 | Shortcut | Action |
@@ -74,6 +82,10 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 | `Alt+Shift+S` | Open save session |
 | `Alt+M` | Open help menu |
 All keybindings are fully configurable in the extension options page with per-scope collision detection.
+
+### Keybinding Scope Coverage
+- Configurable (single source of truth in `src/lib/shared/keybindings.ts`): global open commands, tab manager panel actions, search panel actions, and session panel actions.
+- Not currently configurable (fixed behavior): `j/k` standard aliases, `Ctrl+D/U` half-page jumps, mouse click/wheel interactions, text-edit keys (Backspace/Delete/etc inside inputs).
 
 ## Engineering Promise
 
@@ -116,7 +128,7 @@ The JS bundles are identical across targets — `webextension-polyfill` handles 
 
 ### Command Registration Strategy
 
-Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps only core shortcuts (`open`, `add`, `search`), and the content script handles slot jumps, cycling, vim mode, and panel-local actions so behavior stays consistent across Firefox, Chrome, and Zen.
+Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps only core shortcuts (`open`, `add`, `search`), and the content script handles slot jumps, cycling, standard aliases, and panel-local actions so behavior stays consistent across Firefox, Chrome, and Zen.
 
 ### Release Flow
 
@@ -159,8 +171,8 @@ harpoon_telescope/
 │   │   ├── help/
 │   │   ├── searchCurrentPage/
 │   │   ├── searchOpenTabs/
-│   │   ├── sessionMenu/
-│   │   ├── tabManager/
+│   │   ├── sessionMenu/                    # Session overlays (load/save/restore)
+│   │   ├── tabManager/                     # Tab Manager overlay (slots/swap/undo/remove)
 │   │   └── shared/
 │   ├── icons/
 │   └── types.d.ts
@@ -204,7 +216,7 @@ harpoon_telescope/
 - **Background domain routing** — `background.ts` is orchestration; tab manager/session handlers live in `src/lib/background/*`
 - **`ensureTabManagerLoaded()` guards** — tab manager state is lazily reloaded when background context is cold-started
 - **Configurable keybindings** — all bindings in `browser.storage.local` with per-scope collision detection
-- **Navigation mode** — vim aliases are always enabled on top of basic keys
+- **Navigation behavior** — standard mode is always enabled; `j/k` aliases are additive with base up/down bindings
 - **rAF-throttled rendering** — frecency and telescope views defer DOM updates to animation frames
 - **Perf regression budgets** — filter/render hotspots use `withPerfTrace` + `src/lib/shared/perfBudgets.json` guardrails
 - **Shared design tokens** — overlays consume `panelHost` CSS variables for consistent Ghostty-inspired styling
@@ -216,7 +228,7 @@ harpoon_telescope/
 |-----|------|-------------|
 | `tabManagerList` | `TabManagerEntry[]` | Active tab manager slots (`closed` entries preserved) |
 | `tabManagerSessions` | `TabManagerSession[]` | Saved sessions (max 4) |
-| `frecencyData` | `FrecencyEntry[]` | Frecency visit history (max 50) |
+| `frecencyData` | `FrecencyEntry[]` | Frecency ranking data (max 50) |
 | `keybindings` | `KeybindingsConfig` | User keybindings + navigation mode |
 | `storageSchemaVersion` | `number` | Schema version used by startup migrations |
 

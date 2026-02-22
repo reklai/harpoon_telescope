@@ -27,9 +27,6 @@
         "savedAt": 1700000000123
       }
     ],
-    "bookmarkUsage": {
-      "https://stable.example": { "visitCount": 2, "lastVisit": 1700000000123 }
-    },
     "frecencyData": [
       {
         "tabId": 101,
@@ -67,9 +64,6 @@
         "savedAt": 1700000000123
       }
     ],
-    "bookmarkUsage": {
-      "https://stable.example": { "visitCount": 2, "lastVisit": 1700000000123 }
-    },
     "frecencyData": [
       {
         "tabId": 101,

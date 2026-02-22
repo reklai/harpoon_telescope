@@ -19,7 +19,7 @@ const OVERLAY_TS_FILES = [
   "src/lib/searchCurrentPage/searchCurrentPage.ts",
   "src/lib/searchOpenTabs/searchOpenTabs.ts",
   "src/lib/sessionMenu/sessionMenu.ts",
-  "src/lib/tabManager/session.ts",
+  "src/lib/sessionMenu/session.ts",
   "src/lib/tabManager/tabManager.ts",
 ];
 
@@ -28,7 +28,7 @@ const OVERLAY_CSS_FILES = [
   "src/lib/searchCurrentPage/searchCurrentPage.css",
   "src/lib/searchOpenTabs/searchOpenTabs.css",
   "src/lib/sessionMenu/sessionMenu.css",
-  "src/lib/tabManager/session.css",
+  "src/lib/sessionMenu/session.css",
   "src/lib/tabManager/tabManager.css",
 ];
 

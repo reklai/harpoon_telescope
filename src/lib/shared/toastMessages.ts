@@ -14,10 +14,13 @@ export const toastMessages = {
   tabManagerFull: (max: number): string => `Tab Manager full (max ${max})`,
 
   sessionMenuFailed: "Session menu failed",
+  alreadyUsingSavedSessionFromList: (name: string): string =>
+    `No changes to save, already saved as "${name}"`,
 
   sessionLoadPlanFailed: "Failed to prepare session load",
   sessionNotFound: "Session not found",
   sessionSaveFailed: "Save session failed",
+  sessionSaveReopenRequired: "Session state changed, reopen Save Session and try again",
   sessionSave: (name: string): string => `Saved session "${name}"`,
   sessionSaveReplacing: (name: string, replacedName: string): string =>
     `Saved session "${name}" (replaced "${replacedName}")`,

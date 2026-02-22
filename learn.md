@@ -4,7 +4,7 @@ This file exists so I can grow from junior -> mid -> senior by mastering how thi
 
 ## Current Focus (System-Wide)
 
-- Treat the product as one integrated system: search, tab manager, sessions, bookmarks, help, shared runtime contracts, and build/release tooling.
+- Treat the product as one integrated system: search, tab manager, sessions, help, shared runtime contracts, and build/release tooling.
 - Current engineering focus is Tab Manager + Session behavior, but only as part of the whole architecture and UX.
 - Reliability and performance work should preserve cross-panel consistency, clean data flow, and maintainable module boundaries.
 - Store release work (AMO/CWS) follows system-level correctness, not just one feature area.
@@ -47,12 +47,12 @@ This guide is self-contained: no prerequisite docs are required to learn the sys
 10. [Search Current Page — src/lib/searchCurrentPage](#search-current-page--srclibsearchcurrentpage)
 11. [Search Open Tabs — src/lib/searchOpenTabs](#search-open-tabs--srclibsearchopentabs)
 12. [Tab Manager — src/lib/tabManager](#tab-manager--srclibtabmanager)
-13. [Bookmarks — src/lib/bookmarks](#bookmarks--srclibbookmarks)
+13. [Session Menu — src/lib/sessionMenu](#session-menu--srclibsessionmenu)
 14. [Help — src/lib/help](#help--srclibhelp)
 15. [Shared Utilities — src/lib/shared](#shared-utilities--srclibshared)
 16. [Panel Lifecycle + Guards](#panel-lifecycle--guards)
 17. [Performance Patterns](#performance-patterns)
-18. [UI Conventions (Footers, Vim, Filters)](#ui-conventions-footers-vim-filters)
+18. [UI Conventions (Footers, Navigation, Filters)](#ui-conventions-footers-navigation-filters)
 19. [Patterns Worth Reusing](#patterns-worth-reusing)
 20. [Maintainer Operating Mode](#maintainer-operating-mode)
 21. [System Invariants](#system-invariants)
@@ -66,15 +66,61 @@ This guide is self-contained: no prerequisite docs are required to learn the sys
 
 ## Project Overview
 
-Harpoon Telescope is a keyboard-first browser extension inspired by Neovim plugins:
+Harpoon Telescope is a keyboard-first browser extension inspired by Harpoon/Telescope workflows:
 
 - Tab Manager (Harpoon): pin up to 4 tabs with scroll restore and sessions.
 - Search Current Page (Telescope): fuzzy grep with structural filters + preview.
 - Search Open Tabs (Frecency): ranked open tabs by frequency and recency.
-- Bookmarks: two-pane browser with tree views and confirmations.
+- Session Menu: load/save/replace session flows with explicit confirmations.
 
 Everything runs in plain TypeScript with no UI framework. Overlays are Shadow DOM panels injected into the active page.
 Engineering promise: stay Ghostty-inspired and browser-primitive (DOM/Shadow DOM/WebExtension APIs), keep UI latency low, minimize visual glitching, and preserve Firefox/Chrome parity.
+
+### System Interaction Map (High-Level)
+
+Read this first before the detailed flow chapters.
+
+```text
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                               Browser Runtime                                │
+└───────────────────────────────────────────────────────────────────────────────┘
+                 │
+                 │ keydown / runtime messages
+                 v
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ Content Script (src/lib/appInit/appInit.ts)                                 │
+│ - Global keybinding dispatch (open panels, add/jump commands)               │
+│ - Overlay lifecycle guard (single panel host)                               │
+│ - Page-owned operations (DOM grep, scroll capture/restore requests)         │
+└───────────────────────────────────────────────────────────────────────────────┘
+        │ opens overlays in Shadow DOM                 │ sendMessage(...)
+        v                                               v
+┌────────────────────────────────┐      ┌──────────────────────────────────────┐
+│ Overlay UIs (content context) │      │ Background (privileged context)      │
+│ - searchCurrentPage           │<---->│ - tabManagerDomain                    │
+│ - searchOpenTabs              │      │ - sessionMessageHandler + sessions.ts │
+│ - tabManager                  │      │ - startupRestore / commandRouter       │
+│ - sessionMenu                 │      │ - misc/runtime routers                 │
+│ - help                        │      └──────────────────────────────────────┘
+└────────────────────────────────┘                       │
+        │                                                │ reads/writes
+        │ direct DOM rendering                           v
+        │                                      ┌───────────────────────────────┐
+        └------------------------------------->│ browser.storage.local          │
+                                               │ - tabManagerList              │
+                                               │ - tabManagerSessions          │
+                                               │ - frecencyData               │
+                                               │ - keybindings                │
+                                               │ - storageSchemaVersion       │
+                                               └───────────────────────────────┘
+```
+
+How to use this map:
+
+1. First identify the owner of the state (usually background).
+2. Then locate where the event starts (content keydown or startup event).
+3. Then trace request/response boundaries (runtime message edges).
+4. Finally trace UI rendering boundaries (overlay local state -> DOM).
 
 ---
 
@@ -82,7 +128,7 @@ Engineering promise: stay Ghostty-inspired and browser-primitive (DOM/Shadow DOM
 
 This section is the heart of the file. It shows how data moves through the system so I can rebuild it from memory. Each flow is a lesson in architecture, state management, algorithms, and critical thinking.
 
-How to naturally walk these chapters:
+How to naturally walk these chapters (flow-first):
 
 1. Read one flow from trigger to side effect.
 2. Extract the core concepts from that flow.
@@ -91,6 +137,41 @@ How to naturally walk these chapters:
 5. Run the relevant tests or manual checks.
 6. Explain the flow out loud in interview style.
 7. Capture one lesson I can reuse in another codebase.
+
+Flow evidence artifacts I must produce for each chapter:
+
+1. A one-screen data-flow sketch (`trigger -> handler -> state -> render -> side effect`).
+2. One invariant list (`must always hold`) and one failure-path list (`how it can break`).
+3. One patch artifact (small change or fix) with proof (`typecheck/lint/test/manual repro`).
+4. One tradeoff note (`why this design over alternatives`).
+
+Flow ownership rubric (junior -> mid -> senior):
+
+1. Junior: can trace message/event flow and name owning module for each step.
+2. Mid: can change one step in the flow without breaking neighboring steps.
+3. Senior: can redesign flow boundaries, defend tradeoffs, and add regression guards.
+
+No-AI rep ladder (use on each flow):
+
+1. Rep 1: trace-only (no edits), write flow from memory.
+2. Rep 2: safe extension (new keybinding/filter/hint) with tests.
+3. Rep 3: bug-fix rep (reproduce -> patch -> prove -> document invariant).
+4. Rep 4: refactor rep (reduce complexity, keep behavior identical, prove with checks).
+
+Code-review drill (flow lens):
+
+1. Identify highest-risk edge in the flow (state transition, async boundary, or cleanup path).
+2. Ask what invariant might regress.
+3. Require one targeted regression check for that invariant.
+4. Reject patches that add behavior without adding evidence.
+
+Incident retrospective template (flow lens):
+
+1. Trigger: what event started the broken path?
+2. Drift point: where did expected flow diverge from actual?
+3. Guard gap: what invariant/check was missing?
+4. Fix: what changed in code and why this is the right layer?
+5. Prevention: what test/runbook/doc update now catches this class early?
 
 ---
 
@@ -108,7 +189,7 @@ The challenge is performance. The DOM can have thousands of nodes, and scanning 
 
 The solution uses several techniques. First, `grepPage()` walks the DOM once and caches the lines, invalidating on mutations with a 500ms debounce. This means stale results for up to 500ms after DOM changes, but no repeated full-DOM walks — O(n) once instead of O(n) per keystroke. Second, fuzzy scoring uses a character-by-character algorithm that iterates once per query character, avoiding regex catastrophic backtracking. Third, even if 10,000 lines match, `MAX_RESULTS` caps the list at 200, bounding rendering work. Fourth, virtual scrolling keeps only ~25 DOM nodes in the results list, recycling them as the user scrolls — O(visible) rendering instead of O(total). Fifth, expensive fields like `domContext`, `ancestorHeading`, and `href` are computed lazily in `updatePreview()`, not upfront for all 200 results.
 
-When the user navigates with arrows (or j/k in vim mode), `activeIndex` changes, `renderResults()` highlights the new item, and `updatePreview()` shows its context. When the user presses Enter, the overlay scrolls to the target element using `src/lib/shared/scroll.ts` and closes.
+When the user navigates with arrows (or built-in `j/k` aliases), `activeIndex` changes, `renderResults()` highlights the new item, and `updatePreview()` shows its context. When the user presses Enter, the overlay scrolls to the target element using `src/lib/shared/scroll.ts` and closes.
 
 The lesson here is a checklist for search UI performance: Am I re-scanning data on every keystroke? Cache it. Am I rendering all results? Virtual scroll. Am I doing expensive work upfront? Lazy compute. Am I using regex? Watch for backtracking.
 
@@ -285,94 +366,96 @@ Growth checkpoint:
 
 ---
 
-### Flow C — Bookmarks
+### Flow C — Session Menu (Load / Save / Confirm)
 
-User presses `Alt+B` to open Bookmarks. The content script opens the overlay from `src/lib/bookmarks/bookmarks.ts` and immediately sends `{ type: "BOOKMARK_LIST" }` to the background. The background calls `browser.bookmarks.getTree()` — an API only available in the background context — and returns flattened entries. Until that Promise resolves, the overlay shows nothing or a loading state. Once data arrives, it's stored in `allEntries` and rendered synchronously. No partial updates, no flickering.
+User presses `Alt+S` to open the load-session view. The content script opens `src/lib/sessionMenu/sessionMenu.ts`, which renders immediately with an empty list shell so the search input is responsive before async session fetch completes. Then it loads sessions from background and re-renders with the selected row + preview.
 
-The overlay is a pure view layer with its own local state for navigation and filtering. It does not cache the bookmark tree long-term — it requests fresh data on every open, keeping things simple and avoiding stale-data bugs.
+The session menu is a small state machine with explicit transient modes:
 
-The challenge is providing fast filtering over a potentially large dataset (thousands of bookmarks) while keeping the tree context visible so users know where things are. The solution uses a two-pane layout: the left pane shows filtered results, the right pane shows the folder tree. Users can switch focus with `Tab`/`f` for input/results and `l`/`h` for tree/results. This adds UI complexity, but users always see their location in the hierarchy.
+1. normal list browsing,
+2. rename mode (inline input),
+3. load confirmation,
+4. overwrite confirmation,
+5. delete confirmation.
 
-The overlay manages multiple focus targets through a `detailMode` state machine. In `"tree"` mode, the tree is visible but results have focus. In `"treeNav"` mode, the tree has a cursor and results are dimmed. When the user presses `d` to delete, `detailMode` becomes `"confirmDelete"` and a confirm prompt appears. Pressing `y` confirms, sends `{ type: "BOOKMARK_REMOVE", id }` to the background, and refreshes the list. Pressing `n` cancels back to tree mode. Each state defines what the UI looks like and which keys do what — there's no magic, every transition is explicit in the key handler.
+Each mode narrows allowed key handling so the UI cannot drift into ambiguous mixed states. During confirmation, only configured confirm/cancel keys are accepted. During rename, text-edit behavior is delegated to the input, while jump/close keys still work predictably.
 
-Filtering combines substring and fuzzy matching, then ranks by match quality (exact -> starts-with -> substring -> fuzzy). With no filter pill active, matching runs across title/url/folder path and sorts with title-first tie-breaks. With `/folder` active, matching is scoped to folder path.
-
-The lesson for two-pane UIs with multiple focus targets: use a state machine to make behavior explicit, define all transitions upfront to avoid impossible state combinations, and keep rendering functions pure — state in, DOM out.
+The load flow is two-step by design. `Enter` (tabManager jump action) first requests a slot-level load plan (`SESSION_LOAD_PLAN`), renders preview-side summary rows (`+`, `-`, `~`, `=`), and only executes `SESSION_LOAD` after explicit confirm. This prevents accidental destructive transitions and makes changes visible before commit.
 
 Concepts to internalize from this flow:
 
-1. **State machine discipline:** `detailMode` controls key meaning and render output.
-2. **Relevance design:** ranking strategy matters as much as query matching.
-3. **Context-preserving UI:** tree pane keeps location awareness during filtering.
+1. **Mode-gated input handling:** key meaning depends on explicit state, not ad hoc if-branches.
+2. **Plan-before-commit UX:** show the computed diff before applying load/overwrite operations.
+3. **Fast-open shell rendering:** render early, hydrate async data after, keep first keystroke latency low.
 
 Algorithm lens (step-by-step):
 
-1. Load data from background API wrappers.
-2. Parse slash filters and free-text query.
-3. Combine substring + fuzzy hit detection.
-4. Rank by field priority/tie-breakers.
-5. Render virtualized list + synchronized detail/tree states.
+1. Open shell and bind handlers.
+2. Fetch sessions and compute filtered indices.
+3. On jump action, request load plan and render summary.
+4. Apply only on confirm action.
+5. Re-fetch and re-render canonical state after mutation.
 
 Extension path (how to safely add capability):
 
-1. Add new filter token and parser branch.
-2. Define ranking policy for new field.
-3. Add mode transition rules in keyboard handler.
-4. Update footer hints and confirm states consistently.
+1. Add a new session action in `keybindings.ts` (`DEFAULT_KEYBINDINGS` + labels).
+2. Handle it via `matchesAction(...)` inside `session.ts`.
+3. Add matching footer/help hint via `keyToDisplay(...)`.
+4. Verify no mode leaks (rename/confirm/list transitions remain exclusive).
 
 Interview articulation:
 
-1. "I treated keyboard behavior as a formal state machine to avoid ambiguous UX."
-2. "I prioritized user orientation by keeping tree context visible."
-3. "I balanced precision and recall with ranked substring+fuzzy matching."
+1. "I modeled session interactions as explicit transient states to keep keyboard behavior deterministic."
+2. "I separated planning from execution to prevent accidental destructive loads."
+3. "I kept panel-open latency low by rendering a shell before async hydration."
 
-**Files to trace:** `src/lib/bookmarks/bookmarks.ts` (overlay UI + state), `src/lib/background/bookmarkDomain.ts` (bookmark tree + usage), `src/lib/background/bookmarkMessageHandler.ts` (API wrappers).
+**Files to trace:** `src/lib/sessionMenu/sessionMenu.ts` (panel orchestration), `src/lib/sessionMenu/session.ts` (view renderers + key handlers), `src/lib/background/sessionMessageHandler.ts` and `src/lib/shared/sessions.ts` (plan/load/save/rename/delete domain behavior).
 
 Visual map (Flow C):
 
 ```text
-[User Alt+B]
+[User Alt+S]
     |
     v
-[bookmarks overlay opens in content script]
+[sessionMenu.ts opens shell + binds keys]
     |
     v
-sendMessage BOOKMARK_LIST ------------------------------.
+sendMessage SESSION_LIST -------------------------------.
                                                        |
                                                        v
-                                      [Background bookmarkDomain]
+                                   [Background session handler]
                                                        |
                                                        v
-                                     browser.bookmarks.getTree()
-                                                       |
-                                                       v
-<----------------------- flattened entries -------------'
+<----------------------- session list ------------------'
     |
     v
-[allEntries state] -> [filter + rank] -> [left results + right tree]
+[filtered list + preview]
     |
     v
-[detailMode transitions: tree / treeNav / confirmDelete]
+[Enter/jump] -> SESSION_LOAD_PLAN -> preview summary (+,-,~,=)
+    |
+    v
+[confirmYes] -> SESSION_LOAD
 ```
 
 Practice loop (no AI, data-flow first):
 
-1. Trace: open overlay -> request list -> background API -> local `allEntries` -> filter/rank -> render left/right panes.
-2. Modify: add a new scoped filter (for example `/domain`) and define explicit ranking tie-breakers.
-3. Verify: run tests/manual checks for tree focus, confirm-delete mode, and footer hint consistency.
-4. Explain: defend the `detailMode` state machine as protection against ambiguous keyboard behavior.
+1. Trace: open panel -> list fetch -> filter index computation -> preview render.
+2. Trace: jump -> load plan -> confirm -> load execution.
+3. Modify: add one session-local keybinding and wire footer/help labels from config.
+4. Verify: rename, overwrite, delete, and confirm paths cannot overlap or freeze.
 
 Failure drill:
 
-1. Force an invalid mode transition (for example, allow delete confirm while tree cursor is stale).
-2. Observe UI inconsistency and keybinding confusion.
-3. Repair transition table and explain why explicit finite states reduce hidden UX bugs.
+1. Break one mode reset path (for example leave confirmation active after list mutation).
+2. Observe stale footer/hint behavior or blocked input.
+3. Restore explicit reset transitions and verify escape/close cleanup.
 
 Growth checkpoint:
 
-1. Junior signal: can map each key to state transitions in one mode.
-2. Mid signal: can add a new filter + ranking rule with no regressions in focus behavior.
-3. Senior signal: can simplify mode logic while preserving keyboard predictability.
+1. Junior signal: can trace one mode transition end-to-end.
+2. Mid signal: can add a session action without introducing state leaks.
+3. Senior signal: can simplify mode logic while preserving deterministic keyboard UX.
 
 ---
 
@@ -384,7 +467,7 @@ The challenge is timing. Content scripts load asynchronously, and at startup the
 
 The solution uses a retry loop with initial delay. The background waits 1.5 seconds after startup before even trying — this gives the browser time to load at least one tab. Then it attempts to send the message. If it fails (content script not ready), it waits 1 second and retries, up to 5 attempts. In the worst case, the restore prompt appears after ~6.5 seconds, but it reliably appears. If all retries fail, the user can still manually open Tab Manager and load a session — the feature degrades gracefully instead of breaking.
 
-Startup is a state transition at the application level, outside any single overlay. The restore prompt is triggered from `browser.runtime.onStartup`, then sent into an active tab via retries until a content script is ready. When the user picks a session in `src/lib/tabManager/session.ts`, the overlay sends `{ type: "SESSION_LOAD", name }`. The background rebuilds `tabManagerList` from the session entries, and the user's pinned tabs are restored.
+Startup is a state transition at the application level, outside any single overlay. The restore prompt is triggered from `browser.runtime.onStartup`, then sent into an active tab via retries until a content script is ready. When the user picks a session in `src/lib/sessionMenu/session.ts`, the overlay sends `{ type: "SESSION_LOAD", name }`. The background rebuilds `tabManagerList` from the session entries, and the user's pinned tabs are restored.
 
 Startup events are scheduled on the event loop like any other. The call to `setTimeout(tryShowRestore, 1500)` schedules a callback to run later, and the event loop executes it when the timer fires, after any pending events. There's nothing special about startup — it's just another event in the queue.
 
@@ -416,7 +499,7 @@ Interview articulation:
 2. "I separated persistent session data from runtime tab identity."
 3. "I designed a graceful fallback instead of hard failure."
 
-**Files to trace:** `src/lib/background/startupRestore.ts` (startup handler), `src/lib/tabManager/session.ts` (session restore UI).
+**Files to trace:** `src/lib/background/startupRestore.ts` (startup handler), `src/lib/sessionMenu/session.ts` (session restore UI).
 
 Visual map (Flow D):
 
@@ -489,13 +572,12 @@ harpoon_telescope/
 │   ├── lib/
 │   │   ├── appInit/                 # contentScript bootstrap
 │   │   ├── background/              # background domains + runtime/command routers
-│   │   ├── shared/                  # keybindings, helpers, sessions, scroll, feedback
-│   │   ├── tabManager/              # Tab Manager panel + sessions UI
+│   │   ├── help/                    # Help overlay
 │   │   ├── searchCurrentPage/       # Telescope search (current page)
 │   │   ├── searchOpenTabs/          # Frecency open tabs list
-│   │   ├── bookmarks/               # Bookmarks browser
-│   │   ├── addBookmark/             # Add bookmark wizard
-│   │   └── help/                    # Help overlay
+│   │   ├── sessionMenu/             # Session overlays (load/save/restore)
+│   │   ├── tabManager/              # Tab Manager panel (slots/swap/undo/remove)
+│   │   ├── shared/                  # keybindings, helpers, sessions, scroll, feedback
 │   └── icons/
 │       ├── icon-48.png
 │       ├── icon-96.png
@@ -603,7 +685,7 @@ This file defines global types shared across background + content + UI:
 
 - `TabManagerEntry`, `TabManagerSession`
 - `GrepResult`, `SearchFilter`
-- `BookmarkEntry`, `FrecencyEntry`
+- `FrecencyEntry`
 
 **Why ambient types?**
 
@@ -618,16 +700,17 @@ Ambient types (in `.d.ts`) are globally available without imports. This reduces 
 Keybinding storage and matching are centralized here:
 
 - Stored in `browser.storage.local` and merged with defaults for forward compatibility.
-- Vim navigation is always enabled (adds j/k, never replaces basic keys).
-- Core action matching is centralized (`matchesAction`), and panel-local controls (`d/m/l/h/f` plus `Shift+Space clear-search`) are handled directly inside overlay key handlers.
+- Configurable actions for global, tab manager, search, and session scopes come from one source: `DEFAULT_KEYBINDINGS`.
+- Core action matching is centralized (`matchesAction`) and display labels come from `keyToDisplay`.
+- Fixed behavior outside configurable scopes remains explicit in panel handlers (for example `Ctrl+D/U` half-page jumps and built-in `j/k` aliases).
 
 **Why merge with defaults?**
 
 When the extension updates and adds new shortcuts, users with saved keybindings won't have the new keys. `mergeWithDefaults()` overlays saved bindings onto the full default config, so new actions get their defaults.
 
-**Why vim as additive?**
+**Why standard aliases are additive?**
 
-Arrow keys always work. j/k are bonuses on top. Users don't need to rely on vim motions to use the extension.
+Arrow keys always work. j/k are bonuses on top. Users don't need alias keys to use the extension.
 
 ---
 
@@ -657,13 +740,12 @@ Every keypress calls `getConfig()`. Without caching, that's an async message rou
 Background entry `src/entryPoints/background/background.ts` orchestrates:
 
 - tab manager domain (`src/lib/background/tabManagerDomain.ts`)
-- bookmark domain (`src/lib/background/bookmarkDomain.ts`)
 - runtime routers/handlers (`src/lib/background/*MessageHandler.ts`, `runtimeRouter.ts`)
 - startup restore coordination (`src/lib/background/startupRestore.ts`)
 
 **Key patterns:**
 
-- **Lazy-load guards:** `ensureTabManagerLoaded()`, `ensureFrecencyLoaded()`, and bookmark/session load helpers. MV3 service workers can restart anytime, so stateful handlers call relevant guards before read/write.
+- **Lazy-load guards:** `ensureTabManagerLoaded()`, `ensureFrecencyLoaded()`, and session load helpers. MV3 service workers can restart anytime, so stateful handlers call relevant guards before read/write.
 
 - **State reconciliation:** Before returning tab manager list, query all open tabs and mark entries as `closed` if their tab ID no longer exists.
 
@@ -706,14 +788,11 @@ A Mozilla-coined term: frequency + recency. Tabs visited often and recently rank
 
 ## Tab Manager — src/lib/tabManager
 
-Manages list UI + sessions UI.
+Manages pinned-tab list UI and slot operations.
 
 - slots are compacted to 1..N
 - closed tabs persist and re-open on jump
-- sessions stored in `tabManagerSessions` (max 4)
-- session load uses preview + minimal slot-level load plan legend (`NEW (+)`, `DELETED (-)`, `REPLACED (~)`, `UNCHANGED (=)`)
-- save-session pane shows the current tab-manager tabs in preview under the name input
-- session list search uses `Search Sessions . . .` and `Shift+Space clear-search`
+- swap mode and undo are UI-level state machines (`W` swap, `U` undo)
 
 **Why max 4 slots?**
 
@@ -721,21 +800,28 @@ Opinionated design. More slots = harder to remember which is which. 4 is enough 
 
 ---
 
-## Bookmarks — src/lib/bookmarks
+## Session Menu — src/lib/sessionMenu
 
-Two-pane UI (results + tree). `detailMode` controls tree focus and confirm states.
+Owns session UI overlays: load list, save panel, replace picker, and startup restore UI.
 
-- `/folder` filter for folder path
-- `m` opens move picker
-- `l` focuses tree, `h` returns to results
-- `Shift+Space clear-search` works from input/results/tree
-- move/confirm prompts use `y` confirm and `n` cancel
-- `Ctrl+D/U` supports half-page jumps in bookmark results/tree and add-bookmark list steps
-- add-bookmark applies a final y/n confirmation card with `Title` and `Destination path > {path}`
+- `Alt+S` opens load sessions; `Alt+Shift+S` opens save session
+- sessions are stored in `tabManagerSessions` (max 4)
+- load / overwrite / delete use preview-side `y/n` confirmations
+- session load confirmation includes slot-level legend (`NEW (+)`, `DELETED (-)`, `REPLACED (~)`, `UNCHANGED (=)`)
+- save panel previews current Tab Manager tabs under the name input
+- duplicate-name save errors are inline; identical-content saves are pre-guarded with toast (`No changes to save, already saved as "<name>"`)
+- session search uses `Search Sessions . . .` and `Shift+Space clear-search`
 
-**Why tree-first?**
+---
 
-Context matters. Seeing the folder tree while filtering helps users understand where bookmarks live.
+## Session Restore Overlay — src/lib/sessionMenu
+
+Startup restore prompt reuses session state with a lightweight standalone overlay:
+
+- opens only when saved sessions exist
+- supports list navigation + restore/decline actions
+- uses tab-manager move/jump/close bindings for consistency
+- closes cleanly on confirm/decline and reports feedback toast after restore
 
 ---
 
@@ -755,7 +841,7 @@ If the user customizes shortcuts, the help menu reflects their actual bindings, 
 ## Shared Utilities — src/lib/shared
 
 - `helpers.ts`: `escapeHtml`, `escapeRegex`, `buildFuzzyPattern`, `extractDomain`
-- `filterInput.ts`: shared slash-filter parsing used by search and bookmark overlays
+- `filterInput.ts`: shared slash-filter parsing used by search overlays
 - `panelHost.ts`: shadow host, base styles, focus trapping
 - `scroll.ts`: scroll-to-text highlight
 - `feedback.ts`: toast messages
@@ -841,13 +927,14 @@ Growth checkpoint:
 
 ---
 
-## UI Conventions (Footers, Vim, Filters)
+## UI Conventions (Footers, Navigation, Filters)
 
 - Footer order: nav -> secondary (list/tree) -> action (clear/del/move) -> primary (open) -> close/back
 - Footer labels: uppercase key + lowercase label (ex: `D del`)
-- Vim navigation: j/k aliases are always enabled
-- Clear-search: `Shift+Space` works from input/results/tree contexts
-- Search input placeholders follow `Search <Panel Name> . . .` across session load, bookmarks, open tabs, and current-page search
+- Tab Manager action row order: `U undo` -> `W swap` -> `D del` -> `Enter jump` -> `Esc close`
+- Standard aliases: `j/k` are always enabled for up/down where list navigation exists
+- Clear-search: `Shift+Space` works from search/session input flows
+- Search input placeholders follow `Search <Panel Name> . . .` across session load, open tabs, and current-page search
 
 **Why strict footer order?**
 
@@ -896,7 +983,7 @@ These are non-negotiable truths. If one breaks, behavior drifts.
 
 Global/runtime invariants:
 
-1. Background owns canonical browser state (`tabs`, `sessions`, `bookmarks`, frecency persistence).
+1. Background owns canonical browser state (`tabs`, `sessions`, frecency persistence).
 2. Content overlays are ephemeral views driven by runtime messages and local UI state.
 3. Runtime message shapes stay explicit and synchronized across sender/receiver.
 4. Only one live panel host may exist at a time.
@@ -915,10 +1002,10 @@ Session invariants:
 3. Load planning and load execution are consistent (slot-plan rows and totals align with actual action).
 4. Confirmation flows must be explicit and reversible.
 
-Search/bookmark invariants:
+Search/session-list invariants:
 
 1. Query -> filter -> rank -> render pipeline is deterministic for the same input state.
-2. Focus behavior is explicit (`input`, `results`, tree/detail modes) and keyboard-safe.
+2. Focus behavior is explicit (`input`, `results`, and confirmation/rename modes) and keyboard-safe.
 3. Virtualized lists only render visible windows plus buffer.
 
 Build/release invariants:
@@ -937,7 +1024,7 @@ This is the quick reference I should be able to explain in interviews and design
 |---|---|---|---|---|
 | Search Current Page | Cached line extraction + query ranking | Cache build `O(N)` over candidate nodes; query pass approximately `O(C * Q)` + sort cap | Large DOM + keystroke latency | Cached extraction, capped results, virtual scrolling, lazy preview enrichment |
 | Search Open Tabs | Title/URL match + ranked sort | `O(T)` matching + `O(T log T)` sort | Fast ranking without UI jank | Ranked match tiers, bounded rendering, rAF scheduling |
-| Bookmarks Panel | Filter + tree/detail state transitions | `O(B)` filtering + virtualized rendering | Multi-mode keyboard UX complexity | Explicit mode/state machine + pooled rendering |
+| Session List Panel | Query filter + confirmation state transitions | `O(S)` filtering where `S <= 4` + preview rendering | Mode-gated keyboard behavior during rename/confirm flows | Explicit transient states + confirm/cancel action gating |
 | Tab Manager Jump | Slot lookup + tab activate/reopen | `O(S)` where `S <= 4` | Unstable tab IDs across lifecycle/restart | Persist URL + scroll, closed-entry recovery, reconcile against open tabs |
 | Session Load Plan | Slot-by-slot unchanged/new/deleted/replaced computation | `O(E)` where `E` session entries | Predictable load summary against current tab-manager state | URL normalization + same-slot comparison |
 | Session Load Execute | Reuse existing or open new tabs | `O(E)` plus tab API latency | Consistent restore with partial failures | Per-entry fallback (reuse -> open), queued scroll restore, graceful skip on open failure |
@@ -1015,7 +1102,7 @@ Use this as the final section before interviews or live walkthroughs.
 2. Architecture (90s): content script owns page DOM, background owns browser APIs + canonical state, runtime messages connect them.
 3. Flow A demo (2 min): keypress -> search pipeline -> cached grep -> virtualized render -> scroll side effect.
 4. Flow B demo (2 min): add/jump tab path, unstable tab-ID problem, URL+scroll recovery strategy.
-5. Flow C demo (90s): two-pane state machine and explicit mode transitions.
+5. Flow C demo (90s): session-menu state machine and explicit mode transitions.
 6. Flow D demo (90s): startup race handling with bounded retries and fallback.
 7. Release confidence (60s): CI gates (`verify:compat`, `verify:upgrade`, `verify:store`) + Firefox/Chrome builds.
 
@@ -1038,15 +1125,23 @@ Proof-of-ownership checklist (run this per feature):
 
 1. Flow A ownership proof: trace `appInit.ts` -> `searchCurrentPage.ts` -> `grep.ts`; run search-related tests/manual grep pass; implement one new slash filter; explain ranking + virtualization tradeoffs.
 2. Flow B ownership proof: trace runtime message path into `tabManagerDomain.ts`; run tab-manager add/jump/session checks; implement one command evolution with contract updates; explain tab-ID instability design.
-3. Flow C ownership proof: trace bookmarks request -> render -> mode transitions; run two-pane and delete-confirm checks; implement one new scoped filter; explain state-machine invariants.
+3. Flow C ownership proof: trace session list fetch -> render -> mode transitions; run rename/delete/load-confirm checks; implement one new session-local keybinding; explain mode-state invariants.
 4. Flow D ownership proof: trace startup restore retries in `startupRestore.ts`; run startup/fallback checks; tune retry constants safely; explain eventual consistency vs synchronous assumptions.
 5. Platform ownership proof: run `npm run ci`; explain what `verify:compat`, `verify:upgrade`, and `verify:store` each prevent in release risk.
 
 30/60/90 growth track in this repo:
 
-1. Day 1-30 (Junior -> strong junior): trace all four flows, pass all tests locally, ship one low-risk feature per flow with tests.
-2. Day 31-60 (Mid ramp): own one cross-cutting refactor (message contracts or panel host tokens), keep CI green, and write regression tests for one bug class.
-3. Day 61-90 (Senior trajectory): lead one design change with explicit tradeoffs, define/update one engineering guardrail, and defend architecture + failure strategy in interview-style review.
+1. Day 1-30 (Junior -> strong junior): finish one full rep on each flow (A-D) using the artifact checklist, pass all checks locally, and ship one low-risk patch per flow.
+2. Day 31-60 (Mid ramp): complete two bug-fix reps and one refactor rep across different flows, each with invariant notes + regression proof.
+3. Day 61-90 (Senior trajectory): redesign one flow boundary (ownership, state, or messaging), document tradeoffs, and add one guardrail that prevents recurrence of a real failure class.
+
+Flow-first weekly cadence (repeat):
+
+1. Pick one flow and write trigger -> owner -> state -> render -> side-effect map from memory.
+2. Run one no-AI rep and collect evidence artifacts.
+3. Run one review drill on a recent patch using invariants as acceptance criteria.
+4. Run one incident retrospective (real bug or simulated failure drill).
+5. Summarize what changed in your mental model and what you will tighten next week.
 
 Quick summary of everything learned:
 

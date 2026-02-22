@@ -84,7 +84,7 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 All keybindings are fully configurable in the extension options page with per-scope collision detection.
 
 ### Keybinding Scope Coverage
-- Configurable (single source of truth in `src/lib/shared/keybindings.ts`): global open commands, tab manager panel actions, search panel actions, and session panel actions.
+- Configurable (single source of truth in `src/lib/common/contracts/keybindings.ts`): global open commands, tab manager panel actions, search panel actions, and session panel actions.
 - Not currently configurable (fixed behavior): `j/k` standard aliases, `Ctrl+D/U` half-page jumps, mouse click/wheel interactions, text-edit keys (Backspace/Delete/etc inside inputs).
 
 ## Engineering Promise
@@ -155,7 +155,7 @@ Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps
 harpoon_telescope/
 ├── src/
 │   ├── entryPoints/                        # Browser-executed entry bundles
-│   │   ├── background/background.ts        # Background bootstrap + router composition
+│   │   ├── backgroundRuntime/background.ts # Background bootstrap + router composition
 │   │   ├── contentScript/contentScript.ts
 │   │   ├── optionsPage/
 │   │   │   ├── optionsPage.ts
@@ -165,11 +165,14 @@ harpoon_telescope/
 │   │       ├── toolbarPopup.ts
 │   │       ├── toolbarPopup.html
 │   │       └── toolbarPopup.css
-│   ├── lib/                                # Feature modules + shared utilities
+│   ├── lib/                                # Feature modules + common contracts/utils
 │   │   ├── appInit/
 │   │   ├── adapters/
 │   │   │   └── runtime/                    # Single runtime-message boundary layer
-│   │   ├── background/                     # Background domains + message/command routers
+│   │   ├── backgroundRuntime/              # Privileged background runtime modules
+│   │   │   ├── domains/                    # Tab/session/page domain logic
+│   │   │   ├── handlers/                   # Runtime + command message handlers
+│   │   │   └── lifecycle/                  # Startup restore + boot-time flows
 │   │   ├── core/
 │   │   │   ├── panel/                      # Shared list-navigation controller
 │   │   │   └── sessionMenu/                # Pure session state machine + selectors
@@ -180,8 +183,9 @@ harpoon_telescope/
 │   │   │   │   ├── searchOpenTabs/
 │   │   │   │   ├── sessionMenu/            # Session overlays (load/save/restore)
 │   │   │   │   └── tabManager/             # Tab Manager overlay (slots/swap/undo/remove)
-│   │   │   └── shared/                     # Panel host + preview shell styles
-│   │   └── shared/
+│   │   └── common/
+│   │       ├── contracts/                  # Message shapes + shared type contracts
+│   │       └── utils/                      # Helpers, parsing, formatting, shared UI primitives
 │   ├── icons/
 │   └── types.d.ts
 ├── esBuildConfig/                          # Build script + MV2/MV3 manifests
@@ -222,7 +226,7 @@ harpoon_telescope/
 - **Dual manifests** — MV2 for Firefox/Zen, MV3 for Chrome (service worker lifecycle)
 - **Compatibility guardrail** — `npm run verify:compat` checks manifest permission/command invariants
 - **Store policy guardrail** — `npm run verify:store` keeps manifests, store copy, and privacy policy aligned
-- **Background domain routing** — `background.ts` is orchestration; tab manager/session handlers live in `src/lib/background/*`
+- **Background domain routing** — `background.ts` is orchestration; business logic lives in `src/lib/backgroundRuntime/domains/*` and message routing in `src/lib/backgroundRuntime/handlers/*`
 - **`ensureTabManagerLoaded()` guards** — tab manager state is lazily reloaded when background context is cold-started
 - **Runtime adapter boundary** — runtime message calls are centralized in `src/lib/adapters/runtime/*` so UI modules don't send raw messages directly
 - **Pure core modules for UI state** — `src/lib/core/sessionMenu/sessionCore.ts` isolates session transient-state transitions and derived selectors
@@ -230,7 +234,7 @@ harpoon_telescope/
 - **Configurable keybindings** — all bindings in `browser.storage.local` with per-scope collision detection
 - **Navigation behavior** — standard mode is always enabled; `j/k` aliases are additive with base up/down bindings
 - **rAF-throttled rendering** — frecency and telescope views defer DOM updates to animation frames
-- **Perf regression budgets** — filter/render hotspots use `withPerfTrace` + `src/lib/shared/perfBudgets.json` guardrails
+- **Perf regression budgets** — filter/render hotspots use `withPerfTrace` + `src/lib/common/utils/perfBudgets.json` guardrails
 - **Shared design tokens** — overlays consume `panelHost` CSS variables for consistent Ghostty-inspired styling
 - **Virtual scrolling** — heavy list panels render only the visible window from a pooled set of DOM nodes
 

@@ -41,15 +41,15 @@ This guide is self-contained: no prerequisite docs are required to learn the sys
 4. [Build System — esBuildConfig/build.mjs](#build-system--esbuildconfigbuildmjs)
 5. [Manifests — MV2 and MV3](#manifests--mv2-and-mv3)
 6. [Shared Types — src/types.d.ts](#shared-types--srctypesdts)
-7. [Keybinding System — src/lib/shared/keybindings.ts](#keybinding-system--srclibsharedkeybindingsts)
+7. [Keybinding System — src/lib/common/contracts/keybindings.ts](#keybinding-system--srclibcommoncontractskeybindingsts)
 8. [Content Script Boot — src/entryPoints/contentScript](#contentScript-boot--srcentryPointscontentScript)
-9. [Background Process — src/entryPoints/background](#background-process--srcentryPointsbackground)
+9. [Background Process — src/entryPoints/backgroundRuntime](#background-process--srcentrypointsbackgroundruntime)
 10. [Search Current Page — src/lib/ui/panels/searchCurrentPage](#search-current-page--srclibuipanelssearchcurrentpage)
 11. [Search Open Tabs — src/lib/ui/panels/searchOpenTabs](#search-open-tabs--srclibuipanelssearchopentabs)
 12. [Tab Manager — src/lib/ui/panels/tabManager](#tab-manager--srclibuipanelstabmanager)
 13. [Session Menu — src/lib/ui/panels/sessionMenu](#session-menu--srclibuipanelssessionmenu)
 14. [Help — src/lib/ui/panels/help](#help--srclibuipanelshelp)
-15. [Shared Utilities — src/lib/shared](#shared-utilities--srclibshared)
+15. [Common Layer](#common-layer)
 16. [Panel Lifecycle + Guards](#panel-lifecycle--guards)
 17. [Performance Patterns](#performance-patterns)
 18. [UI Conventions (Footers, Navigation, Filters)](#ui-conventions-footers-navigation-filters)
@@ -61,6 +61,10 @@ This guide is self-contained: no prerequisite docs are required to learn the sys
 24. [Incident Playbooks](#incident-playbooks)
 25. [Interview Prep + Codebase Walkthrough](#interview-prep--codebase-walkthrough)
 26. [Final Thought](#final-thought)
+27. [Algorithm Deep Dive](#algorithm-deep-dive)
+28. [State Management Deep Dive](#state-management-deep-dive)
+29. [Concurrency Deep Dive (JavaScript + Extension Runtime)](#concurrency-deep-dive-javascript--extension-runtime)
+30. [Transferable Engineering Patterns](#transferable-engineering-patterns)
 
 ---
 
@@ -98,9 +102,9 @@ Read this first before the detailed flow chapters.
 ┌────────────────────────────────┐      ┌──────────────────────────────────────┐
 │ Overlay UIs (content context) │      │ Background (privileged context)      │
 │ - searchCurrentPage           │<---->│ - tabManagerDomain                    │
-│ - searchOpenTabs              │      │ - sessionMessageHandler + sessions.ts │
-│ - tabManager                  │      │ - startupRestore / commandRouter      │
-│ - sessionMenu                 │      │ - misc/runtime routers                │
+│ - searchOpenTabs              │      │ - sessionDomain + message handlers    │
+│ - tabManager                  │      │ - startupRestore lifecycle            │
+│ - sessionMenu                 │      │ - command/runtime routing             │
 │ - help                        │      └──────────────────────────────────────┘
 └────────────────────────────────┘                       │
         │                                                │ reads/writes
@@ -197,7 +201,7 @@ The challenge is performance. The DOM can have thousands of nodes, and scanning 
 
 The solution uses several techniques. First, `grepPage()` walks the DOM once and caches the lines, invalidating on mutations with a 500ms debounce. This means stale results for up to 500ms after DOM changes, but no repeated full-DOM walks — O(n) once instead of O(n) per keystroke. Second, fuzzy scoring uses a character-by-character algorithm that iterates once per query character, avoiding regex catastrophic backtracking. Third, even if 10,000 lines match, `MAX_RESULTS` caps the list at 200, bounding rendering work. Fourth, virtual scrolling keeps only ~25 DOM nodes in the results list, recycling them as the user scrolls — O(visible) rendering instead of O(total). Fifth, expensive fields like `domContext`, `ancestorHeading`, and `href` are computed lazily in `updatePreview()`, not upfront for all 200 results.
 
-When the user navigates with arrows (or built-in `j/k` aliases), `activeIndex` changes, `renderResults()` highlights the new item, and `updatePreview()` shows its context. When the user presses Enter, the overlay scrolls to the target element using `src/lib/shared/scroll.ts` and closes.
+When the user navigates with arrows (or built-in `j/k` aliases), `activeIndex` changes, `renderResults()` highlights the new item, and `updatePreview()` shows its context. When the user presses Enter, the overlay scrolls to the target element using `src/lib/common/utils/scroll.ts` and closes.
 
 The lesson here is a checklist for search UI performance: Am I re-scanning data on every keystroke? Cache it. Am I rendering all results? Virtual scroll. Am I doing expensive work upfront? Lazy compute. Am I using regex? Watch for backtracking.
 
@@ -230,7 +234,7 @@ Interview articulation:
 2. "I kept algorithm and UI layers separate so changes stay low-risk."
 3. "I used lazy enrichment to avoid upfront cost on non-active rows."
 
-**Files to trace:** `src/lib/appInit/appInit.ts` (global key handler + host integrity guard), `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts` (overlay UI + state), `src/lib/ui/panels/searchCurrentPage/grep.ts` (DOM walking + fuzzy scoring), `src/lib/ui/shared/panelHost.ts` (host lifecycle + dismiss), `src/lib/shared/scroll.ts` (scroll-to-text).
+**Files to trace:** `src/lib/appInit/appInit.ts` (global key handler + host integrity guard), `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts` (overlay UI + state), `src/lib/ui/panels/searchCurrentPage/grep.ts` (DOM walking + fuzzy scoring), `src/lib/common/utils/panelHost.ts` (host lifecycle + dismiss), `src/lib/common/utils/scroll.ts` (scroll-to-text).
 
 Visual map (Flow A):
 
@@ -281,11 +285,11 @@ Growth checkpoint:
 
 User presses `Alt+Shift+T` to add the current tab. The content script in `src/lib/appInit/appInit.ts` catches the keybind and sends `{ type: "TAB_MANAGER_ADD" }` to the background. Only the background has `browser.tabs.*` API access — content scripts are sandboxed and cannot manipulate browser tabs directly. This is the browser's security model.
 
-The background bootstrap in `src/entryPoints/background/background.ts` delegates tab-manager state to `src/lib/background/tabManagerDomain.ts`. That domain first calls `ensureTabManagerLoaded()` to load state from storage if needed. MV3 service workers can be killed at any time, so every stateful handler calls this guard before reads/writes — it's idempotent and safe to call repeatedly. Then the domain sends `GET_SCROLL` back to the content script to capture the current scroll position, because scroll state is page-owned and the background cannot read `window.scrollX` directly. With scroll position in hand, it creates a `TabManagerEntry`, compacts slots to keep them sequential (1, 2, 3 instead of 1, 3, 4), saves to `browser.storage.local`, and returns. The content script shows a feedback toast via `src/lib/shared/feedback.ts` saying "Added to Tab Manager [slot]".
+The background bootstrap in `src/entryPoints/backgroundRuntime/background.ts` delegates tab-manager state to `src/lib/backgroundRuntime/domains/tabManagerDomain.ts`. That domain first calls `ensureTabManagerLoaded()` to load state from storage if needed. MV3 service workers can be killed at any time, so every stateful handler calls this guard before reads/writes — it's idempotent and safe to call repeatedly. Then the domain sends `GET_SCROLL` back to the content script to capture the current scroll position, because scroll state is page-owned and the background cannot read `window.scrollX` directly. With scroll position in hand, it creates a `TabManagerEntry`, compacts slots to keep them sequential (1, 2, 3 instead of 1, 3, 4), saves to `browser.storage.local`, and returns. The content script shows a feedback toast via `src/lib/common/utils/feedback.ts` saying "Added to Tab Manager [slot]".
 
 Later, the user presses `Alt+1` to jump. The content script sends `{ type: "TAB_MANAGER_JUMP", slot: 1 }`. The background finds the entry and either activates the existing tab or, if it was closed, re-opens the URL in a new tab and restores scroll.
 
-There are two open paths in the full system: page-level keydown in the content script (normal path) and browser command shortcuts routed through `src/lib/background/commandRouter.ts` (command-declared actions). The command router uses bounded retries when delivering `OPEN_*` messages, and selected panel-open data fetches use retries too. This is readiness policy, not business logic: it protects all feature flows from transient context startup gaps.
+There are two open paths in the full system: page-level keydown in the content script (normal path) and browser command shortcuts routed through `src/lib/backgroundRuntime/handlers/commandRouter.ts` (command-declared actions). The command router uses bounded retries when delivering `OPEN_*` messages, and selected panel-open data fetches use retries too. This is readiness policy, not business logic: it protects all feature flows from transient context startup gaps.
 
 The core challenge is that tab IDs are ephemeral — when the browser restarts, all tab IDs change. If we stored tab IDs naively, the list would become useless after restart. The solution is to store URL + scroll position alongside the tab ID. When jumping to a "closed" entry, we re-open the URL in a new tab and restore scroll. The tradeoff: the re-opened tab is a fresh page load, not the original session state with form inputs and history.
 
@@ -325,7 +329,7 @@ Interview articulation:
 2. "I used explicit message contracts to separate page and browser responsibilities."
 3. "I guarded state access for MV3 worker restarts."
 
-**Files to trace:** `src/lib/appInit/appInit.ts` (keybind handler), `src/entryPoints/background/background.ts` (router composition), `src/lib/background/commandRouter.ts` (command delivery retries), `src/lib/background/tabManagerDomain.ts` (state + commands), `src/lib/background/tabManagerMessageHandler.ts` (runtime API surface), `src/lib/ui/panels/tabManager/tabManager.ts` (open-list retry), `src/lib/shared/feedback.ts` (toast).
+**Files to trace:** `src/lib/appInit/appInit.ts` (keybind handler), `src/entryPoints/backgroundRuntime/background.ts` (router composition), `src/lib/backgroundRuntime/handlers/commandRouter.ts` (command delivery retries), `src/lib/backgroundRuntime/domains/tabManagerDomain.ts` (state + commands), `src/lib/backgroundRuntime/handlers/tabManagerMessageHandler.ts` (runtime API surface), `src/lib/ui/panels/tabManager/tabManager.ts` (open-list retry), `src/lib/common/utils/feedback.ts` (toast).
 
 Visual map (Flow B):
 
@@ -417,7 +421,7 @@ Interview articulation:
 2. "I separated planning from execution to prevent accidental destructive loads."
 3. "I kept panel-open latency low by rendering a shell before async hydration."
 
-**Files to trace:** `src/lib/ui/panels/sessionMenu/sessionMenu.ts` (panel orchestration), `src/lib/ui/panels/sessionMenu/session.ts` (view renderers + key handlers), `src/lib/background/sessionMessageHandler.ts` and `src/lib/shared/sessions.ts` (plan/load/save/rename/delete domain behavior).
+**Files to trace:** `src/lib/ui/panels/sessionMenu/sessionMenu.ts` (panel orchestration), `src/lib/ui/panels/sessionMenu/session.ts` (view renderers + key handlers), `src/lib/backgroundRuntime/handlers/sessionMessageHandler.ts` and `src/lib/backgroundRuntime/domains/sessionDomain.ts` (plan/load/save/rename/delete domain behavior).
 
 Visual map (Flow C):
 
@@ -469,7 +473,7 @@ Growth checkpoint:
 
 ### Flow D — Session Restore on Startup
 
-User closes the browser with tabs pinned in Tab Manager. When the browser reopens, `browser.runtime.onStartup` fires and is handled by `src/lib/background/startupRestore.ts` (registered from `src/entryPoints/background/background.ts`). Tab IDs are not stable across browser restarts — the old `tabManagerList` is useless because all those tab IDs now point to nothing. The background clears the stale list and loads `tabManagerSessions` from storage to prepare for restore.
+User closes the browser with tabs pinned in Tab Manager. When the browser reopens, `browser.runtime.onStartup` fires and is handled by `src/lib/backgroundRuntime/lifecycle/startupRestore.ts` (registered from `src/entryPoints/backgroundRuntime/background.ts`). Tab IDs are not stable across browser restarts — the old `tabManagerList` is useless because all those tab IDs now point to nothing. The background clears the stale list and loads `tabManagerSessions` from storage to prepare for restore.
 
 The challenge is timing. Content scripts load asynchronously, and at startup the background is ready before any tab's content script has finished initializing. If the background immediately tries to send `SHOW_SESSION_RESTORE` to the active tab, the message fails because no listener exists yet.
 
@@ -507,7 +511,7 @@ Interview articulation:
 2. "I separated persistent session data from runtime tab identity."
 3. "I designed a graceful fallback instead of hard failure."
 
-**Files to trace:** `src/lib/background/startupRestore.ts` (startup handler), `src/lib/ui/panels/sessionMenu/session.ts` (session restore UI).
+**Files to trace:** `src/lib/backgroundRuntime/lifecycle/startupRestore.ts` (startup handler), `src/lib/ui/panels/sessionMenu/session.ts` (session restore UI).
 
 Visual map (Flow D):
 
@@ -581,7 +585,10 @@ harpoon_telescope/
 │   │   ├── appInit/                 # contentScript bootstrap
 │   │   ├── adapters/
 │   │   │   └── runtime/             # typed runtime boundary (all sendMessage calls)
-│   │   ├── background/              # background domains + runtime/command routers
+│   │   ├── backgroundRuntime/       # privileged background runtime modules
+│   │   │   ├── domains/             # tab/session/page domain logic
+│   │   │   ├── handlers/            # runtime + command message handlers
+│   │   │   └── lifecycle/           # startup restore + boot-time flows
 │   │   ├── core/
 │   │   │   ├── panel/               # shared list-navigation controller
 │   │   │   └── sessionMenu/         # pure session state machine + view selectors
@@ -592,8 +599,9 @@ harpoon_telescope/
 │   │   │   │   ├── searchOpenTabs/  # Frecency open tabs list
 │   │   │   │   ├── sessionMenu/     # Session overlays (load/save/restore)
 │   │   │   │   └── tabManager/      # Tab Manager panel (slots/swap/undo/remove)
-│   │   │   └── shared/              # panelHost + shared preview shell styles
-│   │   ├── shared/                  # keybindings, helpers, sessions, scroll, feedback
+│   │   ├── common/
+│   │   │   ├── contracts/           # message schemas + shared type contracts
+│   │   │   └── utils/               # helpers, parsing, formatting, shared UI primitives
 │   └── icons/
 │       ├── icon-48.png
 │       ├── icon-96.png
@@ -607,7 +615,7 @@ harpoon_telescope/
 
 The build script bundles four entry points into IIFEs and copies static assets to `dist/`:
 
-- `src/entryPoints/background/background.ts` -> `dist/background.js`
+- `src/entryPoints/backgroundRuntime/background.ts` -> `dist/background.js`
 - `src/entryPoints/contentScript/contentScript.ts` -> `dist/contentScript.js`
 - `src/entryPoints/toolbarPopup/toolbarPopup.ts` -> `dist/toolbarPopup/toolbarPopup.js`
 - `src/entryPoints/optionsPage/optionsPage.ts` -> `dist/optionsPage/optionsPage.js`
@@ -711,7 +719,7 @@ Ambient types (in `.d.ts`) are globally available without imports. This reduces 
 
 ---
 
-## Keybinding System — src/lib/shared/keybindings.ts
+## Keybinding System — src/lib/common/contracts/keybindings.ts
 
 Keybinding storage and matching are centralized here:
 
@@ -751,13 +759,13 @@ Every keypress calls `getConfig()`. Without caching, that's an async message rou
 
 ---
 
-## Background Process — src/entryPoints/background
+## Background Process — src/entryPoints/backgroundRuntime
 
-Background entry `src/entryPoints/background/background.ts` orchestrates:
+Background entry `src/entryPoints/backgroundRuntime/background.ts` orchestrates:
 
-- tab manager domain (`src/lib/background/tabManagerDomain.ts`)
-- runtime routers/handlers (`src/lib/background/*MessageHandler.ts`, `runtimeRouter.ts`)
-- startup restore coordination (`src/lib/background/startupRestore.ts`)
+- tab manager domain (`src/lib/backgroundRuntime/domains/tabManagerDomain.ts`)
+- runtime/command handlers (`src/lib/backgroundRuntime/handlers/*`)
+- startup restore coordination (`src/lib/backgroundRuntime/lifecycle/startupRestore.ts`)
 
 **Key patterns:**
 
@@ -856,14 +864,20 @@ If the user customizes shortcuts, the help menu reflects their actual bindings, 
 
 ---
 
-## Shared Utilities — src/lib/shared
+## Common Layer
 
-- `helpers.ts`: `escapeHtml`, `escapeRegex`, `buildFuzzyPattern`, `extractDomain`
-- `filterInput.ts`: shared slash-filter parsing used by search overlays
-- `panelHost.ts`: shadow host, base styles, focus trapping
-- `scroll.ts`: scroll-to-text highlight
-- `feedback.ts`: toast messages
-- `sessions.ts`: session CRUD helpers
+- `src/lib/common/contracts/keybindings.ts`: keybinding config schema/defaults + matching helpers used across UI/background/options.
+- `src/lib/common/contracts/runtimeMessages.ts`: typed message contracts for background <-> content runtime channels.
+- `src/lib/common/utils/helpers.ts`: `escapeHtml`, `escapeRegex`, `buildFuzzyPattern`, `extractDomain`.
+- `src/lib/common/utils/filterInput.ts`: shared slash-filter parsing used by search overlays.
+- `src/lib/common/utils/panelHost.ts`: shadow host, base styles, focus trapping.
+- `src/lib/common/utils/scroll.ts`: scroll-to-text highlight.
+- `src/lib/common/utils/feedback.ts`: toast rendering helper.
+- `src/lib/common/utils/toastMessages.ts`: standardized feedback copy builders.
+- `src/lib/common/utils/perf.ts`: perf instrumentation helper.
+- `src/lib/common/utils/frecencyScoring.ts`: frecency scoring + eviction.
+- `src/lib/common/utils/storageMigrations.ts` + `src/lib/common/utils/storageMigrationsRuntime.ts`: storage schema upgrades.
+- Session business logic now lives in `src/lib/backgroundRuntime/domains/sessionDomain.ts` (domain layer, not common layer).
 
 ## Composability Modules — src/lib/core + src/lib/adapters/runtime
 
@@ -877,15 +891,13 @@ Why this matters for growth:
 1. You can unit-test state transitions without opening UI.
 2. You can change runtime transport behavior in one place.
 3. You can reuse panel list behavior without copy/paste drift.
-- `frecencyScoring.ts`: frecency scoring + eviction
-- `runtimeMessages.ts`: typed message contracts for background <-> content runtime channels
 
 Practice loop (no AI, chapter-specific):
 
-1. Trace one shared helper from caller -> helper -> returned value usage in UI/background.
-2. Modify one shared contract in `runtimeMessages.ts` and update all call sites.
+1. Trace one common-layer helper from caller -> helper -> returned value usage in UI/background.
+2. Modify one common-layer contract in `runtimeMessages.ts` and update all call sites.
 3. Verify: run lint/typecheck/tests and manually trigger the affected runtime flow.
-4. Explain: defend why shared modules should stay minimal and stable.
+4. Explain: defend why common-layer modules should stay minimal and stable.
 
 Failure drill:
 
@@ -895,9 +907,9 @@ Failure drill:
 
 Growth checkpoint:
 
-1. Junior signal: can find where a shared util is consumed.
-2. Mid signal: can evolve a shared contract without hidden breakage.
-3. Senior signal: can decide what belongs in `shared` vs feature-specific modules.
+1. Junior signal: can find where a common utility is consumed.
+2. Mid signal: can evolve a common contract without hidden breakage.
+3. Senior signal: can decide what belongs in `common/contracts` or `common/utils` vs feature-specific modules.
 
 ---
 
@@ -932,7 +944,7 @@ Prevents conflicts. `Alt+F` opens the panel; once open, pressing `Alt+F` should 
 - **Virtual lists with DOM pooling:** Only ~25 DOM nodes exist; they're recycled as the user scrolls.
 - **rAF throttled updates:** Rendering is scheduled via `requestAnimationFrame` to batch DOM writes.
 - **Measured hot paths:** `withPerfTrace(...)` instruments filter/render hotspots and writes stats to `globalThis.__HT_PERF_STATS__`.
-- **Regression budgets:** `src/lib/shared/perfBudgets.json` keeps expected latency envelopes explicit in code review + tests.
+- **Regression budgets:** `src/lib/common/utils/perfBudgets.json` keeps expected latency envelopes explicit in code review + tests.
 - **Cached DOM grep + mutation invalidation:** Walk the DOM once, cache lines, invalidate on changes.
 - **Lazy computation:** Expensive fields (domContext, ancestorHeading) are computed on-demand, not upfront.
 - **Responsive pane switching:** two-pane overlays collapse to stacked panes on smaller viewports.
@@ -1191,3 +1203,672 @@ Quick summary of everything learned:
 If I can trace a feature from keypress to storage to render and back, I understand the system. If I can explain the tradeoffs, I can defend the design. If I can apply these patterns elsewhere, I've grown as an engineer.
 
 This codebase is mine. I built it to learn, and now I can teach it.
+
+---
+
+## Algorithm Deep Dive
+
+This section intentionally goes deeper than the normal walkthrough. It is written so you can re-implement the critical algorithms from memory and defend the tradeoffs in code review.
+
+### 1) Fuzzy scoring internals (search in current page)
+
+Owner files:
+
+- `src/lib/ui/panels/searchCurrentPage/grep/grepScoring.ts`
+- `src/lib/ui/panels/searchCurrentPage/grep.ts`
+
+Core algorithm idea:
+
+- We do not use one large regex.
+- We scan candidate text character-by-character.
+- We award points for useful match structure, not just containment.
+
+Scoring components in `grepScoring.ts`:
+
+- `SCORE_BASE`: every matched character gets base points.
+- `SCORE_CONSECUTIVE`: consecutive matches are rewarded.
+- `SCORE_WORD_BOUNDARY`: matching after separators gets bonus.
+- `SCORE_START`: matching at index 0 gets bonus.
+- `PENALTY_DISTANCE`: gaps between matches lose points.
+
+Why this matters:
+
+- Substring only gives binary yes/no ranking.
+- This scoring gives ordering quality: tighter matches go on top.
+- Complexity is linear in candidate size for each term, predictable under load.
+
+Minimal reconstruction (same logic pattern):
+
+```ts
+function scoreTerm(term: string, candidate: string): number | null {
+  if (term.length === 0) return 0;
+  if (term.length > candidate.length) return null;
+
+  let score = 0;
+  let termIdx = 0;
+  let prevMatchIdx = -2;
+
+  for (let i = 0; i < candidate.length && termIdx < term.length; i++) {
+    if (candidate[i] !== term[termIdx]) continue;
+
+    score += SCORE_BASE;
+    if (i === prevMatchIdx + 1) score += SCORE_CONSECUTIVE;
+
+    if (i === 0) {
+      score += SCORE_START;
+    } else if (WORD_SEPARATORS.has(candidate[i - 1])) {
+      score += SCORE_WORD_BOUNDARY;
+    }
+
+    if (prevMatchIdx >= 0) {
+      const gap = i - prevMatchIdx - 1;
+      if (gap > 0) score += gap * PENALTY_DISTANCE;
+    }
+
+    prevMatchIdx = i;
+    termIdx++;
+  }
+
+  if (termIdx < term.length) return null;
+  return score;
+}
+```
+
+Multi-term query behavior:
+
+- Query is split by spaces.
+- Every non-empty term must match.
+- Total score is sum of each term score.
+- If any term misses, candidate is rejected.
+
+Important edge behavior to remember:
+
+- Empty term contributes 0 and is skipped.
+- Candidate lowercasing happens once during line collection (`TaggedLine.lower`).
+- No regex backtracking risk.
+
+Complexity:
+
+- Let `T` = number of terms, `C` = candidate length.
+- Worst case `O(T * C)` per candidate line.
+- With early exits and `MAX_RESULTS * 3` cutoff in `grep.ts`, practical runtime remains bounded.
+
+### 2) DOM collection and caching pipeline
+
+Owner files:
+
+- `src/lib/ui/panels/searchCurrentPage/grep/grepCache.ts`
+- `src/lib/ui/panels/searchCurrentPage/grep/grepCollectors.ts`
+- `src/lib/ui/panels/searchCurrentPage/grep/grepDom.ts`
+
+Design:
+
+1. Build cached line sets by structural type (`all/code/headings/links/images`).
+2. Invalidate with a debounced `MutationObserver`.
+3. Re-filter from memory for each input update.
+
+Why debounce invalidation:
+
+- Pages can mutate rapidly (ads, timers, infinite scroll).
+- Immediate invalidation on every mutation causes thrash.
+- Debounced invalidation gives stable search responsiveness.
+
+Collector strategy details:
+
+- `collectAll()` handles broad text extraction.
+- `collectCode()` splits `<pre>` by lines and avoids duplicate `<code>` inside `<pre>`.
+- `collectLinks()` captures link text + `href`.
+- `collectImages()` captures alt/title/filename fallback.
+- Multi-filter request does union + dedupe by object identity.
+
+Dedupe reasoning:
+
+- A node can logically satisfy multiple filters.
+- Without dedupe, same visible line appears twice in results.
+- `Set<TaggedLine>` avoids duplicate display and ranking bias.
+
+### 3) Preview enrichment (lazy not eager)
+
+Owner files:
+
+- `src/lib/ui/panels/searchCurrentPage/grep.ts`
+- `src/lib/ui/panels/searchCurrentPage/grep/grepDom.ts`
+- `src/lib/ui/panels/searchCurrentPage/searchCurrentPageView.ts`
+
+Flow:
+
+1. Result list is built cheap first (text, score, context slice).
+2. On active selection, call `enrichResult(result)`.
+3. Enrichment computes heavier fields only when needed:
+   - DOM-aware context window
+   - nearest heading
+   - `href` fallback for link nodes
+
+Why lazy:
+
+- With 200 results, eager enrichment creates avoidable work.
+- User usually previews only a small subset.
+- Latency budget is spent where user focus actually is.
+
+### 4) Virtualized list rendering in current-page search
+
+Owner file:
+
+- `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts`
+
+Key pieces:
+
+- `ITEM_HEIGHT`, `POOL_BUFFER` from `searchCurrentPageView.ts`.
+- Sentinel element sets scrollable height.
+- Actual rendered nodes are pooled and recycled.
+- Scroll handler is passive + rAF-throttled.
+
+Core idea:
+
+- Render only rows visible in viewport +/- buffer.
+- Keep DOM node count roughly constant.
+- Move rendered window as user scrolls.
+
+Mental model:
+
+- `resultsSentinel.height = totalRows * rowHeight`
+- `resultsList.top = startIndex * rowHeight`
+- `children.length = endIndex - startIndex`
+
+This gives:
+
+- Low memory churn
+- Stable scroll behavior
+- Better frame time under long result sets
+
+### 5) Session list search ranking algorithm
+
+Owner file:
+
+- `src/lib/ui/panels/sessionMenu/sessionView.ts`
+
+Ranking order:
+
+1. Exact full-name match
+2. Starts-with
+3. Substring
+4. Fuzzy-only match
+
+Tiebreakers:
+
+1. Shorter name first
+2. Stable original index order
+
+Why this ordering:
+
+- Matches user expectation for named objects.
+- Keeps deterministic behavior across repeated searches.
+
+Pseudo-flow:
+
+```ts
+for each session:
+  if no substring or fuzzy hit: skip
+  score by exact > startsWith > contains > fuzzy
+  collect (index, score, nameLen)
+sort by score, then nameLen, then index
+return indices
+```
+
+### 6) Selection movement algorithm (shared panel controller)
+
+Owner file:
+
+- `src/lib/core/panel/panelListController.ts`
+
+The controller centralizes:
+
+- Up/down movement
+- Half-page jumps
+- Wheel-driven movement
+
+Benefit:
+
+- Every panel shares identical selection semantics.
+- Fewer keyboard behavior regressions when adding a new panel.
+
+### 7) Runtime readiness retry algorithm
+
+Owner files:
+
+- `src/lib/backgroundRuntime/handlers/commandRouter.ts`
+- `src/lib/backgroundRuntime/lifecycle/startupRestore.ts`
+
+Pattern:
+
+- Small bounded retry schedule with increasing delays.
+- Catch send-message failures and retry.
+- Stop after max attempts.
+
+Why bounded retries (not infinite):
+
+- Prevents background worker from spinning forever.
+- Keeps user feedback predictable.
+- Balances robustness vs battery/CPU usage.
+
+---
+
+## State Management Deep Dive
+
+This section is about explicit state ownership, transition discipline, and avoiding hidden coupling.
+
+### 1) State ownership model in this codebase
+
+There are four practical state classes:
+
+1. Canonical persisted state (background + storage)
+   - `tabManagerList`
+   - `tabManagerSessions`
+   - `frecencyData`
+   - `keybindings`
+   - `storageSchemaVersion`
+
+2. Runtime domain state (background memory)
+   - In-memory tab manager list and pending scroll restore maps.
+   - Exists for fast operations between storage syncs.
+
+3. UI transient state (content overlay memory)
+   - Current input text
+   - Selected index
+   - Confirmation mode flags
+   - Focus target
+
+4. Derived view state (computed every render)
+   - Filtered visible indices
+   - Preview model
+   - Footer hints
+
+Rule:
+
+- If state must survive reload/startup, it belongs in storage.
+- If state is only interaction-local, keep it transient in UI.
+- Never duplicate canonical source of truth between contexts.
+
+### 2) Session transient state machine
+
+Owner files:
+
+- `src/lib/core/sessionMenu/sessionCore.ts`
+- `src/lib/ui/panels/sessionMenu/session.ts`
+
+`sessionCore.ts` gives pure transitions/selectors for transient flags:
+
+- rename mode
+- overwrite confirmation
+- delete confirmation
+- load confirmation
+- focus target (`filter` vs `list`)
+
+Important property:
+
+- Transitions are explicit and typed.
+- UI handlers call transitions, then re-render.
+
+This avoids:
+
+- Ad-hoc boolean mutation spread across multiple handlers.
+- Forgotten reset paths after async flows.
+
+Typical transition sequence:
+
+1. User hits overwrite key.
+2. UI handler calls `startSessionOverwriteConfirmation(...)`.
+3. Render shows confirmation block.
+4. Confirm key triggers async `updateSession(...)`.
+5. On completion or failure, `stopSessionOverwriteConfirmation(...)`.
+6. Render returns to normal mode.
+
+### 3) Render model: write state first, render second
+
+Panels follow this pattern repeatedly:
+
+1. Validate input + mode guard.
+2. Mutate state (or dispatch state-machine transition).
+3. Call `ctx.render()`.
+4. Restore focus/caret explicitly when needed.
+
+Why focus restore is explicit:
+
+- Re-render destroys/recreates DOM nodes.
+- Browser default focus retention is not enough for keyboard-first UX.
+
+### 4) Derived state should not be stored if cheap to recompute
+
+Examples:
+
+- Visible session indices from query.
+- Highlight regex from query terms.
+- Footer text from current keybinding config + mode.
+
+Reason:
+
+- Derived state in storage introduces stale cache bugs.
+- Recompute-on-render keeps single source truth.
+
+### 5) Known failure modes and fixes
+
+Failure mode: stale selected index after filtering.
+
+- Symptom: Enter on hidden/invalid row.
+- Fix in this repo: recompute visible indices each handler path and guard selection.
+
+Failure mode: confirmation mode conflicts with rename mode.
+
+- Symptom: key handlers trigger wrong branch.
+- Fix: mutually exclusive transient-state transitions in `sessionCore.ts`.
+
+Failure mode: focus trap mismatch after rerender.
+
+- Symptom: keyboard seems dead because focus moved unexpectedly.
+- Fix: explicit focus target (`filter` or `list`) persisted in transient state and reapplied post-render.
+
+### 6) When to introduce a state machine vs plain object
+
+Use a pure state machine when:
+
+- There are more than 2 mutually exclusive interaction modes.
+- Async confirmation paths can interleave.
+- You need predictable transitions for testing.
+
+Use plain object state when:
+
+- It is simple editable data (input text, active index).
+- Modes are not coupled.
+
+This repo uses both deliberately.
+
+### 7) State management checklist for new features
+
+Before coding:
+
+1. Write owner of each state field.
+2. Mark persistent vs transient.
+3. Define valid transitions and invalid transitions.
+4. Define post-render focus behavior.
+
+Before merge:
+
+1. Verify every async branch clears pending mode.
+2. Verify close/dismiss path resets transient state.
+3. Verify keyboard behavior in every mode.
+
+---
+
+## Concurrency Deep Dive (JavaScript + Extension Runtime)
+
+This section is about practical concurrency under the browser event loop and extension lifecycle.
+
+### 1) Event loop reality used by this repo
+
+Important queues used here:
+
+- Macro task queue (`setTimeout`, events)
+- Micro task queue (promise continuations)
+- Rendering frame queue (`requestAnimationFrame`)
+- Mutation observer callback queue
+
+Consequence:
+
+- Ordering is not "line-by-line across async".
+- UI must assume callbacks may arrive after state changed.
+
+### 2) rAF + debounce combo in current-page search
+
+Owner file:
+
+- `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts`
+
+Input flow:
+
+1. Input event stores pending value.
+2. rAF coalesces same-frame updates.
+3. 200ms debounce delays grep execution.
+
+Why both:
+
+- rAF: prevents redundant same-frame processing.
+- debounce: reduces expensive grep recompute while typing.
+
+Race guard used:
+
+- `panelOpen` flag checked before processing delayed work.
+- If panel closed mid-flight, callback exits safely.
+
+### 3) Preview update coalescing
+
+Pattern:
+
+- `previewRafId` sentinel ensures only one pending frame callback.
+- Multiple navigation events in same frame merge into one preview render.
+
+Result:
+
+- Less layout/reflow churn.
+- No preview render storm on held-down key.
+
+### 4) Startup and command retries for content-script readiness
+
+Owner files:
+
+- `src/lib/backgroundRuntime/handlers/commandRouter.ts`
+- `src/lib/backgroundRuntime/lifecycle/startupRestore.ts`
+
+Race problem:
+
+- Background may send message before content script is ready.
+
+Solution:
+
+- Retry with bounded delays.
+- Fail safely after max attempts.
+
+Why this belongs in infrastructure layer:
+
+- Readiness is transport concern.
+- Feature logic should not care about startup timing races.
+
+### 5) Scroll restore token strategy (real concurrency defense)
+
+Owner file:
+
+- `src/lib/backgroundRuntime/domains/tabManagerDomain.ts`
+
+Mechanism:
+
+- `pendingScrollRestoreTokens` map stores per-tab token.
+- New restore request increments sequence token.
+- Async retry loop checks token each attempt.
+- Stale loop exits if token changed.
+
+This prevents:
+
+- Older async callback overwriting newer intended state.
+
+This is equivalent to cancellation tokens in other systems.
+
+### 6) MV3 worker lifecycle and idempotent guards
+
+In MV3, worker can stop and restart. In-memory state is not durable.
+
+Protection pattern:
+
+- Every handler calls `ensureTabManagerLoaded()` before operations.
+- Multiple calls are safe (idempotent).
+
+Why idempotent guards matter:
+
+- You cannot assume warm process state.
+- Cold-start correctness must match warm-path correctness.
+
+### 7) Concurrency bugs to watch for in this architecture
+
+1. Stale closure over indices after re-render.
+2. Async action completes after panel close and touches detached DOM.
+3. Retry loops still running after owner state changed.
+4. Multiple confirmation modes active from interleaved key paths.
+
+Mitigations already used:
+
+- Existence guards (`if (!document.getElementById("ht-panel-host")) return`).
+- Mode guards before handling keys.
+- Token/sequence checks for async retries.
+- Centralized cleanup registration per panel host.
+
+### 8) Practical coding pattern for safe async UI
+
+Use this template:
+
+```ts
+let isOpen = true;
+let inflightToken = 0;
+
+function close(): void {
+  isOpen = false;
+  cleanup();
+}
+
+async function doWork(): Promise<void> {
+  const token = ++inflightToken;
+  const data = await fetchData();
+  if (!isOpen) return;
+  if (token !== inflightToken) return;
+  render(data);
+}
+```
+
+This same pattern is applied in different forms throughout this repo.
+
+### 9) Why this matters for frontend frameworks too
+
+Even with React/Vue/Solid:
+
+- event loop ordering does not disappear
+- transport retries still needed
+- stale async results still possible
+- lifecycle cleanup still required
+
+Frameworks change ergonomics, not physics.
+
+---
+
+## Transferable Engineering Patterns
+
+These are patterns you can carry into any frontend or fullstack codebase.
+
+### Pattern A: Canonical owner + typed boundary
+
+- Keep one canonical owner of persisted state.
+- Expose typed command/query contracts across boundaries.
+- Never let presentation layers mutate canonical state directly.
+
+Applied here:
+
+- Background runtime owns tab/session canonical data.
+- Content overlays talk through typed runtime messages.
+
+### Pattern B: Pure state transitions for mode-heavy UIs
+
+- Put mode transitions in pure functions.
+- Keep DOM side effects in render/handler layer.
+- Unit-test transition logic independently.
+
+Applied here:
+
+- `sessionCore.ts` transition helpers.
+
+### Pattern C: Guardrails in CI, not memory
+
+- Enforce architecture contracts in lint/tests.
+- Enforce upgrade/store policy contracts in verify scripts.
+
+Applied here:
+
+- `esBuildConfig/lint.mjs` layer checks and UI contracts.
+- `verify:compat`, `verify:upgrade`, `verify:store`.
+
+### Pattern D: Defer expensive work until user intent proves needed
+
+- Lazy enrich preview details.
+- Virtualize long lists.
+- Debounce expensive search computation.
+
+Applied here:
+
+- Search preview enrichment + virtualized result rendering.
+
+### Pattern E: Retry policy is infrastructure, not feature logic
+
+- Keep bounded retries in routing/adapter layers.
+- Keep business logic deterministic and focused.
+
+Applied here:
+
+- Command router and startup restore readiness retries.
+
+### Pattern F: Deterministic keyboard UX requires explicit focus state
+
+- Store focus target in state.
+- Re-apply focus after rerender.
+- Avoid implicit focus assumptions.
+
+Applied here:
+
+- Session list `filter/list` focus transitions.
+
+### Pattern G: Separate contracts from utilities
+
+- `contracts/`: schema, types, actions, stable boundaries.
+- `utils/`: parsing/formatting/helpers with no feature ownership.
+
+Applied here:
+
+- `src/lib/common/contracts/*`
+- `src/lib/common/utils/*`
+
+### Build-your-own exercise set (serious reps)
+
+Exercise 1: Rebuild fuzzy scoring module from scratch.
+
+1. Implement `scoreTerm` and `fuzzyMatch` without reading code.
+2. Add unit tests for exact, prefix, boundary, and gap penalty cases.
+3. Compare ranking output with current implementation.
+
+Exercise 2: Introduce a new session confirmation mode.
+
+1. Add new transition helpers in `sessionCore.ts`.
+2. Wire render branch in session view.
+3. Wire keyboard handling with exclusive mode guard.
+4. Prove no mode leakage by manual matrix testing.
+
+Exercise 3: Add new retry-protected command path.
+
+1. Add message contract in `runtimeMessages.ts`.
+2. Add background handler routing.
+3. Add adapter call site.
+4. Add readiness retry where delivery can race startup.
+
+Exercise 4: Add architecture guardrail.
+
+1. Define a new disallowed dependency edge in `lint.mjs`.
+2. Write failing fixture/change.
+3. Validate lint blocks it.
+4. Document why this guardrail exists.
+
+### Senior-level review prompts
+
+When reviewing any PR, ask:
+
+1. Which layer owns this state?
+2. Did this PR add hidden coupling across layers?
+3. Are async completions cancellation-safe?
+4. Is cleanup deterministic on close/reload?
+5. Are transitions explicit or ad-hoc booleans?
+6. Is the behavior testable without opening a browser?
+7. Did we preserve existing runtime/storage contracts?
+
+If you can answer these from code, you are operating at ownership level.

@@ -233,6 +233,92 @@ Frameworks are just structured orchestrators on top of these primitives.
 
 If you know the primitive layer, frameworks become easier to learn and debug because you understand what they are abstracting.
 
+### 6) Extension security model (must-know)
+
+If you remember only one security concept from this repo, remember this:
+
+- each extension context has different power and different trust assumptions
+- bugs usually happen when those boundaries are blurred
+
+Runtime boundary map:
+
+1. Page DOM context (untrusted content): arbitrary site code and markup.
+2. Content script context (bridge): can read page DOM, can talk to background, should treat page data as untrusted.
+3. Background runtime context (privileged owner): can use `tabs`, `storage`, lifecycle APIs; should enforce policy and validation.
+
+Security rule:
+
+- never let untrusted input cross a trust boundary without validation/sanitization.
+
+### 7) Threat model for this architecture
+
+Threat A: HTML/script injection into overlay UI.
+
+- Source: page text, URLs, titles, or user input rendered into HTML sinks.
+- Mitigation in repo: `escapeHtml` before interpolating dynamic values in `innerHTML`.
+- Owner: `src/lib/common/utils/helpers.ts`.
+
+Threat B: confused deputy via runtime messages.
+
+- Source: weakly-validated message payloads can trigger privileged actions.
+- Mitigation pattern: discriminated message contracts + explicit handler routing + payload checks before side effects.
+- Owners: `src/lib/common/contracts/runtimeMessages.ts`, `src/lib/backgroundRuntime/handlers/*`.
+
+Threat C: over-permissioned manifests.
+
+- Source: requesting permissions broader than needed.
+- Mitigation: MV2/MV3 manifests kept minimal and checked by compatibility/store policy scripts.
+- Owners: `esBuildConfig/manifest_v2.json`, `esBuildConfig/manifest_v3.json`, `esBuildConfig/verifyStore.mjs`.
+
+Threat D: stale extension state after lifecycle restarts.
+
+- Source: MV3 worker suspension/restart and partial runtime readiness.
+- Mitigation: lazy load guards, retries with bounds, and idempotent handlers.
+- Owners: `src/lib/backgroundRuntime/domains/*`, `src/lib/backgroundRuntime/handlers/*`.
+
+### 8) Security checklist for every new feature
+
+Before merging a feature, run this checklist:
+
+1. Input trust: list every external input (page DOM, URL, storage value, runtime payload, key input).
+2. Sink audit: list where those inputs end up (`innerHTML`, tab APIs, storage writes, message sends).
+3. Encoding/validation: prove each sink receives safe/validated values.
+4. Permission audit: confirm no new permission is needed; if needed, justify and document.
+5. Failure mode: ensure failure is safe (close panel/reject action), not partial dangerous behavior.
+
+### 9) Common security mistakes (and fixes)
+
+Mistake:
+
+- "It only comes from my own UI so it is safe."
+
+Fix:
+
+- treat any string derived from page DOM or storage as untrusted until escaped/validated.
+
+Mistake:
+
+- "TypeScript type means runtime payload is valid."
+
+Fix:
+
+- types are compile-time only; runtime payloads still need defensive checks for required fields and value domains.
+
+Mistake:
+
+- "We can clean this up later; the feature works."
+
+Fix:
+
+- secure-by-default at feature time; retrofitting security after release is expensive and error-prone.
+
+### 10) Security learning reps (do these repeatedly)
+
+1. Pick one panel render path and mark every HTML sink. Prove each dynamic value is escaped.
+2. Pick one background handler and add explicit runtime validation for edge payloads.
+3. Remove one manifest permission locally and verify if behavior still works; if yes, permission was unnecessary.
+4. Write one regression test that fails when a security guarantee is broken (for example docs/policy drift, permission mismatch, or missing guard behavior).
+
 ---
 
 ## DOM and Shadow DOM Internals
@@ -1088,6 +1174,66 @@ Growth checkpoint:
 2. Mid signal: can add a new release gate without breaking developer flow.
 3. Senior signal: can tune guardrails for signal over noise (strict enough, not brittle).
 
+### Testing Strategy By Risk (How to choose the right test)
+
+Do not choose test type by habit. Choose by failure cost and blast radius.
+
+Risk-first matrix:
+
+| Change type | Highest-risk failure | Best primary test | Why |
+| --- | --- | --- | --- |
+| Pure ranking/state math | Wrong ordering/state transition | Unit tests | Fast, deterministic, no browser dependency |
+| Runtime contract change | Message sender/receiver drift | Typecheck + contract-focused integration test | Catches boundary breakage early |
+| Background tab/session logic | Data drift or wrong side effects | Domain tests + targeted manual browser repro | Combines deterministic checks with API reality |
+| Panel keyboard/focus behavior | Locked UI, wrong action, focus trap | Manual matrix + regression smoke tests | Real focus/keyboard behavior is environment-sensitive |
+| Manifest/store/privacy edits | Store rejection or policy mismatch | `verify:compat` + `verify:store` | Explicit release safety gate |
+| Migration/storage schema edits | Upgrade data loss/corruption | `verify:upgrade` + migration fixtures | Catches real upgrade path breakage |
+
+Testing tiers to follow in this repo:
+
+1. Tier 1: Pure logic tests (fastest; must run for every algorithm/transition change).
+2. Tier 2: Contract and wiring tests (runtime message and architecture correctness).
+3. Tier 3: Browser-behavior checks (manual matrix for keyboard/focus/render edge cases).
+4. Tier 4: Release policy checks (compatibility, migration, store consistency).
+
+### Regression design rules (high leverage)
+
+1. Each bug fix should add one regression guard at the layer where bug originated.
+2. Prefer invariant-based assertions over snapshot-only checks.
+3. Keep one "happy path" and one "failure path" test for critical flows.
+4. If behavior spans contexts, test boundary assumptions explicitly (payload shape, retries, fallback behavior).
+5. Keep tests small enough to explain in code review in under 60 seconds.
+
+### Manual test matrix for keyboard-heavy panels
+
+Minimum matrix on behavior-heavy changes:
+
+1. Empty list state.
+2. Filtered no-result state.
+3. Confirmation mode active.
+4. Rename/input mode active.
+5. Panel close via `Esc`.
+6. Open/close repeatedly (no stale host lockout).
+7. Chrome + Firefox smoke on key paths.
+
+### How to avoid test-suite bloat
+
+Signals that a new test is high-value:
+
+1. It protects a critical invariant.
+2. It protects a previously regressed bug class.
+3. It protects a cross-context boundary.
+
+Signals that a new test is likely low-value:
+
+1. It duplicates behavior already covered at same layer.
+2. It asserts implementation details instead of observable behavior.
+3. It is brittle to harmless refactors.
+
+Use this rule:
+
+- fewer tests, stronger guarantees beats many shallow tests.
+
 ---
 
 ## Manifests — MV2 and MV3
@@ -1178,6 +1324,50 @@ Firefox caches content scripts. On extension reload, the old script stays alive.
 
 Every keypress calls `getConfig()`. Without caching, that's an async message round-trip on every keypress — noticeable latency. The cache loads once and invalidates on storage changes.
 
+### Security boundary rules for content scripts
+
+Treat content script as a boundary adapter, not as a trusted data owner.
+
+Rules:
+
+1. Page DOM data is untrusted input.
+2. Content script may transform/present data, but privileged decisions stay in background.
+3. Runtime messages should carry minimal needed payloads.
+4. Panel rendering must escape dynamic strings before HTML sinks.
+
+Why this matters:
+
+- content scripts run in pages with arbitrary third-party markup and scripts.
+- this boundary is where injection and confused-state bugs often begin.
+
+### Message handling hardening pattern
+
+When adding a new message case in content script:
+
+1. narrow by message `type` first
+2. validate required fields exist and are sensible
+3. fail safely (`return`, close panel, or send error response)
+4. never assume background/page state is unchanged across `await`
+
+Example guard style:
+
+```ts
+if (message.type === "SET_SCROLL") {
+  if (typeof message.x !== "number" || typeof message.y !== "number") return;
+  window.scrollTo(message.x, message.y);
+}
+```
+
+### Debugging content-script issues fast
+
+If a panel does not open/respond:
+
+1. verify `initApp()` was called once
+2. verify cleanup did not remove active listeners unexpectedly
+3. verify panel host integrity (`#ht-panel-host`) before open
+4. verify keybinding match path (`matchesAction`) sees expected config
+5. verify runtime message response path is resolving/rejecting as expected
+
 ---
 
 ## Background Process — src/entryPoints/backgroundRuntime
@@ -1196,6 +1386,54 @@ Background entry `src/entryPoints/backgroundRuntime/background.ts` orchestrates:
 
 - **Domain routing:** `background.ts` stays thin; handler/domain modules keep privileged logic isolated and easier to review.
 - **Retry logic:** For session restore prompt, retry sending to content script until one is ready.
+
+### Privileged-owner discipline (background only)
+
+Background is privileged; that means it must be conservative.
+
+Rules:
+
+1. Validate incoming runtime payloads before side effects.
+2. Keep side-effecting logic in domain modules, not in scattered handlers.
+3. Keep operations idempotent where lifecycle restarts are possible.
+4. Return explicit success/failure shapes so UI can recover predictably.
+
+Design principle:
+
+- "privilege implies policy ownership." If logic requires permission-sensitive decisions, background should own it.
+
+### Storage evolution discipline (long-term reliability)
+
+State survives release boundaries; bugs here compound over time.
+
+Storage discipline used in this repo:
+
+1. Version storage schema (`storageSchemaVersion`).
+2. Apply explicit migration steps in order.
+3. Keep migrations deterministic and idempotent.
+4. Preserve backward-meaningful defaults when new fields are introduced.
+5. Gate release with upgrade verification (`npm run verify:upgrade`).
+
+Migration anti-patterns to avoid:
+
+1. Implicit migrations hidden inside feature handlers.
+2. Migrations that depend on current tab/page context.
+3. Destructive transforms without fallback or snapshot fixtures.
+
+### Contract-driven handler design
+
+A runtime handler should be easy to reason about:
+
+1. Input contract (what payload is allowed).
+2. Policy checks (what is permitted).
+3. Domain call (single owner mutation/read).
+4. Output contract (what caller can depend on).
+
+If any handler mixes all layers with ad-hoc branching, refactor into:
+
+- contract parsing in handler
+- policy/domain logic in domain module
+- transport/retry concerns in adapter/handler infrastructure
 
 ---
 
@@ -1978,6 +2216,51 @@ If the user customizes shortcuts, the help menu reflects their actual bindings, 
 - `src/lib/common/utils/storageMigrations.ts` + `src/lib/common/utils/storageMigrationsRuntime.ts`: storage schema upgrades.
 - Session business logic now lives in `src/lib/backgroundRuntime/domains/sessionDomain.ts` (domain layer, not common layer).
 
+### Contract-driven architecture (single source of truth)
+
+`common/contracts` is not just a type folder. It defines system boundaries.
+
+What belongs in contracts:
+
+1. runtime message discriminators and payload shapes
+2. keybinding schema and action identifiers
+3. values that must stay synchronized across contexts
+
+What does NOT belong in contracts:
+
+1. rendering helpers
+2. business logic implementations
+3. side-effectful utilities
+
+### How to evolve contracts safely
+
+When changing a shared contract:
+
+1. add fields in backward-compatible form first (optional/defaultable)
+2. update sender + receiver in same patch or tightly-coupled commit series
+3. add regression check for changed path
+4. update docs/help only after behavior is verified
+
+Breaking-change checklist:
+
+1. Are all call sites updated (content, background, adapters, options/popup)?
+2. Is stored data migration required?
+3. Do tests cover both old and new assumptions where needed?
+4. Is failure behavior explicit when old payload appears unexpectedly?
+
+### Utility-layer discipline
+
+`common/utils` should remain low-coupling and composable.
+
+Good utility traits:
+
+1. single responsibility
+2. deterministic output for given input
+3. no hidden ownership of feature state
+4. no mixed transport + domain + render behavior in one function
+
+If a utility starts needing feature-specific state machines, it likely belongs in core/domain modules instead.
+
 ## Composability Modules — src/lib/core + src/lib/adapters/runtime
 
 - `src/lib/core/sessionMenu/sessionCore.ts`: pure session mode transitions and derived view selectors (no DOM/browser APIs)
@@ -2009,6 +2292,31 @@ Growth checkpoint:
 1. Junior signal: can find where a common utility is consumed.
 2. Mid signal: can evolve a common contract without hidden breakage.
 3. Senior signal: can decide what belongs in `common/contracts` or `common/utils` vs feature-specific modules.
+
+### Adapter boundary pattern (why it scales)
+
+Runtime adapters (`src/lib/adapters/runtime/*`) are the only place many UI modules should know about transport details.
+
+Benefits:
+
+1. one retry/error policy surface
+2. one mapping layer from UI intent to runtime messages
+3. easier transport changes (for example adding telemetry or timeout policy)
+
+Adapter contract rule:
+
+- adapters translate intent, domains own business rules, UI owns interaction and rendering.
+
+### How to review composability quality
+
+Use this quick rubric:
+
+1. Can the module be tested without browser APIs?
+2. Can another panel reuse it without copy/paste edits?
+3. Does it expose a small stable interface?
+4. Does it avoid leaking implementation details (DOM nodes, runtime objects) across boundaries?
+
+If answers are mostly "no," the module is not composable yet.
 
 ---
 
@@ -2227,6 +2535,57 @@ Growth checkpoint:
 2. Mid signal: can reduce latency without changing behavior.
 3. Senior signal: can set and defend measurable budgets in code review.
 
+### Performance engineering method (repeatable process)
+
+Use this 6-step loop for any performance work:
+
+1. Define user-facing symptom in measurable terms.
+2. Establish baseline (`before`) with concrete traces/timestamps.
+3. Identify dominant cost (algorithmic, DOM, transport, or lifecycle).
+4. Apply one targeted change with a falsifiable hypothesis.
+5. Re-measure (`after`) under same scenario.
+6. Keep change only if it improves metric without violating invariants.
+
+If you skip baseline/after comparison, you are guessing.
+
+### Latency budgets by interaction class
+
+Suggested budget targets for this extension style:
+
+1. Keystroke-to-visual update: ideally under 16ms, acceptable under 32ms.
+2. Panel open-to-interactive: ideally under 100ms in warm path.
+3. List navigation update: under one frame for perceived responsiveness.
+4. Startup restore prompt delivery: bounded retries with clear fallback in seconds, not unbounded loops.
+
+Budgets are not absolute truths; they are decision constraints for tradeoffs.
+
+### Cost model: where time is usually spent
+
+1. CPU: fuzzy scoring + filtering loops.
+2. DOM: node creation/replacement, style recalculation, layout, paint.
+3. Transport: runtime message send/response latency.
+4. Lifecycle: retries, readiness waits, and startup delay coordination.
+
+When optimizing, first identify which bucket dominates. Wrong bucket optimization creates complexity with little gain.
+
+### Performance anti-pattern checklist
+
+1. Full subtree `innerHTML` rebuild for tiny state change.
+2. Layout thrash (read -> write -> read cycles in same frame).
+3. Unbounded list render size.
+4. Duplicate listeners after reload/open cycles.
+5. Recomputing expensive derived data on every navigation step.
+6. Doing heavy work in confirmation/idle modes where no user value is added.
+
+### Verification proof for performance PRs
+
+Every performance-focused change should include:
+
+1. baseline numbers and scenario description
+2. post-change numbers on same scenario
+3. tradeoff statement (what got more complex and why it is acceptable)
+4. regression guard (test, budget file update, or explicit monitor point)
+
 ---
 
 ## UI Conventions (Footers, Navigation, Filters)
@@ -2241,6 +2600,64 @@ Growth checkpoint:
 **Why strict footer order?**
 
 Consistency across panels. Users learn the pattern once and can predict where keybind hints appear.
+
+### Accessibility + keyboard UX engineering (advanced layer)
+
+Keyboard-first UX is accessibility work, not only power-user ergonomics.
+
+Core principles:
+
+1. Every important action should be reachable without mouse.
+2. Focus location should always be obvious and recoverable.
+3. Mode changes must preserve user intent (typing vs navigating vs confirming).
+4. Escape routes must be reliable (`Esc` closes panel).
+
+### Focus model used across panels
+
+Typical focus states:
+
+1. input-focused (text editing and filtering)
+2. list-focused (navigation/jump/select)
+3. confirmation/rename mode (restricted key semantics)
+
+Rules:
+
+1. Never leave focus implicit after rerender.
+2. Restore caret/selection when returning to input mode.
+3. Avoid keybind collisions between text editing and global panel actions.
+4. During strict confirmation modes, gate keys intentionally and visibly.
+
+### Semantic HTML and assistive behavior
+
+Even in a custom overlay, semantic choice matters:
+
+1. interactive controls should use semantic elements (`button`, `input`) where possible.
+2. meaningful labels/placeholders/titles should communicate action intent.
+3. visual cues should align with keyboard state (active row, active pane, confirmation emphasis).
+
+If semantics are weak, keyboard behavior may still work for you but become fragile for users with assistive tooling.
+
+### Keyboard conflict handling strategy
+
+Because overlay runs on arbitrary pages, conflicts are expected.
+
+Conflict policy:
+
+1. when panel is open, panel key handling takes priority over page shortcuts
+2. when editing text input, text-edit behavior should not be hijacked by unrelated actions
+3. when panel closes, host-page behavior should be fully restored
+
+This prevents "extension stole my keyboard" failure mode.
+
+### Accessibility regression checklist
+
+On keyboard/accessibility-affecting changes, verify:
+
+1. Tab order remains logical.
+2. Active row/pane is visible and trackable.
+3. No dead-end mode where neither typing nor navigation works.
+4. `Esc` exits panel from all non-blocking states.
+5. Confirmation prompts are readable (contrast/emphasis) and action outcomes are clear.
 
 ---
 
@@ -2587,6 +3004,41 @@ What "ownership" means in this repo:
 3. I can explain one tradeoff per subsystem (performance, complexity, UX, reliability).
 4. I can debug failures without relying on framework abstractions.
 
+### ADR-lite decision records (required for non-trivial design changes)
+
+For architecture-impacting changes, write a short decision record in the PR description or docs notes.
+
+Template:
+
+1. Context: what problem exists now?
+2. Decision: what exactly are we changing?
+3. Alternatives considered: what else did we evaluate?
+4. Tradeoffs: what gets better, what gets worse?
+5. Invariants impacted: what must still hold?
+6. Validation: how was this proven (tests/manual/perf)?
+7. Rollback plan: how to revert safely if behavior regresses?
+
+When ADR-lite is mandatory:
+
+1. changing runtime contracts
+2. changing storage schema/migrations
+3. changing cross-panel key behavior conventions
+4. changing panel lifecycle/guard infrastructure
+5. changing architecture boundaries (moving domain ownership)
+
+### Decision quality rubric (junior -> senior)
+
+1. Junior: can explain decision outcome.
+2. Mid: can explain why alternatives were rejected.
+3. Senior: can quantify tradeoffs and predict second-order effects.
+
+### Examples of good decision statements in this codebase
+
+1. "Keep canonical tab/session state in background because content scripts are ephemeral and permission-limited."
+2. "Use typed runtime contracts to prevent cross-context payload drift."
+3. "Prefer virtualized list rendering to cap DOM cost under large result sets."
+4. "Use fail-closed panel lifecycle so initialization errors do not lock future opens."
+
 ---
 
 ## System Invariants
@@ -2626,6 +3078,26 @@ Build/release invariants:
 2. Storage migrations are forward-compatible and test-gated.
 3. Store claims and privacy claims match actual permissions and persisted data.
 
+Security/contract invariants:
+
+1. Untrusted text is escaped before HTML interpolation.
+2. Runtime payload handling is type-discriminated and defensively validated.
+3. Privileged actions remain background-owned; UI layers request, not command by force.
+4. Permission footprint remains minimal and justified.
+
+Debuggability invariants:
+
+1. Every critical flow has a traceable owner module.
+2. Failure paths fail closed or degrade gracefully, not silently drift.
+3. Recovery paths are explicit (close/reopen, retry with bounds, fallback message).
+4. Cross-context behavior remains explainable without hidden side channels.
+
+Decision-governance invariants:
+
+1. Architecture-impacting changes include explicit tradeoff reasoning.
+2. Contract/storage changes include migration/compatibility validation.
+3. Performance-sensitive changes include before/after evidence or clear guardrail rationale.
+
 ---
 
 ## Bug Triage + Patch Runbook
@@ -2649,6 +3121,59 @@ Patch quality questions:
 1. Does this fix preserve existing contracts in other panels/flows?
 2. Does this introduce hidden coupling between modules?
 3. If this fails again, will it fail safe (recoverable) or fail dangerous (lock/freeze/data drift)?
+
+### Debugging playbook (repro -> isolate -> prove)
+
+Use this exact debugging stack when a bug appears:
+
+Phase 1: Reproduce with a narrow script
+
+1. capture exact trigger sequence (keys, mode, panel state, data preconditions)
+2. capture expected vs actual behavior in one sentence each
+3. reduce to smallest reproducible path
+
+Phase 2: Isolate ownership
+
+1. identify which layer first diverges (UI render, state transition, runtime message, background domain, storage data)
+2. inspect nearest boundary contract (payload, mode guard, invariant)
+3. verify whether data drift began before or after async boundary
+
+Phase 3: Instrument intentionally
+
+1. add temporary targeted logs at boundaries, not everywhere
+2. include correlation hints (mode, index, session name, slot, token) in logs
+3. remove debug noise after fix is proven
+
+Phase 4: Patch smallest owning layer
+
+1. avoid patching symptoms in outer layers when root cause is deeper
+2. preserve existing contracts unless deliberate migration is documented
+3. keep failure mode safe and reversible
+
+Phase 5: Prove and harden
+
+1. replay original repro path
+2. run one neighboring edge case
+3. add focused regression guard
+4. document invariant added/clarified
+
+### Fast triage questions (when under time pressure)
+
+1. Is this deterministic or timing-sensitive?
+2. Does bug disappear after panel reopen (transient) or survive restart (persisted)?
+3. Is canonical state wrong, or only view state wrong?
+4. Did behavior change at a context boundary (content <-> background)?
+5. Is there a cleanup leak (stale host/listener/timer) involved?
+
+### Debug evidence quality checklist
+
+A bug report/fix note is high quality if it includes:
+
+1. explicit repro steps
+2. owning-layer diagnosis
+3. invariant that was violated
+4. patch scope rationale
+5. proof artifact (test output and/or manual verification notes)
 
 ---
 

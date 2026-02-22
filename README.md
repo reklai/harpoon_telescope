@@ -1,6 +1,6 @@
 # Harpoon Telescope — Browser Extension
 
-A ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard-first tab navigation on Firefox, Chrome, and Zen.
+A ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard-first tab navigation on Firefox, Chrome (Experimental), and Zen.
 
 ## What It Does
 

@@ -6,7 +6,7 @@ A ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard
 
 - Tab Manager (Harpoon): anchor up to 4 tabs and jump instantly with scroll-position memory.
 - Search Current Page (Telescope): fuzzy in-page search with filters and live preview.
-- Search Open Tabs: frecency-ranked tab switching.
+- Search Open Tabs: fuzzy current open tabs sorted by frequency+recently-opened tab jumping.
 - Sessions: save/load up to 4 tab-manager session sets.
 - Keybinding customization: configurable global and panel bindings.
 
@@ -97,16 +97,12 @@ npm run verify:store
 npm run ci
 ```
 
-## Engineering Promise
+## Promise to myself
 
 - Keyboard-first workflows stay predictable across all panels.
 - Native browser primitives first (Shadow DOM + WebExtension APIs).
 - Firefox/Chrome parity is maintained through shared contracts and adapters.
 - Reliability guardrails (tests + compat/store checks) are part of release quality.
-
-## Source Submission Build Repro (AMO)
-
-Use `RELEASE.md` for full reproducible build instructions (environment requirements, exact build steps, and source archive packaging).
 
 Quick path:
 

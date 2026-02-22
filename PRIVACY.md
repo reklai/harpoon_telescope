@@ -1,21 +1,33 @@
 # Privacy Policy — Harpoon Telescope
 
-**Last updated:** February 20, 2026
+**Last updated:** February 22, 2026
 
 ## Summary
 
 Harpoon Telescope does not collect, transmit, or share any user data. Everything stays in your browser.
+No account is required. No cloud sync is used.
 
 ## Data Storage
 
 The extension stores the following data locally in your browser using `browser.storage.local`:
 
-- **Harpoon list** — URLs and scroll positions of your pinned tabs (up to 4)
-- **Saved sessions** — named snapshots of your harpoon list (up to 4)
-- **Frecency data** — visit frequency and recency scores for open tabs (up to 50 entries)
-- **Keybinding preferences** — your custom keyboard shortcuts and navigation mode setting
+- **Harpoon list** (`tabManagerList`) — URLs and scroll positions of your pinned tabs (up to 4)
+- **Saved sessions** (`tabManagerSessions`) — named snapshots of your harpoon list (up to 4)
+- **Frecency data** (`frecencyData`) — visit frequency and recency scores for open tabs (up to 50 entries)
+- **Keybinding preferences** (`keybindings`) — your custom global and panel shortcuts
+- **Storage schema version** (`storageSchemaVersion`) — migration/versioning metadata
 
 This data never leaves your browser. It is not sent to any server, API, or third party.
+
+## Data Processing (In-Memory, Not Sent Anywhere)
+
+To provide features, the extension processes some data in memory at runtime:
+
+- **Current page content** for in-page search (for example headings, links, code blocks, and visible text)
+- **Open tab metadata** (title/URL) for tab manager and frecency ranking
+- **Keyboard input and runtime messages** to execute actions and render overlays
+
+This processing happens locally in the browser and is not transmitted externally.
 
 ## Data Collection
 
@@ -34,13 +46,21 @@ None. The extension:
 | Permission | Why it's needed |
 |------------|----------------|
 | `tabs` | Read tab titles and URLs to display in harpoon and frecency lists, and to switch between tabs |
-| `activeTab` | Access the current page's content for in-page search (Telescope) |
-| `storage` | Save your harpoon list, sessions, frecency data, and keybinding preferences locally |
-| `<all_urls>` | Inject the content script that provides keyboard shortcuts and search overlays on any page |
+| `activeTab` | Access the active page context for current-page actions |
+| `storage` | Save your harpoon list, sessions, frecency data, keybinding preferences, and schema version locally |
+| `<all_urls>` | Inject the content script that provides keyboard shortcuts and search overlays on pages where you use the extension |
 
 ## Third Parties
 
 There are none. No third-party services, SDKs, libraries that phone home, or external dependencies that transmit data. The only runtime dependency (`webextension-polyfill`) is a local compatibility shim that makes no network requests.
+
+## Data Sharing
+
+None. Harpoon Telescope does not sell, rent, transfer, or disclose your data to third parties.
+
+## Data Retention
+
+Data remains in local extension storage until you remove it (for example by uninstalling the extension or clearing extension storage).
 
 ## Data Deletion
 

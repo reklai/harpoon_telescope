@@ -1,26 +1,15 @@
 // Session save/load views for the tab manager overlay.
 // Renders the save-session input and session-list views inside the tab manager panel.
-// Also provides standalone session-restore overlay for browser startup.
 
-import { keyToDisplay, matchesAction, loadKeybindings, MAX_SESSIONS } from "../../../shared/keybindings";
-import {
-  createPanelHost,
-  removePanelHost,
-  registerPanelCleanup,
-  getBaseStyles,
-  footerRowHtml,
-  vimBadgeHtml,
-  dismissPanel,
-} from "../../shared/panelHost";
-import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../../../shared/helpers";
-import { showFeedback } from "../../../shared/feedback";
-import { toastMessages } from "../../../shared/toastMessages";
-import restoreStyles from "./session.css";
+import { keyToDisplay, matchesAction, MAX_SESSIONS } from "../../../common/contracts/keybindings";
+import { vimBadgeHtml } from "../../../common/utils/panelHost";
+import { escapeHtml } from "../../../common/utils/helpers";
+import { showFeedback } from "../../../common/utils/feedback";
+import { toastMessages } from "../../../common/utils/toastMessages";
 import {
   SessionTransientState,
   createSessionTransientState,
   deriveSessionListViewModel,
-  hasActiveSessionConfirmation,
   resetSessionTransientState as resetSessionTransientStateValue,
   startSessionDeleteConfirmation,
   startSessionLoadConfirmation,
@@ -48,6 +37,21 @@ import {
   moveVisibleSelectionFromWheel,
   moveVisibleSelectionHalfPage,
 } from "../../../core/panel/panelListController";
+import {
+  buildDeleteConfirmationHtml,
+  buildLoadSummaryHtml,
+  buildOverwriteConfirmationHtml,
+  buildPreviewEntriesHtml,
+  buildReplaceSessionFooterHtml,
+  buildSaveSessionFooterHtml,
+  buildSessionListFooterHtml,
+  buildSessionNameHighlightRegex,
+  buildSessionPreviewHtml,
+  buildSessionPreviewPaneHtml,
+  getFilteredSessionIndices,
+  getSessionListHalfPageStep,
+  highlightSessionName,
+} from "./sessionView";
 
 let sessionTransientState = createSessionTransientState();
 
@@ -82,248 +86,6 @@ export interface SessionContext {
   close(): void;
 }
 
-function scoreSessionMatch(
-  lowerText: string,
-  rawText: string,
-  queryLower: string,
-  fuzzyRe: RegExp,
-): number {
-  if (lowerText === queryLower) return 0;          // exact match
-  if (lowerText.startsWith(queryLower)) return 1;  // starts-with
-  if (lowerText.includes(queryLower)) return 2;    // substring
-  if (fuzzyRe.test(rawText)) return 3;             // fuzzy only
-  return -1;                                       // no match
-}
-
-function getFilteredSessionIndices(sessions: TabManagerSession[], rawQuery: string): number[] {
-  const trimmedQuery = rawQuery.trim();
-  if (!trimmedQuery) return sessions.map((_, index) => index);
-
-  const fuzzyRe = buildFuzzyPattern(trimmedQuery);
-  if (!fuzzyRe) return sessions.map((_, index) => index);
-
-  const substringRe = new RegExp(escapeRegex(trimmedQuery), "i");
-  const queryLower = trimmedQuery.toLowerCase();
-  const ranked: Array<{ index: number; score: number; nameLen: number }> = [];
-
-  for (let i = 0; i < sessions.length; i++) {
-    const name = sessions[i].name || "";
-    if (!(substringRe.test(name) || fuzzyRe.test(name))) continue;
-
-    const score = scoreSessionMatch(name.toLowerCase(), name, queryLower, fuzzyRe);
-    if (score < 0) continue;
-
-    ranked.push({
-      index: i,
-      score,
-      nameLen: name.length,
-    });
-  }
-
-  ranked.sort((a, b) => {
-    if (a.score !== b.score) return a.score - b.score;
-    if (a.nameLen !== b.nameLen) return a.nameLen - b.nameLen;
-    return a.index - b.index;
-  });
-
-  return ranked.map((item) => item.index);
-}
-
-function pluralize(count: number, singular: string, plural: string = `${singular}s`): string {
-  return count === 1 ? singular : plural;
-}
-
-function buildSessionNameHighlightRegex(rawQuery: string): RegExp | null {
-  const terms = rawQuery.trim().split(/\s+/).filter(Boolean);
-  if (terms.length === 0) return null;
-  const pattern = terms.map((term) => `(${escapeRegex(escapeHtml(term))})`).join("|");
-  try {
-    return new RegExp(pattern, "gi");
-  } catch (_) {
-    return null;
-  }
-}
-
-function highlightSessionName(name: string, highlightRegex: RegExp | null): string {
-  const escaped = escapeHtml(name);
-  if (!highlightRegex) return escaped;
-  return escaped.replace(highlightRegex, "<mark>$1</mark>");
-}
-
-function getSessionListHalfPageStep(shadow: ShadowRoot): number {
-  const listEl = shadow.querySelector(".ht-session-list-scroll") as HTMLElement | null;
-  const itemEl = shadow.querySelector(".ht-session-item") as HTMLElement | null;
-  const itemHeight = Math.max(1, itemEl?.offsetHeight ?? 34);
-  const rows = Math.max(1, Math.floor((listEl?.clientHeight ?? (itemHeight * 8)) / itemHeight));
-  return Math.max(1, Math.floor(rows / 2));
-}
-
-function buildLoadSummaryHtml(
-  summary: SessionLoadSummary,
-  confirmKey: string,
-  cancelKey: string,
-): string {
-  const slotDiffs = Array.isArray(summary.slotDiffs)
-    ? [...summary.slotDiffs].sort((a, b) => a.slot - b.slot)
-    : [];
-  const reuseMatches = Array.isArray(summary.reuseMatches) ? summary.reuseMatches : [];
-  const reuseBySlot = new Map<number, SessionLoadReuseMatch>();
-  for (const match of reuseMatches) {
-    reuseBySlot.set(match.slot, match);
-  }
-
-  const removeCount = slotDiffs.filter((row) => row.change === "remove").length;
-  const replaceCount = slotDiffs.filter(
-    (row) => row.change === "replace" && !reuseBySlot.has(row.slot),
-  ).length;
-
-  const renderTabLabel = (title?: string, url?: string): string => {
-    const display = (title || "").trim() || extractDomain(url || "") || "Untitled";
-    return `&ldquo;${escapeHtml(display)}&rdquo;`;
-  };
-
-  const planRowsHtml = slotDiffs.length === 0
-    ? `<div class="ht-session-plan-empty">No slot changes detected.</div>`
-    : slotDiffs.map((row) => {
-      const match = reuseBySlot.get(row.slot);
-      if (match) {
-        return `<div class="ht-session-plan-row ht-session-plan-row-reuse">
-          <span class="ht-session-plan-sign">=</span>
-          <span class="ht-session-plan-slot">${row.slot}</span>
-          <span class="ht-session-plan-text">Session ${renderTabLabel(match.sessionTitle, match.sessionUrl)} \u21C4 Current ${renderTabLabel(match.openTabTitle, match.openTabUrl)}</span>
-        </div>`;
-      }
-      if (row.change === "replace") {
-        return `<div class="ht-session-plan-row ht-session-plan-row-replace">
-          <span class="ht-session-plan-sign">~</span>
-          <span class="ht-session-plan-slot">${row.slot}</span>
-          <span class="ht-session-plan-text">${renderTabLabel(row.currentTitle, row.currentUrl)} \u2192 ${renderTabLabel(row.incomingTitle, row.incomingUrl)}</span>
-        </div>`;
-      }
-      if (row.change === "add") {
-        return `<div class="ht-session-plan-row ht-session-plan-row-add">
-          <span class="ht-session-plan-sign">+</span>
-          <span class="ht-session-plan-slot">${row.slot}</span>
-          <span class="ht-session-plan-text">${renderTabLabel(row.incomingTitle, row.incomingUrl)} (new tab)</span>
-        </div>`;
-      }
-      return `<div class="ht-session-plan-row ht-session-plan-row-remove">
-        <span class="ht-session-plan-sign">-</span>
-        <span class="ht-session-plan-slot">${row.slot}</span>
-        <span class="ht-session-plan-text">${renderTabLabel(row.currentTitle, row.currentUrl)} (slot cleared)</span>
-      </div>`;
-    }).join("");
-
-  return `<div class="ht-session-confirm">
-      <div class="ht-session-confirm-icon">\u21bb</div>
-      <div class="ht-session-confirm-msg">
-        Load <span class="ht-session-confirm-title">&ldquo;${escapeHtml(summary.sessionName)}&rdquo;</span>?
-        <div class="ht-session-confirm-path">${summary.totalCount} saved ${pluralize(summary.totalCount, "tab")}</div>
-      </div>
-      <div class="ht-session-plan-totals">
-        NEW <strong>(+)</strong> &middot; DELETED <strong>(-)</strong> &middot; REPLACED <strong>(~)</strong> &middot; UNCHANGED <strong>(=)</strong>
-      </div>
-      <div class="ht-session-plan-list">${planRowsHtml}</div>
-      <div class="ht-session-confirm-hint">
-        <span class="ht-confirm-key ht-confirm-key-yes">${escapeHtml(confirmKey)}</span> confirm
-        &middot;
-        <span class="ht-confirm-key ht-confirm-key-no">${escapeHtml(cancelKey)}</span> cancel
-      </div>
-    </div>`;
-}
-
-function buildOverwriteConfirmationHtml(
-  session: TabManagerSession | undefined,
-  confirmKey: string,
-  cancelKey: string,
-): string {
-  const sessionName = session?.name || "session";
-  const savedCount = session?.entries.length ?? 0;
-  return `<div class="ht-session-confirm">
-      <div class="ht-session-confirm-icon">\u26A0</div>
-      <div class="ht-session-confirm-msg">
-        Overwrite <span class="ht-session-confirm-title">&ldquo;${escapeHtml(sessionName)}&rdquo;</span>?
-        <div class="ht-session-confirm-path">${savedCount} saved ${pluralize(savedCount, "tab")} will be replaced</div>
-      </div>
-      <div class="ht-session-confirm-hint">
-        <span class="ht-confirm-key ht-confirm-key-yes">${escapeHtml(confirmKey)}</span> overwrite
-        &middot;
-        <span class="ht-confirm-key ht-confirm-key-no">${escapeHtml(cancelKey)}</span> cancel
-      </div>
-    </div>`;
-}
-
-function buildDeleteConfirmationHtml(
-  session: TabManagerSession | undefined,
-  confirmKey: string,
-  cancelKey: string,
-): string {
-  const sessionName = session?.name || "session";
-  const savedCount = session?.entries.length ?? 0;
-  return `<div class="ht-session-confirm">
-      <div class="ht-session-confirm-icon">\u26A0</div>
-      <div class="ht-session-confirm-msg">
-        Delete <span class="ht-session-confirm-title">&ldquo;${escapeHtml(sessionName)}&rdquo;</span>?
-        <div class="ht-session-confirm-path">${savedCount} saved ${pluralize(savedCount, "tab")} will be removed</div>
-      </div>
-      <div class="ht-session-confirm-hint">
-        <span class="ht-confirm-key ht-confirm-key-yes">${escapeHtml(confirmKey)}</span> delete
-        &middot;
-        <span class="ht-confirm-key ht-confirm-key-no">${escapeHtml(cancelKey)}</span> cancel
-      </div>
-    </div>`;
-}
-
-interface SessionPreviewEntryLike {
-  title?: string;
-  url?: string;
-}
-
-function buildPreviewEntriesHtml(entries: SessionPreviewEntryLike[], emptyText: string): string {
-  let html = `<div class="ht-session-preview-list">`;
-
-  if (entries.length === 0) {
-    html += `<div class="ht-session-preview-empty">${escapeHtml(emptyText)}</div>`;
-  } else {
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
-      html += `<div class="ht-session-preview-item">
-        <span class="ht-session-preview-slot">${i + 1}</span>
-        <div class="ht-session-preview-info">
-          <div class="ht-session-preview-title">${escapeHtml(entry.title || "Untitled")}</div>
-          <div class="ht-session-preview-url">${escapeHtml(extractDomain(entry.url || ""))}</div>
-        </div>
-      </div>`;
-    }
-  }
-
-  html += `</div>`;
-  return html;
-}
-
-function buildSessionPreviewHtml(session: TabManagerSession | undefined): string {
-  if (!session) {
-    return "";
-  }
-  return buildPreviewEntriesHtml(session.entries, "No tabs in this session.");
-}
-
-function buildSessionPreviewPaneHtml(
-  tabCount: number,
-  hasPreview: boolean,
-  previewHtml: string,
-  placeholderText: string,
-): string {
-  const tabLabel = pluralize(tabCount, "Tab", "Tabs");
-
-  return `<div class="ht-session-preview-pane ht-preview-pane">
-      <div class="ht-preview-header ht-ui-pane-header">
-        <span class="ht-session-pane-header-text ht-ui-pane-header-text">Preview - ${tabCount} ${tabLabel}</span>
-      </div>
-      <div class="ht-preview-placeholder" ${hasPreview ? 'style="display:none;"' : ""}>${escapeHtml(placeholderText)}</div>
-      <div class="ht-preview-content" ${hasPreview ? "" : 'style="display:none;"'}>${previewHtml}</div>
-    </div>`;
-}
 
 async function beginLoadConfirmation(ctx: SessionContext, sessionIdx: number): Promise<void> {
   const target = ctx.sessions[sessionIdx];
@@ -358,71 +120,6 @@ async function confirmLoadSession(ctx: SessionContext): Promise<void> {
 
 export type SessionPanelMode = "saveSession" | "sessionList" | "replaceSession";
 
-function buildSaveSessionFooterHtml(config: KeybindingsConfig, saveKey: string, closeKey: string): string {
-  return footerRowHtml([
-    { key: saveKey, desc: "save" },
-    { key: closeKey, desc: "close" },
-  ]);
-}
-
-function buildSessionListFooterHtml(config: KeybindingsConfig): string {
-  if (hasActiveSessionConfirmation(sessionTransientState)) {
-    return "";
-  }
-
-  const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
-  const moveDownKey = keyToDisplay(config.bindings.tabManager.moveDown.key);
-  const focusListKey = keyToDisplay(config.bindings.session.focusList.key);
-  const focusSearchKey = keyToDisplay(config.bindings.session.focusSearch.key);
-  const clearSearchKey = keyToDisplay(config.bindings.session.clearSearch.key);
-  const renameKey = keyToDisplay(config.bindings.session.rename.key);
-  const overwriteKey = keyToDisplay(config.bindings.session.overwrite.key);
-  const removeKey = keyToDisplay(config.bindings.tabManager.remove.key);
-  const loadKey = keyToDisplay(config.bindings.tabManager.jump.key);
-  const closeKey = keyToDisplay(config.bindings.tabManager.close.key);
-  const navHints = config.navigationMode === "standard"
-    ? [
-      { key: "j/k", desc: "nav" },
-      { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
-      { key: "Ctrl+D/U", desc: "half-page" },
-    ]
-    : [
-      { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
-    ];
-
-  return `${footerRowHtml(navHints)}
-    ${footerRowHtml([
-      { key: focusListKey, desc: "list" },
-      { key: focusSearchKey, desc: "search" },
-      { key: clearSearchKey, desc: "clear-search" },
-      { key: renameKey, desc: "rename" },
-      { key: overwriteKey, desc: "overwrite" },
-      { key: removeKey, desc: "del" },
-      { key: loadKey, desc: "load" },
-      { key: closeKey, desc: "close" },
-    ])}`;
-}
-
-function buildReplaceSessionFooterHtml(config: KeybindingsConfig): string {
-  const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
-  const moveDownKey = keyToDisplay(config.bindings.tabManager.moveDown.key);
-  const replaceKey = keyToDisplay(config.bindings.tabManager.jump.key);
-  const closeKey = keyToDisplay(config.bindings.tabManager.close.key);
-  const navHints = config.navigationMode === "standard"
-    ? [
-      { key: "j/k", desc: "nav" },
-      { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
-    ]
-    : [
-      { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
-    ];
-  return `${footerRowHtml(navHints)}
-    ${footerRowHtml([
-      { key: replaceKey, desc: "replace" },
-      { key: closeKey, desc: "close" },
-    ])}`;
-}
-
 export function refreshSessionViewFooter(ctx: SessionContext, viewMode: SessionPanelMode): void {
   const footerEl = ctx.shadow.querySelector(".ht-footer") as HTMLElement | null;
   if (!footerEl) return;
@@ -435,7 +132,7 @@ export function refreshSessionViewFooter(ctx: SessionContext, viewMode: SessionP
   }
 
   if (viewMode === "sessionList") {
-    footerEl.innerHTML = buildSessionListFooterHtml(ctx.config);
+    footerEl.innerHTML = buildSessionListFooterHtml(ctx.config, sessionTransientState);
     return;
   }
 
@@ -595,7 +292,7 @@ export function renderSessionList(ctx: SessionContext): void {
           )}
         </div>`;
 
-  const footerHtml = buildSessionListFooterHtml(config);
+  const footerHtml = buildSessionListFooterHtml(config, sessionTransientState);
   html += `${footerHtml
     ? `<div class="ht-footer">${footerHtml}</div>`
     : ""}
@@ -1313,185 +1010,4 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
 
   event.stopPropagation();
   return true;
-}
-
-// -- Standalone session restore overlay (shown on browser startup) --
-
-export async function openSessionRestoreOverlay(): Promise<void> {
-  try {
-    const sessions = await listSessions();
-    if (sessions.length === 0) return;
-
-    const config = await loadKeybindings();
-    const { host, shadow } = createPanelHost();
-
-    const style = document.createElement("style");
-    style.textContent = getBaseStyles() + restoreStyles;
-    shadow.appendChild(style);
-
-    const container = document.createElement("div");
-    shadow.appendChild(container);
-
-    let activeIndex = 0;
-
-    function close(): void {
-      document.removeEventListener("keydown", keyHandler, true);
-      window.removeEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
-      removePanelHost();
-    }
-
-    function renderRestoreFooter(): void {
-      const footer = shadow.querySelector(".ht-footer") as HTMLElement | null;
-      if (!footer) return;
-      const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
-      const moveDownKey = keyToDisplay(config.bindings.tabManager.moveDown.key);
-      const restoreKey = keyToDisplay(config.bindings.tabManager.jump.key);
-      const closeKey = keyToDisplay(config.bindings.tabManager.close.key);
-      const navHints = config.navigationMode === "standard"
-        ? [
-          { key: "j/k", desc: "nav" },
-          { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
-        ]
-        : [
-          { key: `${moveUpKey}/${moveDownKey}`, desc: "nav" },
-        ];
-      footer.innerHTML = `${footerRowHtml(navHints)}
-      ${footerRowHtml([
-        { key: restoreKey, desc: "restore" },
-        { key: closeKey, desc: "decline" },
-      ])}`;
-    }
-
-    function onNavigationModeChanged(): void {
-      renderRestoreFooter();
-    }
-
-    function render(): void {
-      let html = `<div class="ht-backdrop"></div>
-        <div class="ht-session-restore-container">
-          <div class="ht-titlebar">
-            <div class="ht-traffic-lights">
-              <button class="ht-dot ht-dot-close" title="Decline (${escapeHtml(keyToDisplay(config.bindings.tabManager.close.key))})"></button>
-            </div>
-            <span class="ht-titlebar-text">Restore Session?</span>
-            ${vimBadgeHtml(config)}
-          </div>
-          <div class="ht-session-restore-list">`;
-
-      for (let i = 0; i < sessions.length; i++) {
-        const s = sessions[i];
-        const cls = i === activeIndex ? "ht-session-restore-item active" : "ht-session-restore-item";
-        const date = new Date(s.savedAt).toLocaleDateString();
-        html += `<div class="${cls}" data-index="${i}">
-          <div class="ht-session-restore-name">${escapeHtml(s.name)}</div>
-          <span class="ht-session-restore-meta">${s.entries.length} tabs \u00b7 ${date}</span>
-        </div>`;
-      }
-
-      html += `</div>
-        <div class="ht-footer"></div>
-      </div>`;
-
-      container.innerHTML = html;
-      renderRestoreFooter();
-
-      const backdrop = shadow.querySelector(".ht-backdrop") as HTMLElement;
-      const closeBtn = shadow.querySelector(".ht-dot-close") as HTMLElement;
-
-      backdrop.addEventListener("click", close);
-      backdrop.addEventListener("mousedown", (event) => event.preventDefault());
-      closeBtn.addEventListener("click", close);
-
-      shadow.querySelectorAll(".ht-session-restore-item").forEach((el) => {
-        el.addEventListener("click", () => {
-          const idx = parseInt((el as HTMLElement).dataset.index!);
-          restoreSession(sessions[idx]);
-        });
-      });
-
-      const listEl = shadow.querySelector(".ht-session-restore-list") as HTMLElement | null;
-      if (listEl) {
-        listEl.addEventListener("wheel", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (sessions.length === 0) return;
-          const next = moveVisibleSelectionFromWheel(
-            sessions.map((_, index) => index),
-            activeIndex,
-            event.deltaY,
-          );
-          if (next === activeIndex) return;
-          activeIndex = next;
-          render();
-        });
-      }
-
-      const activeEl = shadow.querySelector(".ht-session-restore-item.active");
-      if (activeEl) activeEl.scrollIntoView({ block: "nearest" });
-    }
-
-    async function restoreSession(session: TabManagerSession): Promise<void> {
-      try {
-        close();
-        const result = await loadSessionByName(session.name);
-        if (result.ok) {
-          showFeedback(toastMessages.sessionRestore(session.name, result.count ?? 0));
-        }
-      } catch (error) {
-        reportSessionError("Restore session failed", "Failed to restore session", error);
-      }
-    }
-
-    function keyHandler(event: KeyboardEvent): void {
-      if (!document.getElementById("ht-panel-host")) {
-        document.removeEventListener("keydown", keyHandler, true);
-        return;
-      }
-
-      if (matchesAction(event, config, "tabManager", "close")) {
-        event.preventDefault();
-        event.stopPropagation();
-        close();
-        return;
-      }
-      if (matchesAction(event, config, "tabManager", "jump")) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (sessions[activeIndex]) restoreSession(sessions[activeIndex]);
-        return;
-      }
-      if (matchesAction(event, config, "tabManager", "moveDown")) {
-        event.preventDefault();
-        event.stopPropagation();
-        activeIndex = moveVisibleSelectionByDirection(
-          sessions.map((_, index) => index),
-          activeIndex,
-          "down",
-        );
-        render();
-        return;
-      }
-      if (matchesAction(event, config, "tabManager", "moveUp")) {
-        event.preventDefault();
-        event.stopPropagation();
-        activeIndex = moveVisibleSelectionByDirection(
-          sessions.map((_, index) => index),
-          activeIndex,
-          "up",
-        );
-        render();
-        return;
-      }
-      event.stopPropagation();
-    }
-
-    document.addEventListener("keydown", keyHandler, true);
-    window.addEventListener("ht-navigation-mode-changed", onNavigationModeChanged);
-    registerPanelCleanup(close);
-    render();
-    host.focus();
-  } catch (err) {
-    console.error("[Harpoon Telescope] Failed to open session restore overlay:", err);
-    dismissPanel();
-  }
 }

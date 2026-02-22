@@ -10,76 +10,40 @@
 //  - Line cache: DOM only walked once, re-filtered from cache on keystrokes
 //  - Direct DOM refs: no querySelector for active item toggling
 
-import { matchesAction, keyToDisplay } from "../../../shared/keybindings";
+import { matchesAction, keyToDisplay } from "../../../common/contracts/keybindings";
 import {
   createPanelHost,
   removePanelHost,
   registerPanelCleanup,
   getBaseStyles,
-  footerRowHtml,
-  vimBadgeHtml,
   dismissPanel,
-} from "../../shared/panelHost";
-import { escapeHtml, escapeRegex } from "../../../shared/helpers";
-import { parseSlashFilterQuery } from "../../../shared/filterInput";
+} from "../../../common/utils/panelHost";
+import { parseSlashFilterQuery } from "../../../common/utils/filterInput";
 import { grepPage, enrichResult, initLineCache, destroyLineCache } from "./grep";
-import { scrollToText } from "../../../shared/scroll";
-import { showFeedback } from "../../../shared/feedback";
-import { toastMessages } from "../../../shared/toastMessages";
-import { withPerfTrace } from "../../../shared/perf";
+import { scrollToText } from "../../../common/utils/scroll";
+import { showFeedback } from "../../../common/utils/feedback";
+import { toastMessages } from "../../../common/utils/toastMessages";
+import { withPerfTrace } from "../../../common/utils/perf";
 import {
   movePanelListIndexByDirection,
   movePanelListIndexFromWheel,
   movePanelListIndexHalfPage,
 } from "../../../core/panel/panelListController";
-import previewPaneStyles from "../../shared/previewPane.css";
+import {
+  buildHighlightRegex,
+  buildSearchCurrentPageHtml,
+  buildSearchFooterHtml,
+  getTagBadgeColors,
+  highlightText,
+  ITEM_HEIGHT,
+  MAX_DOM_ELEMENTS,
+  MAX_TEXT_BYTES,
+  POOL_BUFFER,
+  renderSearchPreview,
+  VALID_FILTERS,
+} from "./searchCurrentPageView";
+import previewPaneStyles from "../../../common/utils/previewPane.css";
 import searchCurrentPageStyles from "./searchCurrentPage.css";
-
-// Page size limits — only block truly massive pages
-const MAX_DOM_ELEMENTS = 200_000;
-const MAX_TEXT_BYTES = 10 * 1024 * 1024; // 10 MB
-
-// Valid slash commands that map to SearchFilter values
-const VALID_FILTERS: Record<string, SearchFilter> = {
-  "/code": "code",
-  "/headings": "headings",
-  "/img": "images",
-  "/links": "links",
-};
-
-// Badge colors by element tag category
-const TAG_COLORS: Record<string, { bg: string; fg: string }> = {
-  PRE:  { bg: "rgba(175,130,255,0.2)", fg: "#af82ff" },
-  CODE: { bg: "rgba(175,130,255,0.2)", fg: "#af82ff" },
-  H1: { bg: "rgba(50,215,75,0.2)", fg: "#32d74b" },
-  H2: { bg: "rgba(50,215,75,0.2)", fg: "#32d74b" },
-  H3: { bg: "rgba(50,215,75,0.2)", fg: "#32d74b" },
-  H4: { bg: "rgba(50,215,75,0.2)", fg: "#32d74b" },
-  H5: { bg: "rgba(50,215,75,0.2)", fg: "#32d74b" },
-  H6: { bg: "rgba(50,215,75,0.2)", fg: "#32d74b" },
-  A: { bg: "rgba(255,159,10,0.2)", fg: "#ff9f0a" },
-  IMG: { bg: "rgba(0,199,190,0.2)", fg: "#00c7be" },
-};
-const DEFAULT_TAG_COLOR = { bg: "rgba(255,255,255,0.08)", fg: "#808080" };
-const URL_BADGE_COLOR = { bg: "rgba(255,45,146,0.2)", fg: "#ff2d92" };
-
-function getTagBadgeColors(tag: string | undefined): { bg: string; fg: string } {
-  if (!tag) return DEFAULT_TAG_COLOR;
-  return TAG_COLORS[tag] || DEFAULT_TAG_COLOR;
-}
-
-function getTagBadgeInlineStyle(tag: string | undefined): string {
-  const colors = getTagBadgeColors(tag);
-  return ` style="background:${colors.bg};color:${colors.fg};"`;
-}
-
-function getUrlBadgeInlineStyle(): string {
-  return ` style="background:${URL_BADGE_COLOR.bg};color:${URL_BADGE_COLOR.fg};"`;
-}
-
-// Virtual scrolling constants
-const ITEM_HEIGHT = 28;    // px per result row (hardcoded in searchCurrentPage.css)
-const POOL_BUFFER = 5;     // extra items above/below viewport
 
 // Ephemeral per-page state for resume
 let lastSearchState: { query: string } | null = null;
@@ -110,79 +74,12 @@ export async function openSearchCurrentPage(
     shadow.appendChild(style);
 
     const wrapper = document.createElement("div");
-    wrapper.innerHTML = `
-      <div class="ht-backdrop"></div>
-      <div class="ht-search-page-container">
-        <div class="ht-titlebar">
-          <div class="ht-traffic-lights">
-            <button class="ht-dot ht-dot-close" title="Close (${escapeHtml(closeKeyDisplay)})"></button>
-          </div>
-          <span class="ht-titlebar-text">
-            <span class="ht-title-label">Search — Current Page</span>
-            <span class="ht-title-sep">|</span>
-            <span class="ht-title-filters">Filters:
-              <span class="ht-title-filter" data-filter="code">/code</span>
-              <span class="ht-title-filter" data-filter="headings">/headings</span>
-              <span class="ht-title-filter" data-filter="images">/img</span>
-              <span class="ht-title-filter" data-filter="links">/links</span>
-            </span>
-            <span class="ht-title-count"></span>
-          </span>
-          ${vimBadgeHtml(config)}
-        </div>
-        <div class="ht-search-page-body">
-          <div class="ht-search-page-input-wrap ht-ui-input-wrap">
-            <span class="ht-prompt ht-ui-input-prompt">&gt;</span>
-            <input type="text" class="ht-search-page-input ht-ui-input-field" placeholder="Search Current Page . . ." />
-          </div>
-          <div class="ht-filter-pills"></div>
-          <div class="ht-search-page-columns">
-            <div class="ht-results-pane">
-              <div class="ht-results-sentinel"></div>
-              <div class="ht-results-list"></div>
-            </div>
-            <div class="ht-preview-pane">
-              <div class="ht-preview-header ht-ui-pane-header">Preview</div>
-              <div class="ht-preview-breadcrumb" style="display:none;"></div>
-              <div class="ht-preview-placeholder">Select a result to preview</div>
-              <div class="ht-preview-content" style="display:none;"></div>
-            </div>
-          </div>
-          <div class="ht-footer"></div>
-        </div>
-      </div>
-    `;
+    wrapper.innerHTML = buildSearchCurrentPageHtml(config, closeKeyDisplay);
     shadow.appendChild(wrapper);
 
-    // Build footer hints
     const footer = shadow.querySelector(".ht-footer") as HTMLElement;
-    const upKey = keyToDisplay(config.bindings.search.moveUp.key);
-    const downKey = keyToDisplay(config.bindings.search.moveDown.key);
-    const switchPaneKey = keyToDisplay(config.bindings.search.switchPane.key);
-    const focusSearchKey = keyToDisplay(config.bindings.search.focusSearch.key);
-    const clearSearchKey = keyToDisplay(config.bindings.search.clearSearch.key);
-    const acceptKey = keyToDisplay(config.bindings.search.accept.key);
-    const closeKey = keyToDisplay(config.bindings.search.close.key);
     function renderFooter(): void {
-      const navHints = config.navigationMode === "standard"
-        ? [
-          { key: "j/k", desc: "nav" },
-          { key: `${upKey}/${downKey}`, desc: "nav" },
-          { key: "Ctrl+D/U", desc: "half-page" },
-        ]
-        : [
-          { key: `${upKey}/${downKey}`, desc: "nav" },
-        ];
-      footer.innerHTML = `
-        ${footerRowHtml(navHints)}
-        ${footerRowHtml([
-          { key: switchPaneKey, desc: "list" },
-          { key: focusSearchKey, desc: "search" },
-          { key: clearSearchKey, desc: "clear-search" },
-          { key: acceptKey, desc: "jump" },
-          { key: closeKey, desc: "close" },
-        ])}
-      `;
+      footer.innerHTML = buildSearchFooterHtml(config);
     }
 
     function onNavigationModeChanged(): void {
@@ -196,14 +93,12 @@ export async function openSearchCurrentPage(
     const resultsSentinel = shadow.querySelector(".ht-results-sentinel") as HTMLElement;
     const previewHeader = shadow.querySelector(".ht-preview-header") as HTMLElement;
     const previewBreadcrumb = shadow.querySelector(".ht-preview-breadcrumb") as HTMLElement;
-    const previewPane = shadow.querySelector(".ht-preview-pane") as HTMLElement;
     const previewPlaceholder = shadow.querySelector(".ht-preview-placeholder") as HTMLElement;
     const previewContent = shadow.querySelector(".ht-preview-content") as HTMLElement;
     const filterPills = shadow.querySelector(".ht-filter-pills") as HTMLElement;
     const closeBtn = shadow.querySelector(".ht-dot-close") as HTMLElement;
     const backdrop = shadow.querySelector(".ht-backdrop") as HTMLElement;
     const resultsPane = shadow.querySelector(".ht-results-pane") as HTMLElement;
-    const titleText = shadow.querySelector(".ht-titlebar-text") as HTMLElement;
     const titleFilterSpans = shadow.querySelectorAll(".ht-title-filter") as NodeListOf<HTMLElement>;
     const titleCount = shadow.querySelector(".ht-title-count") as HTMLElement;
 
@@ -296,21 +191,6 @@ export async function openSearchCurrentPage(
 
     let highlightRegex: RegExp | null = null;
 
-    function buildHighlightRegex(): void {
-      if (!currentQuery) { highlightRegex = null; return; }
-      try {
-        const terms = currentQuery.split(/\s+/).filter(Boolean);
-        const pattern = terms.map((term) => `(${escapeRegex(escapeHtml(term))})`).join("|");
-        highlightRegex = new RegExp(pattern, "gi");
-      } catch (_) { highlightRegex = null; }
-    }
-
-    function highlightMatch(text: string): string {
-      const escaped = escapeHtml(text);
-      if (!highlightRegex) return escaped;
-      return escaped.replace(highlightRegex, "<mark>$1</mark>");
-    }
-
     // -- Virtual scrolling --
 
     /** Get or create a pooled result item element */
@@ -354,7 +234,7 @@ export async function openSearchCurrentPage(
 
       // Update text
       const span = item.children[1] as HTMLElement;
-      span.innerHTML = highlightMatch(result.text);
+      span.innerHTML = highlightText(result.text, highlightRegex);
 
       // Active state
       if (resultIdx === activeIndex) {
@@ -422,7 +302,7 @@ export async function openSearchCurrentPage(
     function renderResults(): void {
       try {
         withPerfTrace("searchCurrentPage.renderResults", () => {
-          buildHighlightRegex();
+          highlightRegex = buildHighlightRegex(currentQuery);
 
           if (results.length === 0) {
             resultsSentinel.style.height = "0px";
@@ -525,91 +405,16 @@ export async function openSearchCurrentPage(
 
     function updatePreview(): void {
       try {
-        if (results.length === 0 || !results[activeIndex]) {
-          previewHeader.textContent = "Preview";
-          previewBreadcrumb.style.display = "none";
-          showPreviewPlaceholder(true);
-          return;
-        }
-
-        const activeResult = results[activeIndex];
-        enrichResult(activeResult); // lazy: compute domContext/ancestorHeading/href on demand
-        const tag = activeResult.tag || "";
-        previewHeader.textContent = `Preview \u2014 L${activeResult.lineNumber}`;
-        showPreviewPlaceholder(false);
-
-        // Breadcrumb: primary row ([TAG] + heading) and URL row.
-        let primaryRowHtml = "";
-        if (tag) {
-          primaryRowHtml += `<span class="ht-bc-tag"${getTagBadgeInlineStyle(tag)}>${escapeHtml(tag)}</span>`;
-        }
-        if (activeResult.ancestorHeading) {
-          primaryRowHtml += `<span class="ht-bc-heading">${escapeHtml(activeResult.ancestorHeading)}</span>`;
-        }
-        let breadcrumbHtml = primaryRowHtml
-          ? `<span class="ht-bc-row ht-bc-row-main">${primaryRowHtml}</span>`
-          : "";
-        if (activeResult.href) {
-          // Show shortened href
-          let displayHref = activeResult.href;
-          try {
-            displayHref = new URL(activeResult.href).pathname + new URL(activeResult.href).hash;
-          } catch (_) {
-            // Ignore URL parsing failures and keep raw href
-          }
-          breadcrumbHtml += `<span class="ht-bc-row ht-bc-row-url"><span class="ht-bc-href"><span class="ht-bc-tag"${getUrlBadgeInlineStyle()}>URL</span> -&gt; ${escapeHtml(displayHref)}</span></span>`;
-        }
-        if (breadcrumbHtml) {
-          previewBreadcrumb.innerHTML = breadcrumbHtml;
-          previewBreadcrumb.style.display = "";
-        } else {
-          previewBreadcrumb.style.display = "none";
-        }
-
-        // Use DOM-aware context if available, fall back to flat context
-        const contextLines = activeResult.domContext && activeResult.domContext.length > 0
-          ? activeResult.domContext
-          : activeResult.context && activeResult.context.length > 0
-            ? activeResult.context
-            : [activeResult.text];
-
-        const isCode = tag === "PRE" || tag === "CODE";
-        let html = "";
-
-        if (isCode) {
-          // Code block: monospace container with line numbers
-          html += '<div class="ht-preview-code-ctx">';
-          for (let i = 0; i < contextLines.length; i++) {
-            const line = contextLines[i];
-            const trimmed = line.replace(/\s+/g, " ").trim();
-            const isMatch = (
-              trimmed === activeResult.text
-              || line.replace(/\s+/g, " ").trim() === activeResult.text
-            );
-            const cls = isMatch ? "ht-preview-line match" : "ht-preview-line";
-            const lineContent = isMatch ? highlightMatch(line) : escapeHtml(line);
-            html += `<span class="${cls}"><span class="ht-line-num">${i + 1}</span>${lineContent}</span>`;
-          }
-          html += '</div>';
-        } else {
-          // Prose: clean text blocks
-          html += '<div class="ht-preview-prose-ctx">';
-          for (let i = 0; i < contextLines.length; i++) {
-            const line = contextLines[i];
-            const isMatch = (
-              line === activeResult.text
-              || line.replace(/\s+/g, " ").trim() === activeResult.text
-            );
-            const cls = isMatch ? "ht-preview-line match" : "ht-preview-line";
-            const lineContent = isMatch ? highlightMatch(line) : escapeHtml(line);
-            html += `<span class="${cls}">${lineContent}</span>`;
-          }
-          html += '</div>';
-        }
-
-        previewContent.innerHTML = html;
-        const matchLine = previewContent.querySelector(".match");
-        if (matchLine) matchLine.scrollIntoView({ block: "center" });
+        renderSearchPreview({
+          results,
+          activeIndex,
+          highlightRegex,
+          previewHeader,
+          previewBreadcrumb,
+          previewPlaceholder,
+          previewContent,
+          enrichResult,
+        });
       } catch (error) {
         failClose("Page-search preview render failed", error);
       }

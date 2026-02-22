@@ -2,19 +2,19 @@
 // Imported by contentScript.ts as the single bootstrap for all content-side logic.
 
 import browser from "webextension-polyfill";
-import { DEFAULT_KEYBINDINGS, matchesAction } from "../shared/keybindings";
+import { DEFAULT_KEYBINDINGS, matchesAction } from "../common/contracts/keybindings";
 import { grepPage, getPageContent } from "../ui/panels/searchCurrentPage/grep";
-import { scrollToText } from "../shared/scroll";
-import { showFeedback } from "../shared/feedback";
-import { toastMessages } from "../shared/toastMessages";
+import { scrollToText } from "../common/utils/scroll";
+import { showFeedback } from "../common/utils/feedback";
+import { toastMessages } from "../common/utils/toastMessages";
 import { openTabManager } from "../ui/panels/tabManager/tabManager";
 import { openSessionMenu } from "../ui/panels/sessionMenu/sessionMenu";
 import { openSearchCurrentPage } from "../ui/panels/searchCurrentPage/searchCurrentPage";
 import { openSearchOpenTabs } from "../ui/panels/searchOpenTabs/searchOpenTabs";
 import { openHelpOverlay } from "../ui/panels/help/help";
-import { dismissPanel } from "../ui/shared/panelHost";
-import { ContentRuntimeMessage } from "../shared/runtimeMessages";
-import { openSessionRestoreOverlay } from "../ui/panels/sessionMenu/session";
+import { dismissPanel } from "../common/utils/panelHost";
+import { ContentRuntimeMessage } from "../common/contracts/runtimeMessages";
+import { openSessionRestoreOverlay } from "../ui/panels/sessionMenu/sessionRestoreOverlay";
 import {
   addCurrentTabToTabManager,
   cycleTabManagerSlot,

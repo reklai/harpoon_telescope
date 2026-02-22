@@ -2,6 +2,13 @@
 
 This file exists so I can grow from junior -> mid -> senior by mastering how this codebase actually works. It is a full rebuildable walkthrough, not a tutorial. It is meant to make me confident explaining every subsystem in an interview, because this product is mine and I can defend every tradeoff.
 
+> **Structure Contract (Flow-First)**
+> - Keep the existing top-level section order stable unless a reorder is explicitly requested.
+> - Insert new learning content into the most relevant existing section before creating new top-level sections.
+> - Keep recap/interview/niche synthesis content near the end unless it is required earlier for comprehension.
+> - Preserve dataflow readability: primitives -> runtime wiring -> feature flows -> system-level patterns -> operations.
+> - Prefer small, intentional edits over large reshuffles.
+
 ## Current Focus (System-Wide)
 
 - Treat the product as one integrated system: search, tab manager, sessions, help, shared runtime contracts, and build/release tooling.

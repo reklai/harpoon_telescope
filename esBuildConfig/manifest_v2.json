@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "Harpoon Telescope",
   "version": "2.0.0",
-  "description": "Harpoon + Telescope inspired browser extension — grep tabs, live preview, vim motions, and anchor up to 4 tabs with scroll memory.",
+  "description": "Harpoon + Telescope inspired browser extension — search pages, live preview, and anchor up to 4 tabs with scroll memory.",
   "browser_specific_settings": {
     "gecko": {
       "id": "@harpoon-telescope.reklai",

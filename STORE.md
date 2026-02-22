@@ -1,23 +1,92 @@
 # Store Listing — Harpoon Telescope
 
-## Release To-Do (Top Priority First)
+## Tonight Submission Roadmap (Do This In Order)
 
-1. Tab Manager and Session Manager reliability sign-off (release gate).
-2. Validate rapid-switch stability: repeated slot jumps (`Alt+1..4`) and cycle keys (`Alt+-`, `Alt+=`) must not freeze, lock input, or miss jumps.
-3. Validate scroll-location fidelity: jump, reopen-closed-tab, and session load (reused and newly opened tabs) must restore saved `scrollX/scrollY` reliably.
-4. Validate panel-open reliability after focus changes (switch browser <-> IDE repeatedly): every panel must open instantly without requiring tab swaps.
-5. Run full verification suite before packaging: `npm run ci`.
-6. Build both store targets: `npm run build:firefox`, then `npm run build:chrome`.
-7. Run store-policy and manifest consistency checks: `npm run verify:store`, then `npm run verify:compat`.
-8. Finalize store assets and metadata (icons, screenshots, promo text, privacy links, support URL).
-9. Submit Firefox package to AMO with `STORE.md` copy + permissions rationale + privacy policy.
-10. Submit Chrome package to Chrome Web Store with same listing copy adapted to CWS form fields.
-11. Post-submission smoke test on production listing builds in both browsers.
-12. Run focused structure-enabled regression tests before submission:
-    - `node --test test/runtime-wiring.test.mjs`
-    - `node --test test/session-core.test.mjs`
-    - `node --test test/upgrade-path.test.mjs`
-13. Regression-check composability layer paths before release (`src/lib/core/*` state transitions + `src/lib/adapters/runtime/*` API boundaries).
+### 0) Your account prerequisites (you)
+
+1. Chrome Web Store developer account: registered and paid one-time fee.
+2. Chrome Web Store account: 2-Step Verification enabled.
+3. Chrome Web Store account: contact email verified in dashboard settings.
+4. AMO developer account: ready to submit listing.
+5. YouTube upload access: ready for an unlisted promo video URL (required in CWS store listing flow).
+
+### 1) Your required listing assets (you)
+
+Chrome Web Store listing assets to prepare before upload:
+
+1. Store icon: `128x128`.
+2. Screenshots: at least one `1280x800` (up to five).
+3. Small promo tile: `440x280` PNG/JPEG.
+4. Promo video: YouTube URL.
+5. Marquee promo tile: `1400x560` PNG/JPEG (optional but recommended).
+
+AMO listing assets/content to prepare:
+
+1. Clear screenshots that show core flows (recommended `1280x800`, 1.6:1 ratio).
+2. Support URL and/or support email.
+3. Privacy policy URL/text (use `PRIVACY.md` as source).
+4. Accurate feature summary (no misleading claims).
+
+### 2) Build and verification steps (run in repo)
+
+1. Run full gate: `npm run ci`.
+2. Build Firefox package target: `npm run build:firefox`.
+3. Zip `dist/` as Firefox upload artifact (`.xpi` or `.zip` with `manifest.json` at root).
+4. Build Chrome package target: `npm run build:chrome`.
+5. Zip `dist/` as Chrome upload artifact.
+6. Prepare AMO source archive (required for listed and unlisted submissions as of **November 3, 2025**).
+
+Suggested command sequence:
+
+```sh
+VERSION=$(node -p "require('./package.json').version")
+mkdir -p release
+
+npm run ci
+
+npm run build:firefox
+(cd dist && zip -qr "../release/harpoon-telescope-firefox-v${VERSION}.xpi" .)
+
+npm run build:chrome
+(cd dist && zip -qr "../release/harpoon-telescope-chrome-v${VERSION}.zip" .)
+
+git archive --format=zip -o "release/harpoon-telescope-source-v${VERSION}.zip" HEAD
+```
+
+### 3) Submit to AMO (Firefox) first
+
+1. Upload Firefox package (`.xpi`/zip artifact from Firefox build).
+2. Upload source archive when prompted.
+3. Paste summary/description from this file.
+4. Add permission rationale and privacy policy.
+5. Submit for review.
+
+### 4) Submit to Chrome Web Store
+
+1. Dashboard -> Add new item -> upload Chrome zip package.
+2. Fill **Store listing** tab (copy from this file).
+3. Fill **Privacy** tab (must match behavior and privacy policy).
+4. Fill **Distribution** and (if needed) **Test instructions**.
+5. Submit for review (optionally use deferred publishing).
+
+### 5) Post-submission checklist
+
+1. Monitor reviewer emails for both stores.
+2. If reviewer asks for clarification, respond with exact feature/permission mapping from this file.
+3. After approval, install listing build from each store and do one smoke pass.
+
+### Official reference docs (review before submitting)
+
+- Chrome Web Store register/publish/listing:
+  - https://developer.chrome.com/docs/webstore/register
+  - https://developer.chrome.com/docs/webstore/publish
+  - https://developer.chrome.com/docs/webstore/cws-dashboard-listing
+  - https://developer.chrome.com/docs/webstore/program-policies/listing-requirements
+  - https://developer.chrome.com/docs/webstore/program-policies/two-step-verification/
+- Firefox/AMO publish and policy guidance:
+  - https://extensionworkshop.com/documentation/publish/submitting-an-add-on/
+  - https://extensionworkshop.com/documentation/publish/source-code-submission/
+  - https://extensionworkshop.com/documentation/develop/create-an-appealing-listing/
 
 Use this content when submitting to Firefox Add-ons (AMO) and Chrome Web Store.
 Category: **Productivity**
@@ -55,8 +124,8 @@ Filters combine freely: "/code /links api" searches both code and links for "api
 **Switch tabs by frequency**
 Press Alt+Shift+F to see your most-used tabs ranked by how often and how recently you visit them. Type to filter the list by title or URL. Jump to any tab with Enter.
 
-**Fully customizable keyboard shortcuts**
-Every keybinding can be changed in the options page. Collision detection warns you before you create conflicts.
+**Configurable keyboard shortcuts**
+Global commands and panel actions are configurable in the options page. Collision detection warns you before you create conflicts.
 
 **Standard navigation aliases**
 j/k aliases are always available for up/down movement on top of the standard arrow keys. List views also support Ctrl+D / Ctrl+U half-page movement.
@@ -76,7 +145,7 @@ Works on Firefox, Chrome, and Zen Browser.
 
 ## Tags / Keywords
 
-tabs, productivity, keyboard, navigation, search, vim, harpoon, telescope, tab manager, shortcuts
+tabs, productivity, keyboard, navigation, search, harpoon, telescope, tab manager, shortcuts, session manager
 
 ## Additional notes for Chrome Web Store "Why do you need these permissions?"
 

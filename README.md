@@ -81,7 +81,7 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 | `Alt+S` | Open session menu |
 | `Alt+Shift+S` | Open save session |
 | `Alt+M` | Open help menu |
-All keybindings are fully configurable in the extension options page with per-scope collision detection.
+Global/panel keybindings are configurable in the extension options page with per-scope collision detection.
 
 ### Keybinding Scope Coverage
 - Configurable (single source of truth in `src/lib/common/contracts/keybindings.ts`): global open commands, tab manager panel actions, search panel actions, and session panel actions.
@@ -149,6 +149,28 @@ Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps
 2. If permissions, storage limits, or privacy claims changed, update `manifest_v2.json`, `manifest_v3.json`, `STORE.md`, and `PRIVACY.md` together in the same PR.
 3. Run `npm run ci` before tagging a release. This includes `npm run verify:upgrade` and `npm run verify:store`, which block releases on migration regressions or manifest/docs/privacy-policy drift.
 4. Build the target package (`npm run build:firefox` and/or `npm run build:chrome`) and use `STORE.md` + `PRIVACY.md` as the source of truth for store submission text.
+
+### Store Submission (Tonight)
+
+Follow the full checklist in `STORE.md` (top section: `Tonight Submission Roadmap`), then package both targets:
+
+```sh
+VERSION=$(node -p "require('./package.json').version")
+mkdir -p release
+
+npm run ci
+
+npm run build:firefox
+(cd dist && zip -qr "../release/harpoon-telescope-firefox-v${VERSION}.xpi" .)
+
+npm run build:chrome
+(cd dist && zip -qr "../release/harpoon-telescope-chrome-v${VERSION}.zip" .)
+
+# AMO source submission archive
+git archive --format=zip -o "release/harpoon-telescope-source-v${VERSION}.zip" HEAD
+```
+
+The `release/` folder artifacts are ready to upload directly to AMO/CWS.
 
 ## Installation (Development)
 

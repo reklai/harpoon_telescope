@@ -13,6 +13,7 @@
 9. Submit Firefox package to AMO with `STORE.md` copy + permissions rationale + privacy policy.
 10. Submit Chrome package to Chrome Web Store with same listing copy adapted to CWS form fields.
 11. Post-submission smoke test on production listing builds in both browsers.
+12. Regression-check composability layer paths before release (`src/lib/core/*` state transitions + `src/lib/adapters/runtime/*` API boundaries).
 
 Use this content when submitting to Firefox Add-ons (AMO) and Chrome Web Store.
 Category: **Productivity**
@@ -55,6 +56,9 @@ Every keybinding can be changed in the options page. Collision detection warns y
 
 **Standard navigation aliases**
 j/k aliases are always available for up/down movement on top of the standard arrow keys. List views also support Ctrl+D / Ctrl+U half-page movement.
+
+**Predictable panel behavior**
+Search, Tab Manager, and Sessions share the same list navigation semantics (arrow/j/k, wheel, half-page jumps) for consistent muscle memory.
 
 **Sessions**
 Press Alt+S to open the session menu (load view). Press Alt+Shift+S to open save-session directly. Keep up to 4 sessions. Save flow prevents duplicate names and duplicate-content saves.

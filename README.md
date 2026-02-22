@@ -167,7 +167,12 @@ harpoon_telescope/
 │   │       └── toolbarPopup.css
 │   ├── lib/                                # Feature modules + shared utilities
 │   │   ├── appInit/
+│   │   ├── adapters/
+│   │   │   └── runtime/                    # Single runtime-message boundary layer
 │   │   ├── background/                     # Background domains + message/command routers
+│   │   ├── core/
+│   │   │   ├── panel/                      # Shared list-navigation controller
+│   │   │   └── sessionMenu/                # Pure session state machine + selectors
 │   │   ├── help/
 │   │   ├── searchCurrentPage/
 │   │   ├── searchOpenTabs/
@@ -194,9 +199,10 @@ harpoon_telescope/
       runtime messages          runtime messages
                 │                      │
    ┌────────────▼──────────┐   ┌──────▼───────────────┐
-   │ contentScript.js     │   │ optionsPage.js      │
+   │ contentScript.js      │   │ optionsPage.js      │
    │ overlay UI + keybinds │   │ keybinding editor    │
-   │ + page grep + preview │   │ + nav mode settings  │
+   │ + action registry     │   │ + nav mode settings  │
+   │ + page grep + preview │   │                      │
    └────────────┬──────────┘   └──────────────────────┘
                 │
         opens/jumps tabs
@@ -215,6 +221,9 @@ harpoon_telescope/
 - **Store policy guardrail** — `npm run verify:store` keeps manifests, store copy, and privacy policy aligned
 - **Background domain routing** — `background.ts` is orchestration; tab manager/session handlers live in `src/lib/background/*`
 - **`ensureTabManagerLoaded()` guards** — tab manager state is lazily reloaded when background context is cold-started
+- **Runtime adapter boundary** — runtime message calls are centralized in `src/lib/adapters/runtime/*` so UI modules don't send raw messages directly
+- **Pure core modules for UI state** — `src/lib/core/sessionMenu/sessionCore.ts` isolates session transient-state transitions and derived selectors
+- **Shared list-navigation engine** — `src/lib/core/panel/panelListController.ts` keeps wheel/arrow/half-page behavior consistent across overlays
 - **Configurable keybindings** — all bindings in `browser.storage.local` with per-scope collision detection
 - **Navigation behavior** — standard mode is always enabled; `j/k` aliases are additive with base up/down bindings
 - **rAF-throttled rendering** — frecency and telescope views defer DOM updates to animation frames

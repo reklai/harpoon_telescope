@@ -89,18 +89,18 @@ Read this first before the detailed flow chapters.
                  v
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │ Content Script (src/lib/appInit/appInit.ts)                                 │
-│ - Global keybinding dispatch (open panels, add/jump commands)               │
+│ - Global action registry (keybinding -> action handler)                      │
 │ - Overlay lifecycle guard (single panel host)                               │
 │ - Page-owned operations (DOM grep, scroll capture/restore requests)         │
 └───────────────────────────────────────────────────────────────────────────────┘
-        │ opens overlays in Shadow DOM                 │ sendMessage(...)
+        │ opens overlays in Shadow DOM                 │ via runtime adapters
         v                                               v
 ┌────────────────────────────────┐      ┌──────────────────────────────────────┐
 │ Overlay UIs (content context) │      │ Background (privileged context)      │
 │ - searchCurrentPage           │<---->│ - tabManagerDomain                    │
 │ - searchOpenTabs              │      │ - sessionMessageHandler + sessions.ts │
-│ - tabManager                  │      │ - startupRestore / commandRouter       │
-│ - sessionMenu                 │      │ - misc/runtime routers                 │
+│ - tabManager                  │      │ - startupRestore / commandRouter      │
+│ - sessionMenu                 │      │ - misc/runtime routers                │
 │ - help                        │      └──────────────────────────────────────┘
 └────────────────────────────────┘                       │
         │                                                │ reads/writes
@@ -113,6 +113,14 @@ Read this first before the detailed flow chapters.
                                                │ - keybindings                │
                                                │ - storageSchemaVersion       │
                                                └───────────────────────────────┘
+        │
+        v
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ Composability Layer (src/lib/core + src/lib/adapters/runtime)               │
+│ - core/sessionMenu/sessionCore.ts: pure session state transitions/selectors │
+│ - core/panel/panelListController.ts: shared list move/wheel/half-page math  │
+│ - adapters/runtime/*: single runtime sendMessage boundary                    │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
 How to use this map:
@@ -571,7 +579,12 @@ harpoon_telescope/
 │   │       └── optionsPage.css
 │   ├── lib/
 │   │   ├── appInit/                 # contentScript bootstrap
+│   │   ├── adapters/
+│   │   │   └── runtime/             # typed runtime boundary (all sendMessage calls)
 │   │   ├── background/              # background domains + runtime/command routers
+│   │   ├── core/
+│   │   │   ├── panel/               # shared list-navigation controller
+│   │   │   └── sessionMenu/         # pure session state machine + view selectors
 │   │   ├── help/                    # Help overlay
 │   │   ├── searchCurrentPage/       # Telescope search (current page)
 │   │   ├── searchOpenTabs/          # Frecency open tabs list
@@ -722,7 +735,7 @@ Entry point `src/entryPoints/contentScript/contentScript.ts` is minimal: it call
 
 - cleanup on extension reload (`window.__harpoonTelescopeCleanup`)
 - keybinding cache + invalidation
-- global key handler (panel open commands)
+- global action registry (panel + tab-manager actions)
 - message router (`GREP`, `GET_SCROLL`, `OPEN_*`)
 
 **Why cleanup on reload?**
@@ -811,6 +824,8 @@ Owns session UI overlays: load list, save panel, replace picker, and startup res
 - save panel previews current Tab Manager tabs under the name input
 - duplicate-name save errors are inline; identical-content saves are pre-guarded with toast (`No changes to save, already saved as "<name>"`)
 - session search uses `Search Sessions . . .` and `Shift+Space clear-search`
+- transient state logic now flows through `src/lib/core/sessionMenu/sessionCore.ts` so mode transitions are pure/testable
+- list movement behavior reuses `src/lib/core/panel/panelListController.ts` for consistency with other overlays
 
 ---
 
@@ -846,6 +861,19 @@ If the user customizes shortcuts, the help menu reflects their actual bindings, 
 - `scroll.ts`: scroll-to-text highlight
 - `feedback.ts`: toast messages
 - `sessions.ts`: session CRUD helpers
+
+## Composability Modules — src/lib/core + src/lib/adapters/runtime
+
+- `src/lib/core/sessionMenu/sessionCore.ts`: pure session mode transitions and derived view selectors (no DOM/browser APIs)
+- `src/lib/core/panel/panelListController.ts`: shared list index math for arrows, wheel, and half-page jumps
+- `src/lib/adapters/runtime/runtimeClient.ts`: central runtime client with retry policy
+- `src/lib/adapters/runtime/sessionApi.ts`, `tabManagerApi.ts`, `openTabsApi.ts`, `keybindingsApi.ts`: domain-level API wrappers used by overlays and popup
+
+Why this matters for growth:
+
+1. You can unit-test state transitions without opening UI.
+2. You can change runtime transport behavior in one place.
+3. You can reuse panel list behavior without copy/paste drift.
 - `frecencyScoring.ts`: frecency scoring + eviction
 - `runtimeMessages.ts`: typed message contracts for background <-> content runtime channels
 

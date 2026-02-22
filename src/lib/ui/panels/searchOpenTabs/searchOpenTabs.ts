@@ -1,7 +1,7 @@
 // Search Open Tabs overlay — sorted list of all open tabs with fuzzy filter.
 // Alt+Shift+F to open, type to filter, Tab to cycle input/results, Enter to jump.
 
-import { matchesAction, keyToDisplay } from "../../../shared/keybindings";
+import { matchesAction, keyToDisplay } from "../../../common/contracts/keybindings";
 import {
   createPanelHost,
   removePanelHost,
@@ -10,9 +10,9 @@ import {
   footerRowHtml,
   vimBadgeHtml,
   dismissPanel,
-} from "../../shared/panelHost";
-import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../../../shared/helpers";
-import { withPerfTrace } from "../../../shared/perf";
+} from "../../../common/utils/panelHost";
+import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../../../common/utils/helpers";
+import { withPerfTrace } from "../../../common/utils/perf";
 import searchOpenTabsStyles from "./searchOpenTabs.css";
 import { listFrecencyEntriesWithRetry, switchToTabById } from "../../../adapters/runtime/openTabsApi";
 import {

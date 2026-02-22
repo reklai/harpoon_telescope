@@ -2,7 +2,7 @@
 // Supports keyboard nav (arrows, vim j/k), number keys 1-4 to jump,
 // "w" key to enter swap mode, and "d" to delete.
 
-import { MAX_TAB_MANAGER_SLOTS, matchesAction, keyToDisplay } from "../../../shared/keybindings";
+import { MAX_TAB_MANAGER_SLOTS, matchesAction, keyToDisplay } from "../../../common/contracts/keybindings";
 import {
   createPanelHost,
   removePanelHost,
@@ -11,10 +11,10 @@ import {
   footerRowHtml,
   vimBadgeHtml,
   dismissPanel,
-} from "../../shared/panelHost";
-import { escapeHtml, extractDomain } from "../../../shared/helpers";
-import { showFeedback } from "../../../shared/feedback";
-import { toastMessages } from "../../../shared/toastMessages";
+} from "../../../common/utils/panelHost";
+import { escapeHtml, extractDomain } from "../../../common/utils/helpers";
+import { showFeedback } from "../../../common/utils/feedback";
+import { toastMessages } from "../../../common/utils/toastMessages";
 import tabManagerStyles from "./tabManager.css";
 import {
   jumpToTabManagerSlot,

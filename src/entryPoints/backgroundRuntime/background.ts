@@ -1,15 +1,15 @@
 // Background entrypoint — composes domain handlers and runtime routers.
 
 import browser from "webextension-polyfill";
-import { recordFrecencyVisit, removeFrecencyEntry } from "../../lib/shared/frecencyScoring";
-import { registerCommandRouter } from "../../lib/background/commandRouter";
-import { createSessionMessageHandler } from "../../lib/background/sessionMessageHandler";
-import { createTabManagerDomain } from "../../lib/background/tabManagerDomain";
-import { createTabManagerMessageHandler } from "../../lib/background/tabManagerMessageHandler";
-import { miscMessageHandler } from "../../lib/background/miscMessageHandler";
-import { registerRuntimeMessageRouter } from "../../lib/background/runtimeRouter";
-import { registerStartupRestore } from "../../lib/background/startupRestore";
-import { migrateStorageIfNeeded } from "../../lib/shared/storageMigrationsRuntime";
+import { recordFrecencyVisit, removeFrecencyEntry } from "../../lib/common/utils/frecencyScoring";
+import { registerCommandRouter } from "../../lib/backgroundRuntime/handlers/commandRouter";
+import { createSessionMessageHandler } from "../../lib/backgroundRuntime/handlers/sessionMessageHandler";
+import { createTabManagerDomain } from "../../lib/backgroundRuntime/domains/tabManagerDomain";
+import { createTabManagerMessageHandler } from "../../lib/backgroundRuntime/handlers/tabManagerMessageHandler";
+import { miscMessageHandler } from "../../lib/backgroundRuntime/handlers/miscMessageHandler";
+import { registerRuntimeMessageRouter } from "../../lib/backgroundRuntime/handlers/runtimeRouter";
+import { registerStartupRestore } from "../../lib/backgroundRuntime/lifecycle/startupRestore";
+import { migrateStorageIfNeeded } from "../../lib/common/utils/storageMigrationsRuntime";
 
 async function bootstrapBackground(): Promise<void> {
   const migration = await migrateStorageIfNeeded();

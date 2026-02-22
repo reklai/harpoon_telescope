@@ -1,7 +1,7 @@
 import browser from "webextension-polyfill";
-import { loadKeybindings, saveKeybindings } from "../shared/keybindings";
-import { getFrecencyList } from "../shared/frecencyScoring";
-import { grepCurrentTab, getPageContent } from "./pageSearchDomain";
+import { loadKeybindings, saveKeybindings } from "../../common/contracts/keybindings";
+import { getFrecencyList } from "../../common/utils/frecencyScoring";
+import { grepCurrentTab, getPageContent } from "../domains/pageSearchDomain";
 import { RuntimeMessageHandler, UNHANDLED } from "./runtimeRouter";
 
 export const miscMessageHandler: RuntimeMessageHandler = async (message) => {

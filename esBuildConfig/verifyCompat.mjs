@@ -117,7 +117,7 @@ for (const [name, manifest] of [
 
 const requiredSourceFiles = [
   "src/entryPoints/contentScript/contentScript.ts",
-  "src/entryPoints/background/background.ts",
+  "src/entryPoints/backgroundRuntime/background.ts",
   "src/entryPoints/optionsPage/optionsPage.html",
   "src/entryPoints/optionsPage/optionsPage.css",
   "src/entryPoints/toolbarPopup/toolbarPopup.html",

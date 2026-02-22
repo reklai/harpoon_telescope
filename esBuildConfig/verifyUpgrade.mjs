@@ -17,7 +17,7 @@ async function loadMigrationModule() {
   const tempDir = mkdtempSync(join(tmpdir(), "ht-upgrade-verify-"));
   const bundledFile = resolve(tempDir, "storageMigrations.mjs");
   await build({
-    entryPoints: [resolve(root, "src/lib/shared/storageMigrations.ts")],
+    entryPoints: [resolve(root, "src/lib/common/utils/storageMigrations.ts")],
     bundle: true,
     format: "esm",
     platform: "node",

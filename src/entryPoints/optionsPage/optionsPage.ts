@@ -9,8 +9,8 @@ import {
   ACTION_LABELS,
   SCOPE_LABELS,
   DEFAULT_KEYBINDINGS,
-} from "../../lib/shared/keybindings";
-import { escapeHtml } from "../../lib/shared/helpers";
+} from "../../lib/common/contracts/keybindings";
+import { escapeHtml } from "../../lib/common/utils/helpers";
 
 type BindingScope = keyof KeybindingsConfig["bindings"];
 

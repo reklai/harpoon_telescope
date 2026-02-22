@@ -31,7 +31,7 @@ const shared = {
 
 // Each entry point produces one JS file in dist/ (paths relative to project root)
 const entryPoints = [
-  { in: resolve(root, "src/entryPoints/background/background.ts"), out: "background" },
+  { in: resolve(root, "src/entryPoints/backgroundRuntime/background.ts"), out: "background" },
   { in: resolve(root, "src/entryPoints/contentScript/contentScript.ts"), out: "contentScript" },
   { in: resolve(root, "src/entryPoints/toolbarPopup/toolbarPopup.ts"), out: "toolbarPopup/toolbarPopup" },
   { in: resolve(root, "src/entryPoints/optionsPage/optionsPage.ts"), out: "optionsPage/optionsPage" },

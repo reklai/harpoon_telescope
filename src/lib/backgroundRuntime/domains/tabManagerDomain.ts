@@ -1,7 +1,7 @@
 import browser, { Tabs } from "webextension-polyfill";
-import { MAX_TAB_MANAGER_SLOTS } from "../shared/keybindings";
-import { TabManagerState } from "../shared/sessions";
-import { normalizeUrlForMatch } from "../shared/helpers";
+import { MAX_TAB_MANAGER_SLOTS } from "../../common/contracts/keybindings";
+import { TabManagerState } from "./sessionDomain";
+import { normalizeUrlForMatch } from "../../common/utils/helpers";
 
 export interface TabManagerDomainHooks {
   onTabClosed(tabId: number): Promise<void>;

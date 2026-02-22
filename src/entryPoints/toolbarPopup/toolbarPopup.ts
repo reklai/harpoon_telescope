@@ -1,7 +1,7 @@
 // Popup script — browser action popup (toolbar icon click).
 // Lists tab manager entries with add/remove/jump actions.
 
-import { escapeHtml, extractDomain } from "../../lib/shared/helpers";
+import { escapeHtml, extractDomain } from "../../lib/common/utils/helpers";
 import {
   addCurrentTabToTabManager,
   jumpToTabManagerSlot,

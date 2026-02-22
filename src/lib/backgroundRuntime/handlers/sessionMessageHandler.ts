@@ -8,7 +8,7 @@ import {
   sessionReplace,
   sessionSave,
   sessionUpdate,
-} from "../shared/sessions";
+} from "../domains/sessionDomain";
 import { RuntimeMessageHandler, UNHANDLED } from "./runtimeRouter";
 
 export function createSessionMessageHandler(

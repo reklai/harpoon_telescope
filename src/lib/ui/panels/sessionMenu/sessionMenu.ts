@@ -4,10 +4,10 @@ import {
   registerPanelCleanup,
   getBaseStyles,
   dismissPanel,
-} from "../../shared/panelHost";
-import { showFeedback } from "../../../shared/feedback";
-import { toastMessages } from "../../../shared/toastMessages";
-import previewPaneStyles from "../../shared/previewPane.css";
+} from "../../../common/utils/panelHost";
+import { showFeedback } from "../../../common/utils/feedback";
+import { toastMessages } from "../../../common/utils/toastMessages";
+import previewPaneStyles from "../../../common/utils/previewPane.css";
 import tabManagerStyles from "../tabManager/tabManager.css";
 import sessionStyles from "./session.css";
 import sessionMenuStyles from "./sessionMenu.css";
@@ -23,7 +23,7 @@ import {
   handleReplaceSessionKey,
   resetSessionTransientState,
 } from "./session";
-import { normalizeUrlForMatch } from "../../../shared/helpers";
+import { normalizeUrlForMatch } from "../../../common/utils/helpers";
 import { listSessionsWithRetry } from "../../../adapters/runtime/sessionApi";
 import { listTabManagerEntriesWithRetry } from "../../../adapters/runtime/tabManagerApi";
 

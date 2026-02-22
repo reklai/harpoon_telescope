@@ -1,5 +1,5 @@
 import browser from "webextension-polyfill";
-import { TabManagerDomain } from "./tabManagerDomain";
+import { TabManagerDomain } from "../domains/tabManagerDomain";
 import { RuntimeMessageHandler, UNHANDLED } from "./runtimeRouter";
 
 export function createTabManagerMessageHandler(

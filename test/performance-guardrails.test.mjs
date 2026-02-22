@@ -13,7 +13,7 @@ function readJson(pathFromRoot) {
   return JSON.parse(readText(pathFromRoot));
 }
 
-const budgets = readJson("src/lib/shared/perfBudgets.json");
+const budgets = readJson("src/lib/common/utils/perfBudgets.json");
 
 const REQUIRED_BUDGETS = {
   "searchOpenTabs.applyFilter": 20,

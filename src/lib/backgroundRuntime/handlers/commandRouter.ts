@@ -1,5 +1,5 @@
 import browser, { Tabs } from "webextension-polyfill";
-import { ContentRuntimeMessage } from "../shared/runtimeMessages";
+import { ContentRuntimeMessage } from "../../common/contracts/runtimeMessages";
 
 interface CommandRouterDeps {
   addTabManagerEntry(tab: Tabs.Tab): Promise<{ ok: boolean; reason?: string; slot?: number }>;

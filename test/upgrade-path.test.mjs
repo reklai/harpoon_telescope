@@ -12,7 +12,7 @@ function readText(pathFromRoot) {
 }
 
 test("keybinding loader merges legacy stored config with defaults", () => {
-  const source = readText("src/lib/shared/keybindings.ts");
+  const source = readText("src/lib/common/contracts/keybindings.ts");
 
   assert.match(source, /browser\.storage\.local\.get\("keybindings"\)/);
   assert.match(source, /return mergeWithDefaults\(data\.keybindings as Partial<KeybindingsConfig>\)/);
@@ -23,25 +23,25 @@ test("keybinding loader merges legacy stored config with defaults", () => {
 });
 
 test("stable storage keys remain backward-compatible", () => {
-  const keybindings = readText("src/lib/shared/keybindings.ts");
+  const keybindings = readText("src/lib/common/contracts/keybindings.ts");
   assert.match(keybindings, /browser\.storage\.local\.get\("keybindings"\)/);
   assert.match(keybindings, /browser\.storage\.local\.set\(\{\s*keybindings:\s*config\s*\}\)/);
 
-  const tabManager = readText("src/lib/background/tabManagerDomain.ts");
+  const tabManager = readText("src/lib/backgroundRuntime/domains/tabManagerDomain.ts");
   assert.match(tabManager, /browser\.storage\.local\.get\("tabManagerList"\)/);
   assert.match(tabManager, /browser\.storage\.local\.set\(\{\s*tabManagerList\s*\}\)/);
   assert.match(tabManager, /\(data\.tabManagerList as TabManagerEntry\[\]\) \|\| \[\]/);
 
-  const sessions = readText("src/lib/shared/sessions.ts");
+  const sessions = readText("src/lib/backgroundRuntime/domains/sessionDomain.ts");
   assert.match(sessions, /browser\.storage\.local\.get\("tabManagerSessions"\)/);
   assert.match(sessions, /browser\.storage\.local\.set\(\{\s*tabManagerSessions:\s*sessions\s*\}\)/);
   assert.match(sessions, /\(stored\.tabManagerSessions as TabManagerSession\[\]\) \|\| \[\]/);
 
-  const startupRestore = readText("src/lib/background/startupRestore.ts");
+  const startupRestore = readText("src/lib/backgroundRuntime/lifecycle/startupRestore.ts");
   assert.match(startupRestore, /\(stored\.tabManagerSessions as TabManagerSession\[\]\) \|\| \[\]/);
   assert.match(startupRestore, /if \(sessions\.length === 0\) return;/);
 
-  const frecency = readText("src/lib/shared/frecencyScoring.ts");
+  const frecency = readText("src/lib/common/utils/frecencyScoring.ts");
   assert.match(frecency, /browser\.storage\.local\.get\("frecencyData"\)/);
   assert.match(frecency, /frecencyData:\s*Array\.from\(frecencyMap\.values\(\)\)/);
   assert.match(frecency, /\(data\.frecencyData as FrecencyEntry\[\]\) \|\| \[\]/);

@@ -2,8 +2,8 @@
 // Extracted from background.ts; requires access to tab manager state via TabManagerState interface.
 
 import browser from "webextension-polyfill";
-import { MAX_SESSIONS } from "./keybindings";
-import { normalizeUrlForMatch } from "./helpers";
+import { MAX_SESSIONS } from "../../common/contracts/keybindings";
+import { normalizeUrlForMatch } from "../../common/utils/helpers";
 
 /** Interface for accessing tab manager state from the background script */
 export interface TabManagerState {

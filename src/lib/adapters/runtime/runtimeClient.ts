@@ -1,5 +1,5 @@
 import browser from "webextension-polyfill";
-import { BackgroundRuntimeMessage } from "../../shared/runtimeMessages";
+import { BackgroundRuntimeMessage } from "../../common/contracts/runtimeMessages";
 
 export interface RuntimeRetryPolicy {
   retryDelaysMs: number[];

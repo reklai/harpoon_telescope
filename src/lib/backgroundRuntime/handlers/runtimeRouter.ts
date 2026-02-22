@@ -1,5 +1,5 @@
 import browser from "webextension-polyfill";
-import { BackgroundRuntimeMessage } from "../shared/runtimeMessages";
+import { BackgroundRuntimeMessage } from "../../common/contracts/runtimeMessages";
 
 export const UNHANDLED = Symbol("background-runtime-unhandled");
 export type RuntimeMessageResult = unknown | typeof UNHANDLED;

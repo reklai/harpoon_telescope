@@ -36,42 +36,44 @@ This guide is self-contained: no prerequisite docs are required to learn the sys
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Data-Flow Walkthrough (Start -> End -> Start)](#data-flow-walkthrough-start---end---start)
-3. [Folder Structure](#folder-structure)
-4. [Build System — esBuildConfig/build.mjs](#build-system--esbuildconfigbuildmjs)
-5. [Manifests — MV2 and MV3](#manifests--mv2-and-mv3)
-6. [Shared Types — src/types.d.ts](#shared-types--srctypesdts)
-7. [Keybinding System — src/lib/common/contracts/keybindings.ts](#keybinding-system--srclibcommoncontractskeybindingsts)
-8. [Content Script Boot — src/entryPoints/contentScript](#contentScript-boot--srcentryPointscontentScript)
-9. [Background Process — src/entryPoints/backgroundRuntime](#background-process--srcentrypointsbackgroundruntime)
-10. [Search Current Page — src/lib/ui/panels/searchCurrentPage](#search-current-page--srclibuipanelssearchcurrentpage)
-11. [Search Open Tabs — src/lib/ui/panels/searchOpenTabs](#search-open-tabs--srclibuipanelssearchopentabs)
-12. [Tab Manager — src/lib/ui/panels/tabManager](#tab-manager--srclibuipanelstabmanager)
-13. [Session Menu — src/lib/ui/panels/sessionMenu](#session-menu--srclibuipanelssessionmenu)
-14. [Help — src/lib/ui/panels/help](#help--srclibuipanelshelp)
-15. [Common Layer](#common-layer)
-16. [Panel Lifecycle + Guards](#panel-lifecycle--guards)
-17. [Performance Patterns](#performance-patterns)
-18. [UI Conventions (Footers, Navigation, Filters)](#ui-conventions-footers-navigation-filters)
-19. [Patterns Worth Reusing](#patterns-worth-reusing)
-20. [Maintainer Operating Mode](#maintainer-operating-mode)
-21. [System Invariants](#system-invariants)
-22. [Algorithm + Complexity Ledger](#algorithm--complexity-ledger)
-23. [Bug Triage + Patch Runbook](#bug-triage--patch-runbook)
-24. [Incident Playbooks](#incident-playbooks)
-25. [Interview Prep + Codebase Walkthrough](#interview-prep--codebase-walkthrough)
-26. [Final Thought](#final-thought)
-27. [Algorithm Deep Dive](#algorithm-deep-dive)
-28. [State Management Deep Dive](#state-management-deep-dive)
-29. [Concurrency Deep Dive (JavaScript + Extension Runtime)](#concurrency-deep-dive-javascript--extension-runtime)
-30. [Transferable Engineering Patterns](#transferable-engineering-patterns)
-31. [Browser Primitives Deep Dive](#browser-primitives-deep-dive)
-32. [DOM and Shadow DOM Internals](#dom-and-shadow-dom-internals)
-33. [Dynamic UI Complexity and Control Strategies](#dynamic-ui-complexity-and-control-strategies)
-34. [Inline HTML Template Strategy (How It Works + Tradeoffs)](#inline-html-template-strategy-how-it-works--tradeoffs)
-35. [Grepping and Fuzzy Search System (Full Deconstruction)](#grepping-and-fuzzy-search-system-full-deconstruction)
-36. [Primitive-to-Framework Mapping (React/Vue/Solid)](#primitive-to-framework-mapping-reactvuesolid)
-37. [Rebuild and Direction-Change Playbooks](#rebuild-and-direction-change-playbooks)
+2. [Browser Primitives Deep Dive](#browser-primitives-deep-dive)
+3. [DOM and Shadow DOM Internals](#dom-and-shadow-dom-internals)
+4. [Data-Flow Walkthrough (Start -> End -> Start)](#data-flow-walkthrough-start-end-start)
+5. [Folder Structure](#folder-structure)
+6. [Build System — esBuildConfig/build.mjs](#build-system-esbuildconfigbuildmjs)
+7. [Manifests — MV2 and MV3](#manifests-mv2-and-mv3)
+8. [Shared Types — src/types.d.ts](#shared-types-srctypesdts)
+9. [Keybinding System — src/lib/common/contracts/keybindings.ts](#keybinding-system-srclibcommoncontractskeybindingsts)
+10. [Content Script Boot — src/entryPoints/contentScript](#content-script-boot-srcentrypointscontentscript)
+11. [Background Process — src/entryPoints/backgroundRuntime](#background-process-srcentrypointsbackgroundruntime)
+12. [Concurrency Deep Dive (JavaScript + Extension Runtime)](#concurrency-deep-dive-javascript-extension-runtime)
+13. [Search Current Page — src/lib/ui/panels/searchCurrentPage](#search-current-page-srclibuipanelssearchcurrentpage)
+14. [Grepping and Fuzzy Search System (Full Deconstruction)](#grepping-and-fuzzy-search-system-full-deconstruction)
+15. [Algorithm Deep Dive](#algorithm-deep-dive)
+16. [Search Open Tabs — src/lib/ui/panels/searchOpenTabs](#search-open-tabs-srclibuipanelssearchopentabs)
+17. [Tab Manager — src/lib/ui/panels/tabManager](#tab-manager-srclibuipanelstabmanager)
+18. [Session Menu — src/lib/ui/panels/sessionMenu](#session-menu-srclibuipanelssessionmenu)
+19. [State Management Deep Dive](#state-management-deep-dive)
+20. [Session Restore Overlay — src/lib/ui/panels/sessionMenu](#session-restore-overlay-srclibuipanelssessionmenu)
+21. [Help — src/lib/ui/panels/help](#help-srclibuipanelshelp)
+22. [Common Layer](#common-layer)
+23. [Composability Modules — src/lib/core + src/lib/adapters/runtime](#composability-modules-srclibcore-srclibadaptersruntime)
+24. [Dynamic UI Complexity and Control Strategies](#dynamic-ui-complexity-and-control-strategies)
+25. [Inline HTML Template Strategy (How It Works + Tradeoffs)](#inline-html-template-strategy-how-it-works-tradeoffs)
+26. [Panel Lifecycle + Guards](#panel-lifecycle-guards)
+27. [Performance Patterns](#performance-patterns)
+28. [UI Conventions (Footers, Navigation, Filters)](#ui-conventions-footers-navigation-filters)
+29. [Algorithm + Complexity Ledger](#algorithm-complexity-ledger)
+30. [Patterns Worth Reusing](#patterns-worth-reusing)
+31. [Transferable Engineering Patterns](#transferable-engineering-patterns)
+32. [Primitive-to-Framework Mapping (React/Vue/Solid)](#primitive-to-framework-mapping-reactvuesolid)
+33. [Rebuild and Direction-Change Playbooks](#rebuild-and-direction-change-playbooks)
+34. [Maintainer Operating Mode](#maintainer-operating-mode)
+35. [System Invariants](#system-invariants)
+36. [Bug Triage + Patch Runbook](#bug-triage-patch-runbook)
+37. [Incident Playbooks](#incident-playbooks)
+38. [Interview Prep + Codebase Walkthrough](#interview-prep-codebase-walkthrough)
+39. [Final Thought](#final-thought)
 
 ---
 
@@ -140,6 +142,203 @@ How to use this map:
 2. Then locate where the event starts (content keydown or startup event).
 3. Then trace request/response boundaries (runtime message edges).
 4. Finally trace UI rendering boundaries (overlay local state -> DOM).
+
+---
+
+## Browser Primitives Deep Dive
+
+This section is the foundation layer behind everything in this project. The goal is to make you think in primitives first, then map that understanding into any framework.
+
+### 1) What "browser primitives" means in this codebase
+
+When this guide says "browser primitives," it means native platform APIs directly exposed by the browser runtime:
+
+- DOM APIs (`document`, `Element`, `TreeWalker`, `MutationObserver`)
+- Event system (`addEventListener`, capture/bubble phases, keyboard/mouse/focus events)
+- Shadow DOM (`attachShadow`, style isolation, event retargeting)
+- Rendering clock (`requestAnimationFrame`)
+- Timers (`setTimeout`, debounce/retry scheduling)
+- Extension APIs (`browser.runtime`, `browser.tabs`, `browser.storage.local`, `browser.commands`)
+
+In this project, these primitives are used directly instead of a UI framework runtime.
+
+### 2) Why this approach was chosen
+
+Primary reasons:
+
+1. Extension context constraints are strict.
+2. Keyboard/focus behavior must be deterministic.
+3. Performance must stay predictable on arbitrary pages.
+4. Firefox/Chrome compatibility matters.
+
+Direct primitives allow:
+
+- exact control over host insertion/removal
+- explicit cleanup for reload/startup edge cases
+- no framework abstraction leaks around focus and event ordering
+
+Tradeoff:
+
+- You manually solve problems frameworks usually automate.
+
+### 3) The primitive mindset (how to reason)
+
+When adding/changing behavior, reason in this order:
+
+1. Which runtime owns this data? (page DOM vs background runtime vs storage)
+2. Which primitive can observe/change it safely?
+3. What event starts the flow?
+4. Which async boundaries can reorder work?
+5. What cleanup primitive closes the lifecycle?
+
+If you can answer those 5 questions, the implementation becomes straightforward even without a framework.
+
+### 4) Primitive ownership map in this app
+
+Content script (`src/lib/appInit/appInit.ts`):
+
+- owns page-local input handling
+- owns overlay DOM construction
+- owns page text grep and preview rendering
+
+Background runtime (`src/entryPoints/backgroundRuntime/background.ts` + `src/lib/backgroundRuntime/*`):
+
+- owns canonical tab/session state mutations
+- owns privileged tab operations (`browser.tabs.*`)
+- owns startup/command routing
+
+Common contracts (`src/lib/common/contracts/*`):
+
+- defines stable message/config shapes
+
+Common utils (`src/lib/common/utils/*`):
+
+- provides reusable low-level helpers
+
+### 5) What this teaches you for future frameworks
+
+Frameworks are just structured orchestrators on top of these primitives.
+
+- React state update -> still results in DOM operations.
+- useEffect cleanup -> still maps to removing listeners/timers.
+- framework router event -> still sits on browser event loop.
+
+If you know the primitive layer, frameworks become easier to learn and debug because you understand what they are abstracting.
+
+---
+
+## DOM and Shadow DOM Internals
+
+### 1) What the DOM actually is
+
+The DOM is a mutable tree of nodes representing a document snapshot that can be read/written at runtime.
+
+Key node types relevant here:
+
+- `Document`: root access point
+- `Element`: tagged nodes (`div`, `input`, etc.)
+- `Text`: text leaf nodes used by grep traversal
+
+This project uses both element-level and text-node-level traversal depending on task:
+
+- element queries for structure-level UI operations
+- `TreeWalker` text traversal for grep accuracy
+
+### 2) Tree traversal strategies used here
+
+#### Strategy A: Selector-based structural queries
+
+Example usage:
+
+- `querySelectorAll("h1, h2, ...")`
+- `querySelectorAll("a[href]")`
+- `querySelectorAll("img")`
+
+Pros:
+
+- concise, readable
+- semantically aligned with HTML structure
+
+Cons:
+
+- misses unstructured text not in targeted tags
+
+#### Strategy B: Text-node tree walking
+
+Owner:
+
+- `src/lib/ui/panels/searchCurrentPage/grep/grepCollectors.ts`
+
+Pattern:
+
+```ts
+const walker = document.createTreeWalker(
+  document.body,
+  NodeFilter.SHOW_TEXT,
+  { acceptNode(node) { ... } },
+);
+```
+
+Pros:
+
+- catches actual visible text beyond tag heuristics
+- enables more complete grep
+
+Cons:
+
+- must filter aggressively (visibility, pre/code duplicates)
+- easy to over-collect noise without careful acceptance rules
+
+### 3) Shadow DOM internals and why it matters
+
+Shadow DOM lets you attach an isolated subtree to a host element.
+
+Owner utility:
+
+- `src/lib/common/utils/panelHost.ts`
+
+Behavior you get:
+
+- style scoping: host page CSS does not leak into panel styles by default
+- DOM encapsulation: panel internals are not in the light-DOM query path
+- controlled lifecycle: one host, one cleanup path
+
+Why extension overlays need this:
+
+- host pages can have arbitrary CSS resets/frameworks
+- without isolation, overlay UI breaks unpredictably
+
+### 4) Event propagation details you must know
+
+DOM events flow through:
+
+1. capture phase (root -> target)
+2. target phase
+3. bubble phase (target -> root)
+
+This repo intentionally uses capture listeners for global panel key handling so panel shortcuts can preempt page handlers when needed.
+
+Potential pitfall:
+
+- if you forget to stop propagation in the right branch, host page shortcuts can interfere with panel UX.
+
+### 5) Shadow DOM event retargeting
+
+Inside shadow trees, event targets can be retargeted to protect encapsulation.
+
+Practical implication:
+
+- when debugging event paths, inspect `event.composedPath()` if target behavior seems unexpected.
+
+### 6) Layout/reflow sensitivity with dynamic panels
+
+Any read-after-write cycles on layout-sensitive properties can trigger forced synchronous reflow.
+
+This code mitigates that by:
+
+- batching heavy updates via rAF
+- virtualizing long lists
+- minimizing DOM node churn via pooling
 
 ---
 
@@ -785,6 +984,163 @@ Background entry `src/entryPoints/backgroundRuntime/background.ts` orchestrates:
 
 ---
 
+## Concurrency Deep Dive (JavaScript + Extension Runtime)
+
+This section is about practical concurrency under the browser event loop and extension lifecycle.
+
+### 1) Event loop reality used by this repo
+
+Important queues used here:
+
+- Macro task queue (`setTimeout`, events)
+- Micro task queue (promise continuations)
+- Rendering frame queue (`requestAnimationFrame`)
+- Mutation observer callback queue
+
+Consequence:
+
+- Ordering is not "line-by-line across async".
+- UI must assume callbacks may arrive after state changed.
+
+### 2) rAF + debounce combo in current-page search
+
+Owner file:
+
+- `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts`
+
+Input flow:
+
+1. Input event stores pending value.
+2. rAF coalesces same-frame updates.
+3. 200ms debounce delays grep execution.
+
+Why both:
+
+- rAF: prevents redundant same-frame processing.
+- debounce: reduces expensive grep recompute while typing.
+
+Race guard used:
+
+- `panelOpen` flag checked before processing delayed work.
+- If panel closed mid-flight, callback exits safely.
+
+### 3) Preview update coalescing
+
+Pattern:
+
+- `previewRafId` sentinel ensures only one pending frame callback.
+- Multiple navigation events in same frame merge into one preview render.
+
+Result:
+
+- Less layout/reflow churn.
+- No preview render storm on held-down key.
+
+### 4) Startup and command retries for content-script readiness
+
+Owner files:
+
+- `src/lib/backgroundRuntime/handlers/commandRouter.ts`
+- `src/lib/backgroundRuntime/lifecycle/startupRestore.ts`
+
+Race problem:
+
+- Background may send message before content script is ready.
+
+Solution:
+
+- Retry with bounded delays.
+- Fail safely after max attempts.
+
+Why this belongs in infrastructure layer:
+
+- Readiness is transport concern.
+- Feature logic should not care about startup timing races.
+
+### 5) Scroll restore token strategy (real concurrency defense)
+
+Owner file:
+
+- `src/lib/backgroundRuntime/domains/tabManagerDomain.ts`
+
+Mechanism:
+
+- `pendingScrollRestoreTokens` map stores per-tab token.
+- New restore request increments sequence token.
+- Async retry loop checks token each attempt.
+- Stale loop exits if token changed.
+
+This prevents:
+
+- Older async callback overwriting newer intended state.
+
+This is equivalent to cancellation tokens in other systems.
+
+### 6) MV3 worker lifecycle and idempotent guards
+
+In MV3, worker can stop and restart. In-memory state is not durable.
+
+Protection pattern:
+
+- Every handler calls `ensureTabManagerLoaded()` before operations.
+- Multiple calls are safe (idempotent).
+
+Why idempotent guards matter:
+
+- You cannot assume warm process state.
+- Cold-start correctness must match warm-path correctness.
+
+### 7) Concurrency bugs to watch for in this architecture
+
+1. Stale closure over indices after re-render.
+2. Async action completes after panel close and touches detached DOM.
+3. Retry loops still running after owner state changed.
+4. Multiple confirmation modes active from interleaved key paths.
+
+Mitigations already used:
+
+- Existence guards (`if (!document.getElementById("ht-panel-host")) return`).
+- Mode guards before handling keys.
+- Token/sequence checks for async retries.
+- Centralized cleanup registration per panel host.
+
+### 8) Practical coding pattern for safe async UI
+
+Use this template:
+
+```ts
+let isOpen = true;
+let inflightToken = 0;
+
+function close(): void {
+  isOpen = false;
+  cleanup();
+}
+
+async function doWork(): Promise<void> {
+  const token = ++inflightToken;
+  const data = await fetchData();
+  if (!isOpen) return;
+  if (token !== inflightToken) return;
+  render(data);
+}
+```
+
+This same pattern is applied in different forms throughout this repo.
+
+### 9) Why this matters for frontend frameworks too
+
+Even with React/Vue/Solid:
+
+- event loop ordering does not disappear
+- transport retries still needed
+- stale async results still possible
+- lifecycle cleanup still required
+
+Frameworks change ergonomics, not physics.
+
+---
+
 ## Search Current Page — src/lib/ui/panels/searchCurrentPage
 
 `grep.ts` walks the DOM, builds a cache, and scores results using character-by-character fuzzy scoring.
@@ -807,409 +1163,131 @@ Background entry `src/entryPoints/backgroundRuntime/background.ts` orchestrates:
 
 ---
 
-## Search Open Tabs — src/lib/ui/panels/searchOpenTabs
+## Grepping and Fuzzy Search System (Full Deconstruction)
 
-Uses frecency scores to rank open tabs. Filtering accepts both substring and fuzzy matches, then ranks by match quality (exact -> starts-with -> substring -> fuzzy), preferring title hits first, then tighter title matches, then URL matches.
+This is the end-to-end "make search actually useful" pipeline.
 
-**What is frecency?**
+### 1) High-level objective
 
-A Mozilla-coined term: frequency + recency. Tabs visited often and recently rank higher. The formula decays over time so old visits matter less.
+Search should be:
 
----
+- broad enough to find relevant content quickly
+- fast enough to update while typing
+- structured enough to preview context meaningfully
 
-## Tab Manager — src/lib/ui/panels/tabManager
+### 2) End-to-end data path
 
-Manages pinned-tab list UI and slot operations.
+1. User types in panel input.
+2. Input is coalesced via rAF.
+3. Query execution is debounced.
+4. `grepPage(query, filters)` runs.
+5. Collectors provide candidate lines from cache.
+6. Fuzzy scorer ranks matches.
+7. Top results returned (bounded).
+8. List virtualizer renders visible subset.
+9. Preview lazily enriches active result.
 
-- slots are compacted to 1..N
-- closed tabs persist and re-open on jump
-- swap mode and undo are UI-level state machines (`W` swap, `U` undo)
+Owners:
 
-**Why max 4 slots?**
+- `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts`
+- `src/lib/ui/panels/searchCurrentPage/grep.ts`
+- `src/lib/ui/panels/searchCurrentPage/grep/*`
 
-Opinionated design. More slots = harder to remember which is which. 4 is enough for a focused workflow.
+### 3) Why this grep is useful (not just technically correct)
 
----
+Usefulness comes from combined design choices:
 
-## Session Menu — src/lib/ui/panels/sessionMenu
+1. Multiple structural collectors (`code/headings/links/images/all`) make matching semantically relevant.
+2. Fuzzy scoring prioritizes quality of match, not only existence.
+3. Context preview shows surrounding meaning, not isolated line only.
+4. DOM-aware enrichment adds heading and URL breadcrumbs.
+5. Virtualization keeps interaction smooth on big result sets.
 
-Owns session UI overlays: load list, save panel, replace picker, and startup restore UI.
+### 4) Fuzzy search: what it means here
 
-- `Alt+S` opens load sessions; `Alt+Shift+S` opens save session
-- sessions are stored in `tabManagerSessions` (max 4)
-- load / overwrite / delete use preview-side `y/n` confirmations
-- session load confirmation includes slot-level legend (`NEW (+)`, `DELETED (-)`, `REPLACED (~)`, `UNCHANGED (=)`)
-- save panel previews current Tab Manager tabs under the name input
-- duplicate-name save errors are inline; identical-content saves are pre-guarded with toast (`No changes to save, already saved as "<name>"`)
-- session search uses `Search Sessions . . .` and `Shift+Space clear-search`
-- transient state logic now flows through `src/lib/core/sessionMenu/sessionCore.ts` so mode transitions are pure/testable
-- list movement behavior reuses `src/lib/core/panel/panelListController.ts` for consistency with other overlays
+In this repo, fuzzy search means:
 
----
+- characters of query terms can match non-contiguously in candidate text
+- match quality is scored by structure (start/boundary/consecutive/gap)
 
-## Session Restore Overlay — src/lib/ui/panels/sessionMenu
+It is not plain levenshtein distance, and it is not plain substring.
 
-Startup restore prompt reuses session state with a lightweight standalone overlay:
+### 5) Practical scoring interpretation
 
-- opens only when saved sessions exist
-- supports list navigation + restore/decline actions
-- uses tab-manager move/jump/close bindings for consistency
-- closes cleanly on confirm/decline and reports feedback toast after restore
+Given query `tmgr` and candidate `tab manager`:
 
----
+- characters match in order
+- boundary and consecutive bonuses help rank readable abbreviations higher
 
-## Help — src/lib/ui/panels/help
+Given query `tab man` and candidate `my tab manager`:
 
-Help overlay builds sections from live keybinding config. It documents the panel controls and filters.
+- term split allows multi-token matching
+- both terms must match
 
-- includes session-specific controls (focus toggle, search focus, clear-search, load confirm/cancel)
-- key labels mirror current keybinding config instead of hard-coded defaults
+Given loose candidate with many gaps:
 
-**Why live keybindings?**
+- distance penalty reduces score
+- tighter candidates rise above noisy ones
 
-If the user customizes shortcuts, the help menu reflects their actual bindings, not the defaults.
+### 6) Why cache + observer is essential
 
----
+Without cache:
 
-## Common Layer
+- every keystroke walks DOM from scratch
+- heavy pages become unusable
 
-- `src/lib/common/contracts/keybindings.ts`: keybinding config schema/defaults + matching helpers used across UI/background/options.
-- `src/lib/common/contracts/runtimeMessages.ts`: typed message contracts for background <-> content runtime channels.
-- `src/lib/common/utils/helpers.ts`: `escapeHtml`, `escapeRegex`, `buildFuzzyPattern`, `extractDomain`.
-- `src/lib/common/utils/filterInput.ts`: shared slash-filter parsing used by search overlays.
-- `src/lib/common/utils/panelHost.ts`: shadow host, base styles, focus trapping.
-- `src/lib/common/utils/scroll.ts`: scroll-to-text highlight.
-- `src/lib/common/utils/feedback.ts`: toast rendering helper.
-- `src/lib/common/utils/toastMessages.ts`: standardized feedback copy builders.
-- `src/lib/common/utils/perf.ts`: perf instrumentation helper.
-- `src/lib/common/utils/frecencyScoring.ts`: frecency scoring + eviction.
-- `src/lib/common/utils/storageMigrations.ts` + `src/lib/common/utils/storageMigrationsRuntime.ts`: storage schema upgrades.
-- Session business logic now lives in `src/lib/backgroundRuntime/domains/sessionDomain.ts` (domain layer, not common layer).
+With cache + mutation invalidation:
 
-## Composability Modules — src/lib/core + src/lib/adapters/runtime
+- searches run on in-memory arrays
+- page changes still eventually refresh index
 
-- `src/lib/core/sessionMenu/sessionCore.ts`: pure session mode transitions and derived view selectors (no DOM/browser APIs)
-- `src/lib/core/panel/panelListController.ts`: shared list index math for arrows, wheel, and half-page jumps
-- `src/lib/adapters/runtime/runtimeClient.ts`: central runtime client with retry policy
-- `src/lib/adapters/runtime/sessionApi.ts`, `tabManagerApi.ts`, `openTabsApi.ts`, `keybindingsApi.ts`: domain-level API wrappers used by overlays and popup
+Tradeoff:
 
-Why this matters for growth:
+- small staleness window during debounce/invalidation period
 
-1. You can unit-test state transitions without opening UI.
-2. You can change runtime transport behavior in one place.
-3. You can reuse panel list behavior without copy/paste drift.
+That tradeoff is intentional for responsiveness.
 
-Practice loop (no AI, chapter-specific):
+### 7) Why preview enrichment is lazy
 
-1. Trace one common-layer helper from caller -> helper -> returned value usage in UI/background.
-2. Modify one common-layer contract in `runtimeMessages.ts` and update all call sites.
-3. Verify: run lint/typecheck/tests and manually trigger the affected runtime flow.
-4. Explain: defend why common-layer modules should stay minimal and stable.
+Computing full DOM context for every result is expensive and often wasted.
 
-Failure drill:
+Lazy enrich strategy:
 
-1. Introduce a contract mismatch between sender and receiver payload shape.
-2. Observe TypeScript/runtime failure points.
-3. Repair and explain why typed message contracts reduce cross-context bugs.
+- only active result gets heavy context computation
+- cached onto result object once computed
 
-Growth checkpoint:
+This matches actual user attention and keeps panel responsive.
 
-1. Junior signal: can find where a common utility is consumed.
-2. Mid signal: can evolve a common contract without hidden breakage.
-3. Senior signal: can decide what belongs in `common/contracts` or `common/utils` vs feature-specific modules.
+### 8) How to recreate this search system from scratch
 
----
+Build order (recommended):
 
-## Panel Lifecycle + Guards
-
-- panels are isolated Shadow DOM trees
-- global keybinds are blocked while a live panel is open
-- host integrity is checked before open; stale/empty host is dismissed automatically
-- `openPanel()` is fail-closed (sync + async errors both call `dismissPanel()`)
-- panel openers fail-closed too (top-level catch calls `dismissPanel()`)
-- command-triggered open messages use bounded retries for content-script readiness
-- `dismissPanel()` tears down the host and registered panel cleanup
-
-This layer is cross-cutting infrastructure for every feature module. It should stay generic and reusable, with feature-specific logic remaining in each panel/domain module.
-
-**Why block global keybinds when panel is open?**
-
-Prevents conflicts. `Alt+F` opens the panel; once open, pressing `Alt+F` should not try to open another. The panel guard ensures only the panel's key handler responds.
-
-**Failure recovery path (must be second nature):**
-
-1. Trigger arrives (keydown or runtime command message).
-2. Validate host integrity (clear stale host if needed).
-3. Attempt open through guarded `openPanel(...)`.
-4. If init fails at any point, fail closed via `dismissPanel()`.
-5. Next shortcut can open immediately (no ghost host lockout).
-
----
-
-## Performance Patterns
-
-- **Virtual lists with DOM pooling:** Only ~25 DOM nodes exist; they're recycled as the user scrolls.
-- **rAF throttled updates:** Rendering is scheduled via `requestAnimationFrame` to batch DOM writes.
-- **Measured hot paths:** `withPerfTrace(...)` instruments filter/render hotspots and writes stats to `globalThis.__HT_PERF_STATS__`.
-- **Regression budgets:** `src/lib/common/utils/perfBudgets.json` keeps expected latency envelopes explicit in code review + tests.
-- **Cached DOM grep + mutation invalidation:** Walk the DOM once, cache lines, invalidate on changes.
-- **Lazy computation:** Expensive fields (domContext, ancestorHeading) are computed on-demand, not upfront.
-- **Responsive pane switching:** two-pane overlays collapse to stacked panes on smaller viewports.
-
-Practice loop (no AI, chapter-specific):
-
-1. Trace one hot path (`filter` or `render`) from event handler to measured trace output.
-2. Modify one performance-sensitive block (for example list rendering) with a measurable hypothesis.
-3. Verify: inspect perf traces + run perf guardrail tests.
-4. Explain: justify tradeoff between readability and latency on that path.
-
-Failure drill:
-
-1. Temporarily disable virtualization or rAF scheduling in a local branch.
-2. Reproduce jank on larger datasets.
-3. Restore optimization and explain the before/after complexity and frame-budget impact.
-
-Growth checkpoint:
-
-1. Junior signal: can identify which code path is hot.
-2. Mid signal: can reduce latency without changing behavior.
-3. Senior signal: can set and defend measurable budgets in code review.
-
----
-
-## UI Conventions (Footers, Navigation, Filters)
-
-- Footer order: nav -> secondary (list/tree) -> action (clear/del/move) -> primary (open) -> close/back
-- Footer labels: uppercase key + lowercase label (ex: `D del`)
-- Tab Manager action row order: `U undo` -> `W swap` -> `D del` -> `Enter jump` -> `Esc close`
-- Standard aliases: `j/k` are always enabled for up/down where list navigation exists
-- Clear-search: `Shift+Space` works from search/session input flows
-- Search input placeholders follow `Search <Panel Name> . . .` across session load, open tabs, and current-page search
-
-**Why strict footer order?**
-
-Consistency across panels. Users learn the pattern once and can predict where keybind hints appear.
-
----
-
-## Patterns Worth Reusing
-
-- **Message routing with `type` discriminators:** Simple, scalable, easy to trace.
-- **Lazy-load guards:** Safe for service worker restarts; idempotent.
-- **Overlay UI in Shadow DOM:** Isolated styles; no page CSS collisions.
-- **State machines (`detailMode`, `focusedPane`):** Explicit state; predictable behavior.
-- **Unidirectional data flow:** Events mutate state; render reads state.
-- **Ranked text matching:** Combine substring and fuzzy matching, then rank by quality so exact/tighter title hits rise first.
-- **Virtual scrolling:** O(visible) rendering for large lists.
-
----
-
-## Maintainer Operating Mode
-
-Definition: I am not only shipping features. I am preserving system behavior, invariants, and developer velocity.
-
-Release-quality checklist for every change:
-
-1. Identify the owning layer first (content UI, background domain, shared contract, build/release).
-2. State the invariant being changed or preserved before coding.
-3. Implement the smallest coherent patch that keeps module boundaries intact.
-4. Prove behavior with one happy-path check and one failure-path check.
-5. Add regression coverage (test and/or documented manual repro).
-6. Update docs where behavior contracts changed (`learn.md`, `README.md`, `STORE.md`, `PRIVACY.md` when relevant).
-7. Run quality gates: lint, tests, and compatibility/store checks as appropriate.
-
-What "ownership" means in this repo:
-
-1. I can explain any runtime message from sender to handler to side effect.
-2. I can explain why state belongs to background vs content script.
-3. I can explain one tradeoff per subsystem (performance, complexity, UX, reliability).
-4. I can debug failures without relying on framework abstractions.
-
----
-
-## System Invariants
-
-These are non-negotiable truths. If one breaks, behavior drifts.
-
-Global/runtime invariants:
-
-1. Background owns canonical browser state (`tabs`, `sessions`, frecency persistence).
-2. Content overlays are ephemeral views driven by runtime messages and local UI state.
-3. Runtime message shapes stay explicit and synchronized across sender/receiver.
-4. Only one live panel host may exist at a time.
-
-Tab Manager invariants:
-
-1. Slots remain compacted and ordered from 1..N.
-2. Closed entries stay representable and recoverable by URL.
-3. Scroll coordinates are captured/restored as part of tab/session workflow.
-4. Session capacity and slot capacity constraints are enforced consistently.
-
-Session invariants:
-
-1. Session names are unique case-insensitively.
-2. Session list ordering is deterministic (recent-first when listed).
-3. Load planning and load execution are consistent (slot-plan rows and totals align with actual action).
-4. Confirmation flows must be explicit and reversible.
-
-Search/session-list invariants:
-
-1. Query -> filter -> rank -> render pipeline is deterministic for the same input state.
-2. Focus behavior is explicit (`input`, `results`, and confirmation/rename modes) and keyboard-safe.
-3. Virtualized lists only render visible windows plus buffer.
-
-Build/release invariants:
-
-1. MV2/MV3 manifests remain policy-compatible with behavior and docs.
-2. Storage migrations are forward-compatible and test-gated.
-3. Store claims and privacy claims match actual permissions and persisted data.
-
----
-
-## Algorithm + Complexity Ledger
-
-This is the quick reference I should be able to explain in interviews and design reviews.
-
-| Subsystem | Core operation | Complexity (high-level) | Main challenge | Mitigation used |
-|---|---|---|---|---|
-| Search Current Page | Cached line extraction + query ranking | Cache build `O(N)` over candidate nodes; query pass approximately `O(C * Q)` + sort cap | Large DOM + keystroke latency | Cached extraction, capped results, virtual scrolling, lazy preview enrichment |
-| Search Open Tabs | Title/URL match + ranked sort | `O(T)` matching + `O(T log T)` sort | Fast ranking without UI jank | Ranked match tiers, bounded rendering, rAF scheduling |
-| Session List Panel | Query filter + confirmation state transitions | `O(S)` filtering where `S <= 4` + preview rendering | Mode-gated keyboard behavior during rename/confirm flows | Explicit transient states + confirm/cancel action gating |
-| Tab Manager Jump | Slot lookup + tab activate/reopen | `O(S)` where `S <= 4` | Unstable tab IDs across lifecycle/restart | Persist URL + scroll, closed-entry recovery, reconcile against open tabs |
-| Session Load Plan | Slot-by-slot unchanged/new/deleted/replaced computation | `O(E)` where `E` session entries | Predictable load summary against current tab-manager state | URL normalization + same-slot comparison |
-| Session Load Execute | Reuse existing or open new tabs | `O(E)` plus tab API latency | Consistent restore with partial failures | Per-entry fallback (reuse -> open), queued scroll restore, graceful skip on open failure |
-| Panel Lifecycle | Open/close/focus/error handling | `O(1)` control flow | Ghost host and readiness race conditions | Host-integrity checks, fail-closed open paths, bounded retries |
-
-When discussing complexity, always include:
-
-1. Data size variable (`N`, `T`, `B`, `E`) and where it comes from.
-2. Practical cap/guardrail used in product behavior.
-3. The dominant user-facing risk (latency, stale state, focus confusion).
-
----
-
-## Bug Triage + Patch Runbook
-
-Use this every time before coding a fix.
-
-1. Reproduce precisely.
-2. Classify the layer: UI state, runtime messaging, background domain, storage/migration, or build/release.
-3. Capture expected invariant and observed invariant break.
-4. Isolate minimal failing path in code (function + message + state transition).
-5. Patch minimally at the owning layer (avoid cross-layer band-aids first).
-6. Verify with:
-   - one direct repro replay,
-   - one adjacent regression check,
-   - one failure-path check.
-7. Add or update tests/guardrails where practical.
-8. Update docs that define behavior contracts.
-
-Patch quality questions:
-
-1. Does this fix preserve existing contracts in other panels/flows?
-2. Does this introduce hidden coupling between modules?
-3. If this fails again, will it fail safe (recoverable) or fail dangerous (lock/freeze/data drift)?
-
----
-
-## Incident Playbooks
-
-Incident: panel shortcut does nothing.
-
-1. Check panel host lifecycle (`createPanelHost`, `dismissPanel`, cleanup registration).
-2. Verify global keybinding path in `appInit.ts`.
-3. Verify runtime command path in `commandRouter.ts`.
-4. Confirm stale host recovery and retry paths are active.
-
-Incident: tab jump/session load restores wrong scroll location.
-
-1. Verify capture points (`GET_SCROLL` capture before switch/save).
-2. Verify saved session/tab entry contains expected `scrollX/scrollY`.
-3. Verify restore queue + delivery (`SET_SCROLL`, ready/retry path).
-4. Check restricted-page edge cases where content script messaging is blocked.
-
-Incident: session load summary differs from observed load.
-
-1. Compare load-plan computation vs load execution path.
-2. Verify URL normalization and same-slot comparison behavior.
-3. Confirm session list snapshot did not change between plan and confirm.
-
-Incident: cross-context drift (UI shows stale data).
-
-1. Verify background remains canonical source and list fetch occurs on open.
-2. Confirm message contract payloads match expected types.
-3. Verify no stale cached UI list survives mode transitions.
-
----
-
-## Interview Prep + Codebase Walkthrough
-
-Use this as the final section before interviews or live walkthroughs.
-
-10-minute walkthrough script:
-
-1. Product + target user (30s): keyboard-first tab/search workflow for power users.
-2. Architecture (90s): content script owns page DOM, background owns browser APIs + canonical state, runtime messages connect them.
-3. Flow A demo (2 min): keypress -> search pipeline -> cached grep -> virtualized render -> scroll side effect.
-4. Flow B demo (2 min): add/jump tab path, unstable tab-ID problem, URL+scroll recovery strategy.
-5. Flow C demo (90s): session-menu state machine and explicit mode transitions.
-6. Flow D demo (90s): startup race handling with bounded retries and fallback.
-7. Release confidence (60s): CI gates (`verify:compat`, `verify:upgrade`, `verify:store`) + Firefox/Chrome builds.
-
-Interview question drill:
-
-1. Why no framework?
-Answer frame: browser primitives reduce overhead, keep control over focus/latency, and map well to extension constraints.
-2. How do you replace framework conveniences in vanilla TypeScript?
-Answer frame: explicit state machines for UI modes, shared panel-host lifecycle contracts, typed runtime message contracts, virtualized lists, and deterministic keyboard/focus management.
-3. How do you prevent state drift between contexts?
-Answer frame: background is canonical source of truth, overlays request fresh state, message contracts are explicit.
-4. What was the hardest bug class?
-Answer frame: lifecycle and readiness races (MV3 worker restart, startup prompt delivery), solved with idempotent guards and bounded retries.
-5. How do you prove performance claims?
-Answer frame: virtualized rendering, rAF scheduling, perf traces, and CI budget tests.
-6. How is this extension store-ready?
-Answer frame: manifest/privacy/store docs are policy-checked; compatibility and migration gates run in CI.
-
-Proof-of-ownership checklist (run this per feature):
-
-1. Flow A ownership proof: trace `appInit.ts` -> `searchCurrentPage.ts` -> `grep.ts`; run search-related tests/manual grep pass; implement one new slash filter; explain ranking + virtualization tradeoffs.
-2. Flow B ownership proof: trace runtime message path into `tabManagerDomain.ts`; run tab-manager add/jump/session checks; implement one command evolution with contract updates; explain tab-ID instability design.
-3. Flow C ownership proof: trace session list fetch -> render -> mode transitions; run rename/delete/load-confirm checks; implement one new session-local keybinding; explain mode-state invariants.
-4. Flow D ownership proof: trace startup restore retries in `startupRestore.ts`; run startup/fallback checks; tune retry constants safely; explain eventual consistency vs synchronous assumptions.
-5. Platform ownership proof: run `npm run ci`; explain what `verify:compat`, `verify:upgrade`, and `verify:store` each prevent in release risk.
-
-30/60/90 growth track in this repo:
-
-1. Day 1-30 (Junior -> strong junior): finish one full rep on each flow (A-D) using the artifact checklist, pass all checks locally, and ship one low-risk patch per flow.
-2. Day 31-60 (Mid ramp): complete two bug-fix reps and one refactor rep across different flows, each with invariant notes + regression proof.
-3. Day 61-90 (Senior trajectory): redesign one flow boundary (ownership, state, or messaging), document tradeoffs, and add one guardrail that prevents recurrence of a real failure class.
-
-Flow-first weekly cadence (repeat):
-
-1. Pick one flow and write trigger -> owner -> state -> render -> side-effect map from memory.
-2. Run one no-AI rep and collect evidence artifacts.
-3. Run one review drill on a recent patch using invariants as acceptance criteria.
-4. Run one incident retrospective (real bug or simulated failure drill).
-5. Summarize what changed in your mental model and what you will tighten next week.
-
-Quick summary of everything learned:
-
-1. I can trace real data flow from keypress to render/storage/side effects across browser contexts.
-2. I understand extension boundaries: page DOM vs browser APIs vs runtime messaging.
-3. I can design explicit state machines for keyboard-heavy UIs.
-4. I can reason about performance budgets and enforce them with instrumentation/tests.
-5. I can design resilient startup/recovery behavior for async lifecycle mismatches.
-6. I can ship with release guardrails: compatibility, upgrade safety, and store-policy consistency.
-7. I can extend this codebase confidently and explain tradeoffs like an owner, not a passenger.
-
----
-
-## Final Thought
-
-If I can trace a feature from keypress to storage to render and back, I understand the system. If I can explain the tradeoffs, I can defend the design. If I can apply these patterns elsewhere, I've grown as an engineer.
-
-This codebase is mine. I built it to learn, and now I can teach it.
+1. implement raw text collector
+2. implement simple substring filter
+3. add fuzzy scoring
+4. add result ranking and cap
+5. add cache + invalidation
+6. add structural filters
+7. add lazy preview enrichment
+8. add virtualization
+9. add keyboard/focus controls
+
+Each step should stay working before moving to next.
+
+### 9) How to change search direction safely
+
+If changing scoring behavior:
+
+1. keep existing API shape (`grepPage`, `enrichResult`)
+2. add measurement for rank shifts on known pages
+3. test edge inputs (empty, very short, special chars)
+4. verify preview still aligns with selected row
+
+If changing collector behavior:
+
+1. validate duplicates are still deduped
+2. validate visibility filtering still excludes hidden noise
+3. validate code/links/images tags still map to badges correctly
 
 ---
 
@@ -1460,6 +1538,46 @@ Why bounded retries (not infinite):
 
 ---
 
+## Search Open Tabs — src/lib/ui/panels/searchOpenTabs
+
+Uses frecency scores to rank open tabs. Filtering accepts both substring and fuzzy matches, then ranks by match quality (exact -> starts-with -> substring -> fuzzy), preferring title hits first, then tighter title matches, then URL matches.
+
+**What is frecency?**
+
+A Mozilla-coined term: frequency + recency. Tabs visited often and recently rank higher. The formula decays over time so old visits matter less.
+
+---
+
+## Tab Manager — src/lib/ui/panels/tabManager
+
+Manages pinned-tab list UI and slot operations.
+
+- slots are compacted to 1..N
+- closed tabs persist and re-open on jump
+- swap mode and undo are UI-level state machines (`W` swap, `U` undo)
+
+**Why max 4 slots?**
+
+Opinionated design. More slots = harder to remember which is which. 4 is enough for a focused workflow.
+
+---
+
+## Session Menu — src/lib/ui/panels/sessionMenu
+
+Owns session UI overlays: load list, save panel, replace picker, and startup restore UI.
+
+- `Alt+S` opens load sessions; `Alt+Shift+S` opens save session
+- sessions are stored in `tabManagerSessions` (max 4)
+- load / overwrite / delete use preview-side `y/n` confirmations
+- session load confirmation includes slot-level legend (`NEW (+)`, `DELETED (-)`, `REPLACED (~)`, `UNCHANGED (=)`)
+- save panel previews current Tab Manager tabs under the name input
+- duplicate-name save errors are inline; identical-content saves are pre-guarded with toast (`No changes to save, already saved as "<name>"`)
+- session search uses `Search Sessions . . .` and `Shift+Space clear-search`
+- transient state logic now flows through `src/lib/core/sessionMenu/sessionCore.ts` so mode transitions are pure/testable
+- list movement behavior reuses `src/lib/core/panel/panelListController.ts` for consistency with other overlays
+
+---
+
 ## State Management Deep Dive
 
 This section is about explicit state ownership, transition discipline, and avoiding hidden coupling.
@@ -1606,476 +1724,76 @@ Before merge:
 
 ---
 
-## Concurrency Deep Dive (JavaScript + Extension Runtime)
+## Session Restore Overlay — src/lib/ui/panels/sessionMenu
 
-This section is about practical concurrency under the browser event loop and extension lifecycle.
+Startup restore prompt reuses session state with a lightweight standalone overlay:
 
-### 1) Event loop reality used by this repo
-
-Important queues used here:
-
-- Macro task queue (`setTimeout`, events)
-- Micro task queue (promise continuations)
-- Rendering frame queue (`requestAnimationFrame`)
-- Mutation observer callback queue
-
-Consequence:
-
-- Ordering is not "line-by-line across async".
-- UI must assume callbacks may arrive after state changed.
-
-### 2) rAF + debounce combo in current-page search
-
-Owner file:
-
-- `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts`
-
-Input flow:
-
-1. Input event stores pending value.
-2. rAF coalesces same-frame updates.
-3. 200ms debounce delays grep execution.
-
-Why both:
-
-- rAF: prevents redundant same-frame processing.
-- debounce: reduces expensive grep recompute while typing.
-
-Race guard used:
-
-- `panelOpen` flag checked before processing delayed work.
-- If panel closed mid-flight, callback exits safely.
-
-### 3) Preview update coalescing
-
-Pattern:
-
-- `previewRafId` sentinel ensures only one pending frame callback.
-- Multiple navigation events in same frame merge into one preview render.
-
-Result:
-
-- Less layout/reflow churn.
-- No preview render storm on held-down key.
-
-### 4) Startup and command retries for content-script readiness
-
-Owner files:
-
-- `src/lib/backgroundRuntime/handlers/commandRouter.ts`
-- `src/lib/backgroundRuntime/lifecycle/startupRestore.ts`
-
-Race problem:
-
-- Background may send message before content script is ready.
-
-Solution:
-
-- Retry with bounded delays.
-- Fail safely after max attempts.
-
-Why this belongs in infrastructure layer:
-
-- Readiness is transport concern.
-- Feature logic should not care about startup timing races.
-
-### 5) Scroll restore token strategy (real concurrency defense)
-
-Owner file:
-
-- `src/lib/backgroundRuntime/domains/tabManagerDomain.ts`
-
-Mechanism:
-
-- `pendingScrollRestoreTokens` map stores per-tab token.
-- New restore request increments sequence token.
-- Async retry loop checks token each attempt.
-- Stale loop exits if token changed.
-
-This prevents:
-
-- Older async callback overwriting newer intended state.
-
-This is equivalent to cancellation tokens in other systems.
-
-### 6) MV3 worker lifecycle and idempotent guards
-
-In MV3, worker can stop and restart. In-memory state is not durable.
-
-Protection pattern:
-
-- Every handler calls `ensureTabManagerLoaded()` before operations.
-- Multiple calls are safe (idempotent).
-
-Why idempotent guards matter:
-
-- You cannot assume warm process state.
-- Cold-start correctness must match warm-path correctness.
-
-### 7) Concurrency bugs to watch for in this architecture
-
-1. Stale closure over indices after re-render.
-2. Async action completes after panel close and touches detached DOM.
-3. Retry loops still running after owner state changed.
-4. Multiple confirmation modes active from interleaved key paths.
-
-Mitigations already used:
-
-- Existence guards (`if (!document.getElementById("ht-panel-host")) return`).
-- Mode guards before handling keys.
-- Token/sequence checks for async retries.
-- Centralized cleanup registration per panel host.
-
-### 8) Practical coding pattern for safe async UI
-
-Use this template:
-
-```ts
-let isOpen = true;
-let inflightToken = 0;
-
-function close(): void {
-  isOpen = false;
-  cleanup();
-}
-
-async function doWork(): Promise<void> {
-  const token = ++inflightToken;
-  const data = await fetchData();
-  if (!isOpen) return;
-  if (token !== inflightToken) return;
-  render(data);
-}
-```
-
-This same pattern is applied in different forms throughout this repo.
-
-### 9) Why this matters for frontend frameworks too
-
-Even with React/Vue/Solid:
-
-- event loop ordering does not disappear
-- transport retries still needed
-- stale async results still possible
-- lifecycle cleanup still required
-
-Frameworks change ergonomics, not physics.
+- opens only when saved sessions exist
+- supports list navigation + restore/decline actions
+- uses tab-manager move/jump/close bindings for consistency
+- closes cleanly on confirm/decline and reports feedback toast after restore
 
 ---
 
-## Transferable Engineering Patterns
+## Help — src/lib/ui/panels/help
 
-These are patterns you can carry into any frontend or fullstack codebase.
+Help overlay builds sections from live keybinding config. It documents the panel controls and filters.
 
-### Pattern A: Canonical owner + typed boundary
+- includes session-specific controls (focus toggle, search focus, clear-search, load confirm/cancel)
+- key labels mirror current keybinding config instead of hard-coded defaults
 
-- Keep one canonical owner of persisted state.
-- Expose typed command/query contracts across boundaries.
-- Never let presentation layers mutate canonical state directly.
+**Why live keybindings?**
 
-Applied here:
-
-- Background runtime owns tab/session canonical data.
-- Content overlays talk through typed runtime messages.
-
-### Pattern B: Pure state transitions for mode-heavy UIs
-
-- Put mode transitions in pure functions.
-- Keep DOM side effects in render/handler layer.
-- Unit-test transition logic independently.
-
-Applied here:
-
-- `sessionCore.ts` transition helpers.
-
-### Pattern C: Guardrails in CI, not memory
-
-- Enforce architecture contracts in lint/tests.
-- Enforce upgrade/store policy contracts in verify scripts.
-
-Applied here:
-
-- `esBuildConfig/lint.mjs` layer checks and UI contracts.
-- `verify:compat`, `verify:upgrade`, `verify:store`.
-
-### Pattern D: Defer expensive work until user intent proves needed
-
-- Lazy enrich preview details.
-- Virtualize long lists.
-- Debounce expensive search computation.
-
-Applied here:
-
-- Search preview enrichment + virtualized result rendering.
-
-### Pattern E: Retry policy is infrastructure, not feature logic
-
-- Keep bounded retries in routing/adapter layers.
-- Keep business logic deterministic and focused.
-
-Applied here:
-
-- Command router and startup restore readiness retries.
-
-### Pattern F: Deterministic keyboard UX requires explicit focus state
-
-- Store focus target in state.
-- Re-apply focus after rerender.
-- Avoid implicit focus assumptions.
-
-Applied here:
-
-- Session list `filter/list` focus transitions.
-
-### Pattern G: Separate contracts from utilities
-
-- `contracts/`: schema, types, actions, stable boundaries.
-- `utils/`: parsing/formatting/helpers with no feature ownership.
-
-Applied here:
-
-- `src/lib/common/contracts/*`
-- `src/lib/common/utils/*`
-
-### Build-your-own exercise set (serious reps)
-
-Exercise 1: Rebuild fuzzy scoring module from scratch.
-
-1. Implement `scoreTerm` and `fuzzyMatch` without reading code.
-2. Add unit tests for exact, prefix, boundary, and gap penalty cases.
-3. Compare ranking output with current implementation.
-
-Exercise 2: Introduce a new session confirmation mode.
-
-1. Add new transition helpers in `sessionCore.ts`.
-2. Wire render branch in session view.
-3. Wire keyboard handling with exclusive mode guard.
-4. Prove no mode leakage by manual matrix testing.
-
-Exercise 3: Add new retry-protected command path.
-
-1. Add message contract in `runtimeMessages.ts`.
-2. Add background handler routing.
-3. Add adapter call site.
-4. Add readiness retry where delivery can race startup.
-
-Exercise 4: Add architecture guardrail.
-
-1. Define a new disallowed dependency edge in `lint.mjs`.
-2. Write failing fixture/change.
-3. Validate lint blocks it.
-4. Document why this guardrail exists.
-
-### Senior-level review prompts
-
-When reviewing any PR, ask:
-
-1. Which layer owns this state?
-2. Did this PR add hidden coupling across layers?
-3. Are async completions cancellation-safe?
-4. Is cleanup deterministic on close/reload?
-5. Are transitions explicit or ad-hoc booleans?
-6. Is the behavior testable without opening a browser?
-7. Did we preserve existing runtime/storage contracts?
-
-If you can answer these from code, you are operating at ownership level.
+If the user customizes shortcuts, the help menu reflects their actual bindings, not the defaults.
 
 ---
 
-## Browser Primitives Deep Dive
-
-This section is the foundation layer behind everything in this project. The goal is to make you think in primitives first, then map that understanding into any framework.
-
-### 1) What "browser primitives" means in this codebase
-
-When this guide says "browser primitives," it means native platform APIs directly exposed by the browser runtime:
-
-- DOM APIs (`document`, `Element`, `TreeWalker`, `MutationObserver`)
-- Event system (`addEventListener`, capture/bubble phases, keyboard/mouse/focus events)
-- Shadow DOM (`attachShadow`, style isolation, event retargeting)
-- Rendering clock (`requestAnimationFrame`)
-- Timers (`setTimeout`, debounce/retry scheduling)
-- Extension APIs (`browser.runtime`, `browser.tabs`, `browser.storage.local`, `browser.commands`)
-
-In this project, these primitives are used directly instead of a UI framework runtime.
-
-### 2) Why this approach was chosen
-
-Primary reasons:
-
-1. Extension context constraints are strict.
-2. Keyboard/focus behavior must be deterministic.
-3. Performance must stay predictable on arbitrary pages.
-4. Firefox/Chrome compatibility matters.
-
-Direct primitives allow:
-
-- exact control over host insertion/removal
-- explicit cleanup for reload/startup edge cases
-- no framework abstraction leaks around focus and event ordering
-
-Tradeoff:
-
-- You manually solve problems frameworks usually automate.
-
-### 3) The primitive mindset (how to reason)
-
-When adding/changing behavior, reason in this order:
-
-1. Which runtime owns this data? (page DOM vs background runtime vs storage)
-2. Which primitive can observe/change it safely?
-3. What event starts the flow?
-4. Which async boundaries can reorder work?
-5. What cleanup primitive closes the lifecycle?
-
-If you can answer those 5 questions, the implementation becomes straightforward even without a framework.
-
-### 4) Primitive ownership map in this app
-
-Content script (`src/lib/appInit/appInit.ts`):
-
-- owns page-local input handling
-- owns overlay DOM construction
-- owns page text grep and preview rendering
-
-Background runtime (`src/entryPoints/backgroundRuntime/background.ts` + `src/lib/backgroundRuntime/*`):
-
-- owns canonical tab/session state mutations
-- owns privileged tab operations (`browser.tabs.*`)
-- owns startup/command routing
-
-Common contracts (`src/lib/common/contracts/*`):
-
-- defines stable message/config shapes
-
-Common utils (`src/lib/common/utils/*`):
-
-- provides reusable low-level helpers
-
-### 5) What this teaches you for future frameworks
-
-Frameworks are just structured orchestrators on top of these primitives.
-
-- React state update -> still results in DOM operations.
-- useEffect cleanup -> still maps to removing listeners/timers.
-- framework router event -> still sits on browser event loop.
-
-If you know the primitive layer, frameworks become easier to learn and debug because you understand what they are abstracting.
-
----
-
-## DOM and Shadow DOM Internals
-
-### 1) What the DOM actually is
-
-The DOM is a mutable tree of nodes representing a document snapshot that can be read/written at runtime.
-
-Key node types relevant here:
-
-- `Document`: root access point
-- `Element`: tagged nodes (`div`, `input`, etc.)
-- `Text`: text leaf nodes used by grep traversal
-
-This project uses both element-level and text-node-level traversal depending on task:
-
-- element queries for structure-level UI operations
-- `TreeWalker` text traversal for grep accuracy
-
-### 2) Tree traversal strategies used here
-
-#### Strategy A: Selector-based structural queries
-
-Example usage:
-
-- `querySelectorAll("h1, h2, ...")`
-- `querySelectorAll("a[href]")`
-- `querySelectorAll("img")`
-
-Pros:
-
-- concise, readable
-- semantically aligned with HTML structure
-
-Cons:
-
-- misses unstructured text not in targeted tags
-
-#### Strategy B: Text-node tree walking
-
-Owner:
-
-- `src/lib/ui/panels/searchCurrentPage/grep/grepCollectors.ts`
-
-Pattern:
-
-```ts
-const walker = document.createTreeWalker(
-  document.body,
-  NodeFilter.SHOW_TEXT,
-  { acceptNode(node) { ... } },
-);
-```
-
-Pros:
-
-- catches actual visible text beyond tag heuristics
-- enables more complete grep
-
-Cons:
-
-- must filter aggressively (visibility, pre/code duplicates)
-- easy to over-collect noise without careful acceptance rules
-
-### 3) Shadow DOM internals and why it matters
-
-Shadow DOM lets you attach an isolated subtree to a host element.
-
-Owner utility:
-
-- `src/lib/common/utils/panelHost.ts`
-
-Behavior you get:
-
-- style scoping: host page CSS does not leak into panel styles by default
-- DOM encapsulation: panel internals are not in the light-DOM query path
-- controlled lifecycle: one host, one cleanup path
-
-Why extension overlays need this:
-
-- host pages can have arbitrary CSS resets/frameworks
-- without isolation, overlay UI breaks unpredictably
-
-### 4) Event propagation details you must know
-
-DOM events flow through:
-
-1. capture phase (root -> target)
-2. target phase
-3. bubble phase (target -> root)
-
-This repo intentionally uses capture listeners for global panel key handling so panel shortcuts can preempt page handlers when needed.
-
-Potential pitfall:
-
-- if you forget to stop propagation in the right branch, host page shortcuts can interfere with panel UX.
-
-### 5) Shadow DOM event retargeting
-
-Inside shadow trees, event targets can be retargeted to protect encapsulation.
-
-Practical implication:
-
-- when debugging event paths, inspect `event.composedPath()` if target behavior seems unexpected.
-
-### 6) Layout/reflow sensitivity with dynamic panels
-
-Any read-after-write cycles on layout-sensitive properties can trigger forced synchronous reflow.
-
-This code mitigates that by:
-
-- batching heavy updates via rAF
-- virtualizing long lists
-- minimizing DOM node churn via pooling
+## Common Layer
+
+- `src/lib/common/contracts/keybindings.ts`: keybinding config schema/defaults + matching helpers used across UI/background/options.
+- `src/lib/common/contracts/runtimeMessages.ts`: typed message contracts for background <-> content runtime channels.
+- `src/lib/common/utils/helpers.ts`: `escapeHtml`, `escapeRegex`, `buildFuzzyPattern`, `extractDomain`.
+- `src/lib/common/utils/filterInput.ts`: shared slash-filter parsing used by search overlays.
+- `src/lib/common/utils/panelHost.ts`: shadow host, base styles, focus trapping.
+- `src/lib/common/utils/scroll.ts`: scroll-to-text highlight.
+- `src/lib/common/utils/feedback.ts`: toast rendering helper.
+- `src/lib/common/utils/toastMessages.ts`: standardized feedback copy builders.
+- `src/lib/common/utils/perf.ts`: perf instrumentation helper.
+- `src/lib/common/utils/frecencyScoring.ts`: frecency scoring + eviction.
+- `src/lib/common/utils/storageMigrations.ts` + `src/lib/common/utils/storageMigrationsRuntime.ts`: storage schema upgrades.
+- Session business logic now lives in `src/lib/backgroundRuntime/domains/sessionDomain.ts` (domain layer, not common layer).
+
+## Composability Modules — src/lib/core + src/lib/adapters/runtime
+
+- `src/lib/core/sessionMenu/sessionCore.ts`: pure session mode transitions and derived view selectors (no DOM/browser APIs)
+- `src/lib/core/panel/panelListController.ts`: shared list index math for arrows, wheel, and half-page jumps
+- `src/lib/adapters/runtime/runtimeClient.ts`: central runtime client with retry policy
+- `src/lib/adapters/runtime/sessionApi.ts`, `tabManagerApi.ts`, `openTabsApi.ts`, `keybindingsApi.ts`: domain-level API wrappers used by overlays and popup
+
+Why this matters for growth:
+
+1. You can unit-test state transitions without opening UI.
+2. You can change runtime transport behavior in one place.
+3. You can reuse panel list behavior without copy/paste drift.
+
+Practice loop (no AI, chapter-specific):
+
+1. Trace one common-layer helper from caller -> helper -> returned value usage in UI/background.
+2. Modify one common-layer contract in `runtimeMessages.ts` and update all call sites.
+3. Verify: run lint/typecheck/tests and manually trigger the affected runtime flow.
+4. Explain: defend why common-layer modules should stay minimal and stable.
+
+Failure drill:
+
+1. Introduce a contract mismatch between sender and receiver payload shape.
+2. Observe TypeScript/runtime failure points.
+3. Repair and explain why typed message contracts reduce cross-context bugs.
+
+Growth checkpoint:
+
+1. Junior signal: can find where a common utility is consumed.
+2. Mid signal: can evolve a common contract without hidden breakage.
+3. Senior signal: can decide what belongs in `common/contracts` or `common/utils` vs feature-specific modules.
 
 ---
 
@@ -2239,131 +1957,228 @@ When to consider evolving:
 
 ---
 
-## Grepping and Fuzzy Search System (Full Deconstruction)
+## Panel Lifecycle + Guards
 
-This is the end-to-end "make search actually useful" pipeline.
+- panels are isolated Shadow DOM trees
+- global keybinds are blocked while a live panel is open
+- host integrity is checked before open; stale/empty host is dismissed automatically
+- `openPanel()` is fail-closed (sync + async errors both call `dismissPanel()`)
+- panel openers fail-closed too (top-level catch calls `dismissPanel()`)
+- command-triggered open messages use bounded retries for content-script readiness
+- `dismissPanel()` tears down the host and registered panel cleanup
 
-### 1) High-level objective
+This layer is cross-cutting infrastructure for every feature module. It should stay generic and reusable, with feature-specific logic remaining in each panel/domain module.
 
-Search should be:
+**Why block global keybinds when panel is open?**
 
-- broad enough to find relevant content quickly
-- fast enough to update while typing
-- structured enough to preview context meaningfully
+Prevents conflicts. `Alt+F` opens the panel; once open, pressing `Alt+F` should not try to open another. The panel guard ensures only the panel's key handler responds.
 
-### 2) End-to-end data path
+**Failure recovery path (must be second nature):**
 
-1. User types in panel input.
-2. Input is coalesced via rAF.
-3. Query execution is debounced.
-4. `grepPage(query, filters)` runs.
-5. Collectors provide candidate lines from cache.
-6. Fuzzy scorer ranks matches.
-7. Top results returned (bounded).
-8. List virtualizer renders visible subset.
-9. Preview lazily enriches active result.
+1. Trigger arrives (keydown or runtime command message).
+2. Validate host integrity (clear stale host if needed).
+3. Attempt open through guarded `openPanel(...)`.
+4. If init fails at any point, fail closed via `dismissPanel()`.
+5. Next shortcut can open immediately (no ghost host lockout).
 
-Owners:
+---
 
-- `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts`
-- `src/lib/ui/panels/searchCurrentPage/grep.ts`
-- `src/lib/ui/panels/searchCurrentPage/grep/*`
+## Performance Patterns
 
-### 3) Why this grep is useful (not just technically correct)
+- **Virtual lists with DOM pooling:** Only ~25 DOM nodes exist; they're recycled as the user scrolls.
+- **rAF throttled updates:** Rendering is scheduled via `requestAnimationFrame` to batch DOM writes.
+- **Measured hot paths:** `withPerfTrace(...)` instruments filter/render hotspots and writes stats to `globalThis.__HT_PERF_STATS__`.
+- **Regression budgets:** `src/lib/common/utils/perfBudgets.json` keeps expected latency envelopes explicit in code review + tests.
+- **Cached DOM grep + mutation invalidation:** Walk the DOM once, cache lines, invalidate on changes.
+- **Lazy computation:** Expensive fields (domContext, ancestorHeading) are computed on-demand, not upfront.
+- **Responsive pane switching:** two-pane overlays collapse to stacked panes on smaller viewports.
 
-Usefulness comes from combined design choices:
+Practice loop (no AI, chapter-specific):
 
-1. Multiple structural collectors (`code/headings/links/images/all`) make matching semantically relevant.
-2. Fuzzy scoring prioritizes quality of match, not only existence.
-3. Context preview shows surrounding meaning, not isolated line only.
-4. DOM-aware enrichment adds heading and URL breadcrumbs.
-5. Virtualization keeps interaction smooth on big result sets.
+1. Trace one hot path (`filter` or `render`) from event handler to measured trace output.
+2. Modify one performance-sensitive block (for example list rendering) with a measurable hypothesis.
+3. Verify: inspect perf traces + run perf guardrail tests.
+4. Explain: justify tradeoff between readability and latency on that path.
 
-### 4) Fuzzy search: what it means here
+Failure drill:
 
-In this repo, fuzzy search means:
+1. Temporarily disable virtualization or rAF scheduling in a local branch.
+2. Reproduce jank on larger datasets.
+3. Restore optimization and explain the before/after complexity and frame-budget impact.
 
-- characters of query terms can match non-contiguously in candidate text
-- match quality is scored by structure (start/boundary/consecutive/gap)
+Growth checkpoint:
 
-It is not plain levenshtein distance, and it is not plain substring.
+1. Junior signal: can identify which code path is hot.
+2. Mid signal: can reduce latency without changing behavior.
+3. Senior signal: can set and defend measurable budgets in code review.
 
-### 5) Practical scoring interpretation
+---
 
-Given query `tmgr` and candidate `tab manager`:
+## UI Conventions (Footers, Navigation, Filters)
 
-- characters match in order
-- boundary and consecutive bonuses help rank readable abbreviations higher
+- Footer order: nav -> secondary (list/tree) -> action (clear/del/move) -> primary (open) -> close/back
+- Footer labels: uppercase key + lowercase label (ex: `D del`)
+- Tab Manager action row order: `U undo` -> `W swap` -> `D del` -> `Enter jump` -> `Esc close`
+- Standard aliases: `j/k` are always enabled for up/down where list navigation exists
+- Clear-search: `Shift+Space` works from search/session input flows
+- Search input placeholders follow `Search <Panel Name> . . .` across session load, open tabs, and current-page search
 
-Given query `tab man` and candidate `my tab manager`:
+**Why strict footer order?**
 
-- term split allows multi-token matching
-- both terms must match
+Consistency across panels. Users learn the pattern once and can predict where keybind hints appear.
 
-Given loose candidate with many gaps:
+---
 
-- distance penalty reduces score
-- tighter candidates rise above noisy ones
+## Algorithm + Complexity Ledger
 
-### 6) Why cache + observer is essential
+This is the quick reference I should be able to explain in interviews and design reviews.
 
-Without cache:
+| Subsystem | Core operation | Complexity (high-level) | Main challenge | Mitigation used |
+|---|---|---|---|---|
+| Search Current Page | Cached line extraction + query ranking | Cache build `O(N)` over candidate nodes; query pass approximately `O(C * Q)` + sort cap | Large DOM + keystroke latency | Cached extraction, capped results, virtual scrolling, lazy preview enrichment |
+| Search Open Tabs | Title/URL match + ranked sort | `O(T)` matching + `O(T log T)` sort | Fast ranking without UI jank | Ranked match tiers, bounded rendering, rAF scheduling |
+| Session List Panel | Query filter + confirmation state transitions | `O(S)` filtering where `S <= 4` + preview rendering | Mode-gated keyboard behavior during rename/confirm flows | Explicit transient states + confirm/cancel action gating |
+| Tab Manager Jump | Slot lookup + tab activate/reopen | `O(S)` where `S <= 4` | Unstable tab IDs across lifecycle/restart | Persist URL + scroll, closed-entry recovery, reconcile against open tabs |
+| Session Load Plan | Slot-by-slot unchanged/new/deleted/replaced computation | `O(E)` where `E` session entries | Predictable load summary against current tab-manager state | URL normalization + same-slot comparison |
+| Session Load Execute | Reuse existing or open new tabs | `O(E)` plus tab API latency | Consistent restore with partial failures | Per-entry fallback (reuse -> open), queued scroll restore, graceful skip on open failure |
+| Panel Lifecycle | Open/close/focus/error handling | `O(1)` control flow | Ghost host and readiness race conditions | Host-integrity checks, fail-closed open paths, bounded retries |
 
-- every keystroke walks DOM from scratch
-- heavy pages become unusable
+When discussing complexity, always include:
 
-With cache + mutation invalidation:
+1. Data size variable (`N`, `T`, `B`, `E`) and where it comes from.
+2. Practical cap/guardrail used in product behavior.
+3. The dominant user-facing risk (latency, stale state, focus confusion).
 
-- searches run on in-memory arrays
-- page changes still eventually refresh index
+---
 
-Tradeoff:
+## Patterns Worth Reusing
 
-- small staleness window during debounce/invalidation period
+- **Message routing with `type` discriminators:** Simple, scalable, easy to trace.
+- **Lazy-load guards:** Safe for service worker restarts; idempotent.
+- **Overlay UI in Shadow DOM:** Isolated styles; no page CSS collisions.
+- **State machines (`detailMode`, `focusedPane`):** Explicit state; predictable behavior.
+- **Unidirectional data flow:** Events mutate state; render reads state.
+- **Ranked text matching:** Combine substring and fuzzy matching, then rank by quality so exact/tighter title hits rise first.
+- **Virtual scrolling:** O(visible) rendering for large lists.
 
-That tradeoff is intentional for responsiveness.
+---
 
-### 7) Why preview enrichment is lazy
+## Transferable Engineering Patterns
 
-Computing full DOM context for every result is expensive and often wasted.
+These are patterns you can carry into any frontend or fullstack codebase.
 
-Lazy enrich strategy:
+### Pattern A: Canonical owner + typed boundary
 
-- only active result gets heavy context computation
-- cached onto result object once computed
+- Keep one canonical owner of persisted state.
+- Expose typed command/query contracts across boundaries.
+- Never let presentation layers mutate canonical state directly.
 
-This matches actual user attention and keeps panel responsive.
+Applied here:
 
-### 8) How to recreate this search system from scratch
+- Background runtime owns tab/session canonical data.
+- Content overlays talk through typed runtime messages.
 
-Build order (recommended):
+### Pattern B: Pure state transitions for mode-heavy UIs
 
-1. implement raw text collector
-2. implement simple substring filter
-3. add fuzzy scoring
-4. add result ranking and cap
-5. add cache + invalidation
-6. add structural filters
-7. add lazy preview enrichment
-8. add virtualization
-9. add keyboard/focus controls
+- Put mode transitions in pure functions.
+- Keep DOM side effects in render/handler layer.
+- Unit-test transition logic independently.
 
-Each step should stay working before moving to next.
+Applied here:
 
-### 9) How to change search direction safely
+- `sessionCore.ts` transition helpers.
 
-If changing scoring behavior:
+### Pattern C: Guardrails in CI, not memory
 
-1. keep existing API shape (`grepPage`, `enrichResult`)
-2. add measurement for rank shifts on known pages
-3. test edge inputs (empty, very short, special chars)
-4. verify preview still aligns with selected row
+- Enforce architecture contracts in lint/tests.
+- Enforce upgrade/store policy contracts in verify scripts.
 
-If changing collector behavior:
+Applied here:
 
-1. validate duplicates are still deduped
-2. validate visibility filtering still excludes hidden noise
-3. validate code/links/images tags still map to badges correctly
+- `esBuildConfig/lint.mjs` layer checks and UI contracts.
+- `verify:compat`, `verify:upgrade`, `verify:store`.
+
+### Pattern D: Defer expensive work until user intent proves needed
+
+- Lazy enrich preview details.
+- Virtualize long lists.
+- Debounce expensive search computation.
+
+Applied here:
+
+- Search preview enrichment + virtualized result rendering.
+
+### Pattern E: Retry policy is infrastructure, not feature logic
+
+- Keep bounded retries in routing/adapter layers.
+- Keep business logic deterministic and focused.
+
+Applied here:
+
+- Command router and startup restore readiness retries.
+
+### Pattern F: Deterministic keyboard UX requires explicit focus state
+
+- Store focus target in state.
+- Re-apply focus after rerender.
+- Avoid implicit focus assumptions.
+
+Applied here:
+
+- Session list `filter/list` focus transitions.
+
+### Pattern G: Separate contracts from utilities
+
+- `contracts/`: schema, types, actions, stable boundaries.
+- `utils/`: parsing/formatting/helpers with no feature ownership.
+
+Applied here:
+
+- `src/lib/common/contracts/*`
+- `src/lib/common/utils/*`
+
+### Build-your-own exercise set (serious reps)
+
+Exercise 1: Rebuild fuzzy scoring module from scratch.
+
+1. Implement `scoreTerm` and `fuzzyMatch` without reading code.
+2. Add unit tests for exact, prefix, boundary, and gap penalty cases.
+3. Compare ranking output with current implementation.
+
+Exercise 2: Introduce a new session confirmation mode.
+
+1. Add new transition helpers in `sessionCore.ts`.
+2. Wire render branch in session view.
+3. Wire keyboard handling with exclusive mode guard.
+4. Prove no mode leakage by manual matrix testing.
+
+Exercise 3: Add new retry-protected command path.
+
+1. Add message contract in `runtimeMessages.ts`.
+2. Add background handler routing.
+3. Add adapter call site.
+4. Add readiness retry where delivery can race startup.
+
+Exercise 4: Add architecture guardrail.
+
+1. Define a new disallowed dependency edge in `lint.mjs`.
+2. Write failing fixture/change.
+3. Validate lint blocks it.
+4. Document why this guardrail exists.
+
+### Senior-level review prompts
+
+When reviewing any PR, ask:
+
+1. Which layer owns this state?
+2. Did this PR add hidden coupling across layers?
+3. Are async completions cancellation-safe?
+4. Is cleanup deterministic on close/reload?
+5. Are transitions explicit or ad-hoc booleans?
+6. Is the behavior testable without opening a browser?
+7. Did we preserve existing runtime/storage contracts?
+
+If you can answer these from code, you are operating at ownership level.
 
 ---
 
@@ -2535,3 +2350,190 @@ You can claim strong foundation when you can:
 5. review one framework tutorial and translate every abstraction to primitives
 
 If you do this long enough, you stop being framework-dependent and become system-capable.
+
+## Maintainer Operating Mode
+
+Definition: I am not only shipping features. I am preserving system behavior, invariants, and developer velocity.
+
+Release-quality checklist for every change:
+
+1. Identify the owning layer first (content UI, background domain, shared contract, build/release).
+2. State the invariant being changed or preserved before coding.
+3. Implement the smallest coherent patch that keeps module boundaries intact.
+4. Prove behavior with one happy-path check and one failure-path check.
+5. Add regression coverage (test and/or documented manual repro).
+6. Update docs where behavior contracts changed (`learn.md`, `README.md`, `STORE.md`, `PRIVACY.md` when relevant).
+7. Run quality gates: lint, tests, and compatibility/store checks as appropriate.
+
+What "ownership" means in this repo:
+
+1. I can explain any runtime message from sender to handler to side effect.
+2. I can explain why state belongs to background vs content script.
+3. I can explain one tradeoff per subsystem (performance, complexity, UX, reliability).
+4. I can debug failures without relying on framework abstractions.
+
+---
+
+## System Invariants
+
+These are non-negotiable truths. If one breaks, behavior drifts.
+
+Global/runtime invariants:
+
+1. Background owns canonical browser state (`tabs`, `sessions`, frecency persistence).
+2. Content overlays are ephemeral views driven by runtime messages and local UI state.
+3. Runtime message shapes stay explicit and synchronized across sender/receiver.
+4. Only one live panel host may exist at a time.
+
+Tab Manager invariants:
+
+1. Slots remain compacted and ordered from 1..N.
+2. Closed entries stay representable and recoverable by URL.
+3. Scroll coordinates are captured/restored as part of tab/session workflow.
+4. Session capacity and slot capacity constraints are enforced consistently.
+
+Session invariants:
+
+1. Session names are unique case-insensitively.
+2. Session list ordering is deterministic (recent-first when listed).
+3. Load planning and load execution are consistent (slot-plan rows and totals align with actual action).
+4. Confirmation flows must be explicit and reversible.
+
+Search/session-list invariants:
+
+1. Query -> filter -> rank -> render pipeline is deterministic for the same input state.
+2. Focus behavior is explicit (`input`, `results`, and confirmation/rename modes) and keyboard-safe.
+3. Virtualized lists only render visible windows plus buffer.
+
+Build/release invariants:
+
+1. MV2/MV3 manifests remain policy-compatible with behavior and docs.
+2. Storage migrations are forward-compatible and test-gated.
+3. Store claims and privacy claims match actual permissions and persisted data.
+
+---
+
+## Bug Triage + Patch Runbook
+
+Use this every time before coding a fix.
+
+1. Reproduce precisely.
+2. Classify the layer: UI state, runtime messaging, background domain, storage/migration, or build/release.
+3. Capture expected invariant and observed invariant break.
+4. Isolate minimal failing path in code (function + message + state transition).
+5. Patch minimally at the owning layer (avoid cross-layer band-aids first).
+6. Verify with:
+   - one direct repro replay,
+   - one adjacent regression check,
+   - one failure-path check.
+7. Add or update tests/guardrails where practical.
+8. Update docs that define behavior contracts.
+
+Patch quality questions:
+
+1. Does this fix preserve existing contracts in other panels/flows?
+2. Does this introduce hidden coupling between modules?
+3. If this fails again, will it fail safe (recoverable) or fail dangerous (lock/freeze/data drift)?
+
+---
+
+## Incident Playbooks
+
+Incident: panel shortcut does nothing.
+
+1. Check panel host lifecycle (`createPanelHost`, `dismissPanel`, cleanup registration).
+2. Verify global keybinding path in `appInit.ts`.
+3. Verify runtime command path in `commandRouter.ts`.
+4. Confirm stale host recovery and retry paths are active.
+
+Incident: tab jump/session load restores wrong scroll location.
+
+1. Verify capture points (`GET_SCROLL` capture before switch/save).
+2. Verify saved session/tab entry contains expected `scrollX/scrollY`.
+3. Verify restore queue + delivery (`SET_SCROLL`, ready/retry path).
+4. Check restricted-page edge cases where content script messaging is blocked.
+
+Incident: session load summary differs from observed load.
+
+1. Compare load-plan computation vs load execution path.
+2. Verify URL normalization and same-slot comparison behavior.
+3. Confirm session list snapshot did not change between plan and confirm.
+
+Incident: cross-context drift (UI shows stale data).
+
+1. Verify background remains canonical source and list fetch occurs on open.
+2. Confirm message contract payloads match expected types.
+3. Verify no stale cached UI list survives mode transitions.
+
+---
+
+## Interview Prep + Codebase Walkthrough
+
+Use this as the final section before interviews or live walkthroughs.
+
+10-minute walkthrough script:
+
+1. Product + target user (30s): keyboard-first tab/search workflow for power users.
+2. Architecture (90s): content script owns page DOM, background owns browser APIs + canonical state, runtime messages connect them.
+3. Flow A demo (2 min): keypress -> search pipeline -> cached grep -> virtualized render -> scroll side effect.
+4. Flow B demo (2 min): add/jump tab path, unstable tab-ID problem, URL+scroll recovery strategy.
+5. Flow C demo (90s): session-menu state machine and explicit mode transitions.
+6. Flow D demo (90s): startup race handling with bounded retries and fallback.
+7. Release confidence (60s): CI gates (`verify:compat`, `verify:upgrade`, `verify:store`) + Firefox/Chrome builds.
+
+Interview question drill:
+
+1. Why no framework?
+Answer frame: browser primitives reduce overhead, keep control over focus/latency, and map well to extension constraints.
+2. How do you replace framework conveniences in vanilla TypeScript?
+Answer frame: explicit state machines for UI modes, shared panel-host lifecycle contracts, typed runtime message contracts, virtualized lists, and deterministic keyboard/focus management.
+3. How do you prevent state drift between contexts?
+Answer frame: background is canonical source of truth, overlays request fresh state, message contracts are explicit.
+4. What was the hardest bug class?
+Answer frame: lifecycle and readiness races (MV3 worker restart, startup prompt delivery), solved with idempotent guards and bounded retries.
+5. How do you prove performance claims?
+Answer frame: virtualized rendering, rAF scheduling, perf traces, and CI budget tests.
+6. How is this extension store-ready?
+Answer frame: manifest/privacy/store docs are policy-checked; compatibility and migration gates run in CI.
+
+Proof-of-ownership checklist (run this per feature):
+
+1. Flow A ownership proof: trace `appInit.ts` -> `searchCurrentPage.ts` -> `grep.ts`; run search-related tests/manual grep pass; implement one new slash filter; explain ranking + virtualization tradeoffs.
+2. Flow B ownership proof: trace runtime message path into `tabManagerDomain.ts`; run tab-manager add/jump/session checks; implement one command evolution with contract updates; explain tab-ID instability design.
+3. Flow C ownership proof: trace session list fetch -> render -> mode transitions; run rename/delete/load-confirm checks; implement one new session-local keybinding; explain mode-state invariants.
+4. Flow D ownership proof: trace startup restore retries in `startupRestore.ts`; run startup/fallback checks; tune retry constants safely; explain eventual consistency vs synchronous assumptions.
+5. Platform ownership proof: run `npm run ci`; explain what `verify:compat`, `verify:upgrade`, and `verify:store` each prevent in release risk.
+
+30/60/90 growth track in this repo:
+
+1. Day 1-30 (Junior -> strong junior): finish one full rep on each flow (A-D) using the artifact checklist, pass all checks locally, and ship one low-risk patch per flow.
+2. Day 31-60 (Mid ramp): complete two bug-fix reps and one refactor rep across different flows, each with invariant notes + regression proof.
+3. Day 61-90 (Senior trajectory): redesign one flow boundary (ownership, state, or messaging), document tradeoffs, and add one guardrail that prevents recurrence of a real failure class.
+
+Flow-first weekly cadence (repeat):
+
+1. Pick one flow and write trigger -> owner -> state -> render -> side-effect map from memory.
+2. Run one no-AI rep and collect evidence artifacts.
+3. Run one review drill on a recent patch using invariants as acceptance criteria.
+4. Run one incident retrospective (real bug or simulated failure drill).
+5. Summarize what changed in your mental model and what you will tighten next week.
+
+Quick summary of everything learned:
+
+1. I can trace real data flow from keypress to render/storage/side effects across browser contexts.
+2. I understand extension boundaries: page DOM vs browser APIs vs runtime messaging.
+3. I can design explicit state machines for keyboard-heavy UIs.
+4. I can reason about performance budgets and enforce them with instrumentation/tests.
+5. I can design resilient startup/recovery behavior for async lifecycle mismatches.
+6. I can ship with release guardrails: compatibility, upgrade safety, and store-policy consistency.
+7. I can extend this codebase confidently and explain tradeoffs like an owner, not a passenger.
+
+---
+
+## Final Thought
+
+If I can trace a feature from keypress to storage to render and back, I understand the system. If I can explain the tradeoffs, I can defend the design. If I can apply these patterns elsewhere, I've grown as an engineer.
+
+This codebase is mine. I built it to learn, and now I can teach it.
+
+---

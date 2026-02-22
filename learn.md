@@ -38,42 +38,43 @@ This guide is self-contained: no prerequisite docs are required to learn the sys
 1. [Project Overview](#project-overview)
 2. [Browser Primitives Deep Dive](#browser-primitives-deep-dive)
 3. [DOM and Shadow DOM Internals](#dom-and-shadow-dom-internals)
-4. [Data-Flow Walkthrough (Start -> End -> Start)](#data-flow-walkthrough-start-end-start)
-5. [Folder Structure](#folder-structure)
-6. [Build System — esBuildConfig/build.mjs](#build-system-esbuildconfigbuildmjs)
-7. [Manifests — MV2 and MV3](#manifests-mv2-and-mv3)
-8. [Shared Types — src/types.d.ts](#shared-types-srctypesdts)
-9. [Keybinding System — src/lib/common/contracts/keybindings.ts](#keybinding-system-srclibcommoncontractskeybindingsts)
-10. [Content Script Boot — src/entryPoints/contentScript](#content-script-boot-srcentrypointscontentscript)
-11. [Background Process — src/entryPoints/backgroundRuntime](#background-process-srcentrypointsbackgroundruntime)
-12. [Concurrency Deep Dive (JavaScript + Extension Runtime)](#concurrency-deep-dive-javascript-extension-runtime)
-13. [Search Current Page — src/lib/ui/panels/searchCurrentPage](#search-current-page-srclibuipanelssearchcurrentpage)
-14. [Grepping and Fuzzy Search System (Full Deconstruction)](#grepping-and-fuzzy-search-system-full-deconstruction)
-15. [Algorithm Deep Dive](#algorithm-deep-dive)
-16. [Search Open Tabs — src/lib/ui/panels/searchOpenTabs](#search-open-tabs-srclibuipanelssearchopentabs)
-17. [Tab Manager — src/lib/ui/panels/tabManager](#tab-manager-srclibuipanelstabmanager)
-18. [Session Menu — src/lib/ui/panels/sessionMenu](#session-menu-srclibuipanelssessionmenu)
-19. [State Management Deep Dive](#state-management-deep-dive)
-20. [Session Restore Overlay — src/lib/ui/panels/sessionMenu](#session-restore-overlay-srclibuipanelssessionmenu)
-21. [Help — src/lib/ui/panels/help](#help-srclibuipanelshelp)
-22. [Common Layer](#common-layer)
-23. [Composability Modules — src/lib/core + src/lib/adapters/runtime](#composability-modules-srclibcore-srclibadaptersruntime)
-24. [Dynamic UI Complexity and Control Strategies](#dynamic-ui-complexity-and-control-strategies)
-25. [Inline HTML Template Strategy (How It Works + Tradeoffs)](#inline-html-template-strategy-how-it-works-tradeoffs)
-26. [Panel Lifecycle + Guards](#panel-lifecycle-guards)
-27. [Performance Patterns](#performance-patterns)
-28. [UI Conventions (Footers, Navigation, Filters)](#ui-conventions-footers-navigation-filters)
-29. [Algorithm + Complexity Ledger](#algorithm-complexity-ledger)
-30. [Patterns Worth Reusing](#patterns-worth-reusing)
-31. [Transferable Engineering Patterns](#transferable-engineering-patterns)
-32. [Primitive-to-Framework Mapping (React/Vue/Solid)](#primitive-to-framework-mapping-reactvuesolid)
-33. [Rebuild and Direction-Change Playbooks](#rebuild-and-direction-change-playbooks)
-34. [Maintainer Operating Mode](#maintainer-operating-mode)
-35. [System Invariants](#system-invariants)
-36. [Bug Triage + Patch Runbook](#bug-triage-patch-runbook)
-37. [Incident Playbooks](#incident-playbooks)
-38. [Interview Prep + Codebase Walkthrough](#interview-prep-codebase-walkthrough)
-39. [Final Thought](#final-thought)
+4. [Raw HTML Foundation (No JSX)](#raw-html-foundation-no-jsx)
+5. [Data-Flow Walkthrough (Start -> End -> Start)](#data-flow-walkthrough-start---end---start)
+6. [Folder Structure](#folder-structure)
+7. [Build System — esBuildConfig/build.mjs](#build-system-esbuildconfigbuildmjs)
+8. [Manifests — MV2 and MV3](#manifests-mv2-and-mv3)
+9. [Shared Types — src/types.d.ts](#shared-types-srctypesdts)
+10. [Keybinding System — src/lib/common/contracts/keybindings.ts](#keybinding-system-srclibcommoncontractskeybindingsts)
+11. [Content Script Boot — src/entryPoints/contentScript](#content-script-boot-srcentrypointscontentscript)
+12. [Background Process — src/entryPoints/backgroundRuntime](#background-process-srcentrypointsbackgroundruntime)
+13. [Concurrency Deep Dive (JavaScript + Extension Runtime)](#concurrency-deep-dive-javascript-extension-runtime)
+14. [Search Current Page — src/lib/ui/panels/searchCurrentPage](#search-current-page-srclibuipanelssearchcurrentpage)
+15. [Grepping and Fuzzy Search System (Full Deconstruction)](#grepping-and-fuzzy-search-system-full-deconstruction)
+16. [Algorithm Deep Dive](#algorithm-deep-dive)
+17. [Search Open Tabs — src/lib/ui/panels/searchOpenTabs](#search-open-tabs-srclibuipanelssearchopentabs)
+18. [Tab Manager — src/lib/ui/panels/tabManager](#tab-manager-srclibuipanelstabmanager)
+19. [Session Menu — src/lib/ui/panels/sessionMenu](#session-menu-srclibuipanelssessionmenu)
+20. [State Management Deep Dive](#state-management-deep-dive)
+21. [Session Restore Overlay — src/lib/ui/panels/sessionMenu](#session-restore-overlay-srclibuipanelssessionmenu)
+22. [Help — src/lib/ui/panels/help](#help-srclibuipanelshelp)
+23. [Common Layer](#common-layer)
+24. [Composability Modules — src/lib/core + src/lib/adapters/runtime](#composability-modules-srclibcore-srclibadaptersruntime)
+25. [Dynamic UI Complexity and Control Strategies](#dynamic-ui-complexity-and-control-strategies)
+26. [Inline HTML Template Strategy (How It Works + Tradeoffs)](#inline-html-template-strategy-how-it-works-tradeoffs)
+27. [Panel Lifecycle + Guards](#panel-lifecycle-guards)
+28. [Performance Patterns](#performance-patterns)
+29. [UI Conventions (Footers, Navigation, Filters)](#ui-conventions-footers-navigation-filters)
+30. [Algorithm + Complexity Ledger](#algorithm-complexity-ledger)
+31. [Patterns Worth Reusing](#patterns-worth-reusing)
+32. [Transferable Engineering Patterns](#transferable-engineering-patterns)
+33. [Primitive-to-Framework Mapping (React/Vue/Solid)](#primitive-to-framework-mapping-reactvuesolid)
+34. [Rebuild and Direction-Change Playbooks](#rebuild-and-direction-change-playbooks)
+35. [Maintainer Operating Mode](#maintainer-operating-mode)
+36. [System Invariants](#system-invariants)
+37. [Bug Triage + Patch Runbook](#bug-triage-patch-runbook)
+38. [Incident Playbooks](#incident-playbooks)
+39. [Interview Prep + Codebase Walkthrough](#interview-prep-codebase-walkthrough)
+40. [Final Thought](#final-thought)
 
 ---
 
@@ -339,6 +340,213 @@ This code mitigates that by:
 - batching heavy updates via rAF
 - virtualizing long lists
 - minimizing DOM node churn via pooling
+
+---
+
+## Raw HTML Foundation (No JSX)
+
+This section teaches raw HTML as a first-class engineering skill, not as a fallback. The goal is to make you comfortable building and maintaining dynamic UI directly with browser primitives.
+
+### 1) What "raw HTML" actually means
+
+Raw HTML in this codebase means:
+
+- semantic HTML structure written as template strings or created via `document.createElement`
+- direct DOM mutation (`append`, `replaceChildren`, `classList`, `textContent`)
+- event wiring via native listeners
+- explicit cleanup and lifecycle ownership
+
+Owner examples:
+
+- `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts`
+- `src/lib/ui/panels/searchCurrentPage/searchCurrentPageView.ts`
+- `src/lib/ui/panels/sessionMenu/session.ts`
+- `src/lib/ui/panels/tabManager/tabManager.ts`
+
+### 2) Why master this before JSX abstractions
+
+If you understand raw HTML deeply, JSX becomes easier because JSX eventually compiles to DOM instructions. The abstraction layer changes ergonomics, but not platform behavior.
+
+Raw HTML skill gives you:
+
+1. Deterministic control over focus, keyboard routing, and panel lifecycle.
+2. Better debugging when framework abstractions leak.
+3. Better performance intuition (layout, paint, reflow, node churn).
+4. Better security hygiene around untrusted text and HTML sinks.
+
+### 3) HTML is semantics first, visuals second
+
+HTML is not "just something CSS styles." It is also:
+
+- document structure for machines and humans
+- accessibility tree input
+- keyboard/focus interaction contract
+- default behavior contract (forms, buttons, links, navigation)
+
+Use semantic elements intentionally:
+
+- use `button` for actions, not clickable `div`
+- use `label` with `input` for accessible form controls
+- use heading hierarchy (`h1` -> `h6`) for meaningful structure
+- use `main`, `nav`, `section`, `article` when they reflect real structure
+
+### 4) The parser and DOM are not identical to source text
+
+Browsers parse invalid HTML and auto-correct structure. Your source string is input, but the DOM tree is the actual runtime truth.
+
+Example pitfall:
+
+```html
+<p>hello<div>world</div></p>
+```
+
+The browser will close/reopen tags to normalize tree validity. Debug by inspecting the rendered DOM, not only the original string.
+
+### 5) Safe dynamic content: use the right sink
+
+Rule of thumb:
+
+- untrusted text -> `textContent`
+- trusted static shell -> `innerHTML` template is acceptable
+- mixed dynamic + HTML -> escape dynamic portions first
+
+This repo uses `escapeHtml` for dynamic text before HTML interpolation:
+
+- `src/lib/common/utils/helpers.ts`
+
+Pattern:
+
+```ts
+import { escapeHtml } from "../../common/utils/helpers";
+
+const html = `<span>${escapeHtml(userVisibleText)}</span>`;
+container.innerHTML = html;
+```
+
+Never inject unescaped user/page text into `innerHTML`.
+
+### 6) Practical composition patterns without JSX
+
+Pattern A: static shell via template string
+
+- fast to author
+- good for panel skeleton markup
+- used in this repo for panel frame/layout boot
+
+Pattern B: dynamic rows via `createElement`
+
+- safer for repeated interactive list items
+- easy to avoid full reparse of large HTML strings
+- better control of per-item listeners and classes
+
+Pattern C: hybrid
+
+- static outer shell in `innerHTML`
+- dynamic list/preview updates with direct node mutation
+- this is the dominant pattern in this extension
+
+### 7) Common practices for maintainable raw HTML
+
+1. Keep shell/template generation and stateful rendering separate.
+2. Keep selectors stable and explicit (`.ht-...` class contracts).
+3. Prefer one render owner function per panel mode.
+4. Centralize footer/hint HTML builders to prevent drift.
+5. Keep one cleanup path that removes listeners/timers/observers.
+6. Prefer event delegation for large/virtual lists.
+7. Keep accessibility attributes (`title`, labels, roles) intentional.
+
+### 8) Form and input mechanics you should know deeply
+
+Even if UI looks like "just an input," behavior depends on primitive details:
+
+- `input` event fires on value change while typing
+- `keydown` handles navigation/shortcuts
+- `change` fires on commit/blur semantics
+- `submit` on form can be canceled via `preventDefault`
+
+Useful native tools:
+
+- `new FormData(form)` for extraction
+- `input.setSelectionRange(start, end)` for cursor control
+- `input.focus()` for mode transitions
+- `HTMLInputElement.selectionStart/selectionEnd` for edit behavior
+
+### 9) Performance with raw DOM
+
+Costs to watch:
+
+- reparsing large `innerHTML` strings
+- replacing whole subtree for tiny state updates
+- read-after-write layout thrash
+- too many active listeners on large lists
+
+Patterns used in this codebase:
+
+- virtualized list rendering for search results
+- bounded result caps
+- lazy preview enrichment
+- requestAnimationFrame-coalesced rendering paths
+
+### 10) When raw HTML is better than JSX
+
+Raw HTML is usually a better fit when:
+
+1. You need maximal control in extension/page-injected environments.
+2. Bundle/runtime overhead must stay minimal.
+3. UI surface is moderate and highly keyboard-driven.
+4. You need deterministic host-page integration and teardown.
+5. You are building infra-level primitives, not product-scale component ecosystems.
+
+### 11) When JSX is better than raw HTML
+
+JSX/frameworks are usually better when:
+
+1. UI hierarchy is very deep and frequently changing.
+2. Large teams need strict component contracts and reuse patterns.
+3. SSR/hydration is a product requirement.
+4. You want ecosystem leverage (router/data tools/devtools) over low-level control.
+
+### 12) Raw HTML vs JSX: tradeoff matrix
+
+| Concern | Raw HTML/DOM | JSX/Framework |
+| --- | --- | --- |
+| Initial control | Maximum | Mediated by framework model |
+| Runtime overhead | Minimal | Higher baseline |
+| Learning curve | Low to start, high to scale | Higher upfront, easier scaling with conventions |
+| Debugging | Direct platform behavior | Requires abstraction + platform understanding |
+| Large-team ergonomics | Manual discipline required | Better default structure |
+| Extension compatibility | Excellent | Depends on bundling/runtime strategy |
+
+### 13) Primitive-to-JSX mapping mental model
+
+Use this mapping to keep foundations strong while learning frameworks:
+
+- template builder function -> component render function
+- closure state vars -> component state/store
+- manual `render()` call -> framework reconciliation trigger
+- listener cleanup -> effect cleanup/unmount lifecycle
+- explicit DOM query/update -> refs/effects + render tree updates
+
+If your primitive model is clear, JSX becomes a productivity layer, not magic.
+
+### 14) Anti-patterns to avoid
+
+1. Full `innerHTML` re-render on every keypress when only one row changed.
+2. Mixing business logic and string templates in one giant function.
+3. Multiple independent cleanup paths that can drift.
+4. Relying on placeholder text as the only affordance/label.
+5. Unescaped interpolation into HTML sinks.
+6. Binding per-item listeners when delegation is sufficient.
+
+### 15) Practice ladder for this repo
+
+Use these reps to build deep ownership:
+
+1. Rebuild one small panel shell with only semantic HTML + class contracts.
+2. Replace one `innerHTML` row render with `createElement` and compare complexity/perf.
+3. Add one input behavior (cursor or shortcut nuance) and prove no regressions.
+4. Explain why each DOM sink in that flow is safe or unsafe.
+5. Re-implement the same interaction in JSX and map each primitive one-to-one.
 
 ---
 

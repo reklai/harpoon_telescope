@@ -65,6 +65,13 @@ This guide is self-contained: no prerequisite docs are required to learn the sys
 28. [State Management Deep Dive](#state-management-deep-dive)
 29. [Concurrency Deep Dive (JavaScript + Extension Runtime)](#concurrency-deep-dive-javascript--extension-runtime)
 30. [Transferable Engineering Patterns](#transferable-engineering-patterns)
+31. [Browser Primitives Deep Dive](#browser-primitives-deep-dive)
+32. [DOM and Shadow DOM Internals](#dom-and-shadow-dom-internals)
+33. [Dynamic UI Complexity and Control Strategies](#dynamic-ui-complexity-and-control-strategies)
+34. [Inline HTML Template Strategy (How It Works + Tradeoffs)](#inline-html-template-strategy-how-it-works--tradeoffs)
+35. [Grepping and Fuzzy Search System (Full Deconstruction)](#grepping-and-fuzzy-search-system-full-deconstruction)
+36. [Primitive-to-Framework Mapping (React/Vue/Solid)](#primitive-to-framework-mapping-reactvuesolid)
+37. [Rebuild and Direction-Change Playbooks](#rebuild-and-direction-change-playbooks)
 
 ---
 
@@ -1872,3 +1879,659 @@ When reviewing any PR, ask:
 7. Did we preserve existing runtime/storage contracts?
 
 If you can answer these from code, you are operating at ownership level.
+
+---
+
+## Browser Primitives Deep Dive
+
+This section is the foundation layer behind everything in this project. The goal is to make you think in primitives first, then map that understanding into any framework.
+
+### 1) What "browser primitives" means in this codebase
+
+When this guide says "browser primitives," it means native platform APIs directly exposed by the browser runtime:
+
+- DOM APIs (`document`, `Element`, `TreeWalker`, `MutationObserver`)
+- Event system (`addEventListener`, capture/bubble phases, keyboard/mouse/focus events)
+- Shadow DOM (`attachShadow`, style isolation, event retargeting)
+- Rendering clock (`requestAnimationFrame`)
+- Timers (`setTimeout`, debounce/retry scheduling)
+- Extension APIs (`browser.runtime`, `browser.tabs`, `browser.storage.local`, `browser.commands`)
+
+In this project, these primitives are used directly instead of a UI framework runtime.
+
+### 2) Why this approach was chosen
+
+Primary reasons:
+
+1. Extension context constraints are strict.
+2. Keyboard/focus behavior must be deterministic.
+3. Performance must stay predictable on arbitrary pages.
+4. Firefox/Chrome compatibility matters.
+
+Direct primitives allow:
+
+- exact control over host insertion/removal
+- explicit cleanup for reload/startup edge cases
+- no framework abstraction leaks around focus and event ordering
+
+Tradeoff:
+
+- You manually solve problems frameworks usually automate.
+
+### 3) The primitive mindset (how to reason)
+
+When adding/changing behavior, reason in this order:
+
+1. Which runtime owns this data? (page DOM vs background runtime vs storage)
+2. Which primitive can observe/change it safely?
+3. What event starts the flow?
+4. Which async boundaries can reorder work?
+5. What cleanup primitive closes the lifecycle?
+
+If you can answer those 5 questions, the implementation becomes straightforward even without a framework.
+
+### 4) Primitive ownership map in this app
+
+Content script (`src/lib/appInit/appInit.ts`):
+
+- owns page-local input handling
+- owns overlay DOM construction
+- owns page text grep and preview rendering
+
+Background runtime (`src/entryPoints/backgroundRuntime/background.ts` + `src/lib/backgroundRuntime/*`):
+
+- owns canonical tab/session state mutations
+- owns privileged tab operations (`browser.tabs.*`)
+- owns startup/command routing
+
+Common contracts (`src/lib/common/contracts/*`):
+
+- defines stable message/config shapes
+
+Common utils (`src/lib/common/utils/*`):
+
+- provides reusable low-level helpers
+
+### 5) What this teaches you for future frameworks
+
+Frameworks are just structured orchestrators on top of these primitives.
+
+- React state update -> still results in DOM operations.
+- useEffect cleanup -> still maps to removing listeners/timers.
+- framework router event -> still sits on browser event loop.
+
+If you know the primitive layer, frameworks become easier to learn and debug because you understand what they are abstracting.
+
+---
+
+## DOM and Shadow DOM Internals
+
+### 1) What the DOM actually is
+
+The DOM is a mutable tree of nodes representing a document snapshot that can be read/written at runtime.
+
+Key node types relevant here:
+
+- `Document`: root access point
+- `Element`: tagged nodes (`div`, `input`, etc.)
+- `Text`: text leaf nodes used by grep traversal
+
+This project uses both element-level and text-node-level traversal depending on task:
+
+- element queries for structure-level UI operations
+- `TreeWalker` text traversal for grep accuracy
+
+### 2) Tree traversal strategies used here
+
+#### Strategy A: Selector-based structural queries
+
+Example usage:
+
+- `querySelectorAll("h1, h2, ...")`
+- `querySelectorAll("a[href]")`
+- `querySelectorAll("img")`
+
+Pros:
+
+- concise, readable
+- semantically aligned with HTML structure
+
+Cons:
+
+- misses unstructured text not in targeted tags
+
+#### Strategy B: Text-node tree walking
+
+Owner:
+
+- `src/lib/ui/panels/searchCurrentPage/grep/grepCollectors.ts`
+
+Pattern:
+
+```ts
+const walker = document.createTreeWalker(
+  document.body,
+  NodeFilter.SHOW_TEXT,
+  { acceptNode(node) { ... } },
+);
+```
+
+Pros:
+
+- catches actual visible text beyond tag heuristics
+- enables more complete grep
+
+Cons:
+
+- must filter aggressively (visibility, pre/code duplicates)
+- easy to over-collect noise without careful acceptance rules
+
+### 3) Shadow DOM internals and why it matters
+
+Shadow DOM lets you attach an isolated subtree to a host element.
+
+Owner utility:
+
+- `src/lib/common/utils/panelHost.ts`
+
+Behavior you get:
+
+- style scoping: host page CSS does not leak into panel styles by default
+- DOM encapsulation: panel internals are not in the light-DOM query path
+- controlled lifecycle: one host, one cleanup path
+
+Why extension overlays need this:
+
+- host pages can have arbitrary CSS resets/frameworks
+- without isolation, overlay UI breaks unpredictably
+
+### 4) Event propagation details you must know
+
+DOM events flow through:
+
+1. capture phase (root -> target)
+2. target phase
+3. bubble phase (target -> root)
+
+This repo intentionally uses capture listeners for global panel key handling so panel shortcuts can preempt page handlers when needed.
+
+Potential pitfall:
+
+- if you forget to stop propagation in the right branch, host page shortcuts can interfere with panel UX.
+
+### 5) Shadow DOM event retargeting
+
+Inside shadow trees, event targets can be retargeted to protect encapsulation.
+
+Practical implication:
+
+- when debugging event paths, inspect `event.composedPath()` if target behavior seems unexpected.
+
+### 6) Layout/reflow sensitivity with dynamic panels
+
+Any read-after-write cycles on layout-sensitive properties can trigger forced synchronous reflow.
+
+This code mitigates that by:
+
+- batching heavy updates via rAF
+- virtualizing long lists
+- minimizing DOM node churn via pooling
+
+---
+
+## Dynamic UI Complexity and Control Strategies
+
+This is the hardest part of UI engineering in practice.
+
+### 1) The core complexity problem
+
+Dynamic UIs combine:
+
+- mutable state
+- asynchronous events
+- user input timing
+- rendering side effects
+- focus/accessibility constraints
+
+Each piece is manageable alone; complexity comes from interactions between them.
+
+### 2) Typical failure classes (real-world)
+
+1. Mode leakage: UI thinks it is in two modes at once.
+2. Stale async completion: old request overwrites new intent.
+3. Focus drift: keyboard stops working because focus moved unexpectedly.
+4. List index drift: selected index points to filtered-out item.
+5. Cleanup gaps: listeners/timers survive panel close/reload.
+
+### 3) How this repo tackles it
+
+#### A) Separate canonical vs transient state
+
+- canonical in background/storage
+- transient in panel runtime
+
+#### B) Explicit mode transitions
+
+Owner:
+
+- `src/lib/core/sessionMenu/sessionCore.ts`
+
+UI does not invent mode rules ad-hoc in every handler; it uses dedicated transition helpers.
+
+#### C) Render-after-state discipline
+
+Pattern repeated in handlers:
+
+1. guard current mode
+2. mutate state/transition
+3. rerender
+4. restore focus/caret if needed
+
+#### D) Fail-closed lifecycle handling
+
+If panel work fails:
+
+- log context
+- close panel safely
+- cleanup listeners
+
+This prevents half-broken interactive state.
+
+### 4) Why this matters beyond this codebase
+
+Framework or no framework, you still need:
+
+- state ownership clarity
+- explicit transition logic
+- cancellation/race defense
+- deterministic cleanup
+
+Those are architecture skills, not library-specific tricks.
+
+### 5) UI complexity checklist for every new panel
+
+1. What are valid modes and invalid transitions?
+2. Which keys should be disabled in each mode?
+3. What state survives rerender?
+4. What state survives close/reopen?
+5. Which async operations can complete out of order?
+6. What must be cleaned on close/reload?
+
+If this checklist is weak, bugs will show up under fast typing and edge-case navigation.
+
+---
+
+## Inline HTML Template Strategy (How It Works + Tradeoffs)
+
+This project often uses `container.innerHTML = ...` for rendering panel views.
+
+### 1) How it works here
+
+Example owners:
+
+- `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts`
+- `src/lib/ui/panels/sessionMenu/session.ts`
+- `src/lib/ui/panels/sessionMenu/sessionRestoreOverlay.ts`
+
+Flow:
+
+1. Build HTML string from current state.
+2. Replace container content via `innerHTML`.
+3. Query fresh element refs.
+4. Attach listeners to fresh nodes.
+
+### 2) Why this was chosen
+
+Pros:
+
+- straightforward rendering model
+- no virtual DOM dependency
+- very explicit output for keyboard-first overlays
+
+Cons:
+
+- replacing `innerHTML` destroys old nodes and listeners
+- input caret/focus can reset unless manually restored
+- easy to accidentally introduce XSS if interpolation is unsanitized
+
+### 3) Mitigations used in this repo
+
+1. Escape user/content text before interpolation (`escapeHtml`).
+2. Immediately rebind listeners after rerender.
+3. Preserve and restore focus/caret where required.
+4. Keep higher-order state outside DOM to survive rerenders.
+
+### 4) Complex inline HTML: how to reason about it
+
+Complex templates become manageable when decomposed by responsibility:
+
+- header fragment
+- input fragment
+- list fragment
+- preview fragment
+- footer fragment
+
+That is exactly why extraction files were added:
+
+- `searchCurrentPageView.ts`
+- `sessionView.ts`
+
+This gives composable string-render primitives while preserving current architecture.
+
+### 5) Problems associated with string-template rendering
+
+1. Large template literals reduce local readability.
+2. Small typo can silently break structure.
+3. Harder to get static type guarantees for DOM shape.
+4. Re-rendering full sections can be more expensive than targeted patching.
+
+When to keep this approach:
+
+- moderate-size overlays
+- deterministic render phases
+- strong keyboard/control needs
+
+When to consider evolving:
+
+- very large nested UI trees
+- high-frequency fine-grained local updates
+- heavy component reuse requirements
+
+---
+
+## Grepping and Fuzzy Search System (Full Deconstruction)
+
+This is the end-to-end "make search actually useful" pipeline.
+
+### 1) High-level objective
+
+Search should be:
+
+- broad enough to find relevant content quickly
+- fast enough to update while typing
+- structured enough to preview context meaningfully
+
+### 2) End-to-end data path
+
+1. User types in panel input.
+2. Input is coalesced via rAF.
+3. Query execution is debounced.
+4. `grepPage(query, filters)` runs.
+5. Collectors provide candidate lines from cache.
+6. Fuzzy scorer ranks matches.
+7. Top results returned (bounded).
+8. List virtualizer renders visible subset.
+9. Preview lazily enriches active result.
+
+Owners:
+
+- `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts`
+- `src/lib/ui/panels/searchCurrentPage/grep.ts`
+- `src/lib/ui/panels/searchCurrentPage/grep/*`
+
+### 3) Why this grep is useful (not just technically correct)
+
+Usefulness comes from combined design choices:
+
+1. Multiple structural collectors (`code/headings/links/images/all`) make matching semantically relevant.
+2. Fuzzy scoring prioritizes quality of match, not only existence.
+3. Context preview shows surrounding meaning, not isolated line only.
+4. DOM-aware enrichment adds heading and URL breadcrumbs.
+5. Virtualization keeps interaction smooth on big result sets.
+
+### 4) Fuzzy search: what it means here
+
+In this repo, fuzzy search means:
+
+- characters of query terms can match non-contiguously in candidate text
+- match quality is scored by structure (start/boundary/consecutive/gap)
+
+It is not plain levenshtein distance, and it is not plain substring.
+
+### 5) Practical scoring interpretation
+
+Given query `tmgr` and candidate `tab manager`:
+
+- characters match in order
+- boundary and consecutive bonuses help rank readable abbreviations higher
+
+Given query `tab man` and candidate `my tab manager`:
+
+- term split allows multi-token matching
+- both terms must match
+
+Given loose candidate with many gaps:
+
+- distance penalty reduces score
+- tighter candidates rise above noisy ones
+
+### 6) Why cache + observer is essential
+
+Without cache:
+
+- every keystroke walks DOM from scratch
+- heavy pages become unusable
+
+With cache + mutation invalidation:
+
+- searches run on in-memory arrays
+- page changes still eventually refresh index
+
+Tradeoff:
+
+- small staleness window during debounce/invalidation period
+
+That tradeoff is intentional for responsiveness.
+
+### 7) Why preview enrichment is lazy
+
+Computing full DOM context for every result is expensive and often wasted.
+
+Lazy enrich strategy:
+
+- only active result gets heavy context computation
+- cached onto result object once computed
+
+This matches actual user attention and keeps panel responsive.
+
+### 8) How to recreate this search system from scratch
+
+Build order (recommended):
+
+1. implement raw text collector
+2. implement simple substring filter
+3. add fuzzy scoring
+4. add result ranking and cap
+5. add cache + invalidation
+6. add structural filters
+7. add lazy preview enrichment
+8. add virtualization
+9. add keyboard/focus controls
+
+Each step should stay working before moving to next.
+
+### 9) How to change search direction safely
+
+If changing scoring behavior:
+
+1. keep existing API shape (`grepPage`, `enrichResult`)
+2. add measurement for rank shifts on known pages
+3. test edge inputs (empty, very short, special chars)
+4. verify preview still aligns with selected row
+
+If changing collector behavior:
+
+1. validate duplicates are still deduped
+2. validate visibility filtering still excludes hidden noise
+3. validate code/links/images tags still map to badges correctly
+
+---
+
+## Primitive-to-Framework Mapping (React/Vue/Solid)
+
+Goal: make framework behavior feel obvious because you understand the primitive equivalent.
+
+### 1) Mapping table
+
+| Primitive-layer concept in this repo | React-style abstraction | What to remember |
+|---|---|---|
+| `let state; render();` in handler | `setState` + component rerender | Both are state transition then UI derivation |
+| `addEventListener` + cleanup | `useEffect` return cleanup | Cleanup is not optional in either world |
+| `panelOpen`/token guards | stale closure protection in async effects | Race conditions still exist under hooks |
+| `innerHTML` rerender + rebind | JSX reconciliation | Reconciliation automates node diffing, not ownership semantics |
+| manual focus restore | refs + effect focus management | Keyboard UX still needs explicit rules |
+| runtime adapter module | service layer/hooks/query client | boundary stays valuable with or without framework |
+
+### 2) What frameworks abstract away
+
+- DOM diffing / patching
+- component composition ergonomics
+- lifecycle wiring syntax
+
+### 3) What frameworks do NOT abstract away
+
+- event-loop timing
+- browser API ownership boundaries
+- background/content cross-context contracts
+- extension API constraints
+- data ownership and race conditions
+
+### 4) React mental mapping for one panel
+
+Current primitive pattern:
+
+1. read state vars
+2. build HTML
+3. attach listeners
+4. mutate state in handlers
+5. rerender
+
+Equivalent React shape:
+
+1. state hooks
+2. JSX render function
+3. callbacks bound in JSX
+4. effects for listener/timer lifecycles
+5. derived UI from current state
+
+But underlying concerns remain identical:
+
+- where canonical state lives
+- which async operations need cancellation
+- how focus is controlled after state transitions
+
+### 5) Niche pitfalls when moving to frameworks
+
+1. Over-centralizing state in global stores too early.
+2. Ignoring extension context boundaries (background vs content).
+3. Assuming framework scheduler solves logical races.
+4. Losing precise keyboard/focus semantics under generic component libraries.
+
+### 6) Foundation-first adoption strategy
+
+When learning a new framework:
+
+1. map each framework feature to primitive equivalent
+2. ask what problem it solves and what tradeoff it introduces
+3. verify where platform constraints still leak through
+4. keep contracts + adapters + ownership model from this architecture
+
+If you do this, framework learning becomes translation, not reinvention.
+
+---
+
+## Rebuild and Direction-Change Playbooks
+
+This section is for ownership-level capability: rebuild from scratch, pivot architecture, or migrate frameworks without losing system clarity.
+
+### Playbook A: Rebuild the current system from zero (primitive-first)
+
+Phase 1: Platform scaffold
+
+1. background entrypoint
+2. content script bootstrap
+3. runtime message contracts
+4. build scripts and manifest wiring
+
+Phase 2: Core interaction shell
+
+1. panel host with shadow root
+2. open/close lifecycle and cleanup registry
+3. global keybinding dispatch path
+
+Phase 3: First feature vertical (search current page)
+
+1. input + results list
+2. grep collector and ranking
+3. preview pane
+4. keyboard navigation
+5. virtualization
+
+Phase 4: Tab Manager vertical
+
+1. background domain for slots
+2. add/jump/remove/reorder paths
+3. scroll capture/restore behavior
+
+Phase 5: Session vertical
+
+1. save/list/load/rename/delete domain logic
+2. transient state machine for modes
+3. confirmation/replace/restore overlays
+
+Phase 6: Guardrails and tests
+
+1. architecture lint checks
+2. runtime wiring tests
+3. upgrade/store/compat checks
+
+### Playbook B: Change direction while preserving reliability
+
+If you need to pivot feature behavior:
+
+1. keep message contracts stable first
+2. keep canonical ownership in background runtime
+3. keep UI mode transitions explicit
+4. migrate one panel at a time
+5. run full CI between each step
+
+### Playbook C: Migrate UI layer to a framework safely
+
+Keep as-is:
+
+- `src/lib/common/contracts/*`
+- `src/lib/backgroundRuntime/*`
+- `src/lib/adapters/runtime/*`
+- build/verify guardrails
+
+Potentially replace:
+
+- `src/lib/ui/panels/*` rendering layer
+
+Migration order:
+
+1. migrate one panel behind existing adapter contracts
+2. preserve keybinding semantics exactly
+3. preserve focus/cleanup behavior exactly
+4. compare keyboard behavior matrix before/after
+5. only then migrate next panel
+
+### Playbook D: How to know your foundation is strong
+
+You can claim strong foundation when you can:
+
+1. implement the same feature in vanilla primitives and in a framework
+2. explain every race risk and lifecycle cleanup needed
+3. identify canonical state owner without guessing
+4. reason about tradeoffs before coding
+5. adapt architecture without breaking contracts
+
+### Practical mastery loop (repeat weekly)
+
+1. pick one subsystem and redraw ownership map from memory
+2. re-implement a reduced version without copying code
+3. add one test that catches a realistic regression
+4. explain tradeoffs and alternatives in writing
+5. review one framework tutorial and translate every abstraction to primitives
+
+If you do this long enough, you stop being framework-dependent and become system-capable.

@@ -15,6 +15,13 @@ import { openHelpOverlay } from "../help/help";
 import { dismissPanel } from "../shared/panelHost";
 import { ContentRuntimeMessage } from "../shared/runtimeMessages";
 import { openSessionRestoreOverlay } from "../sessionMenu/session";
+import {
+  addCurrentTabToTabManager,
+  cycleTabManagerSlot,
+  jumpToTabManagerSlot,
+} from "../adapters/runtime/tabManagerApi";
+import { fetchKeybindings } from "../adapters/runtime/keybindingsApi";
+import { notifyContentScriptReady } from "../adapters/runtime/contentLifecycleApi";
 
 // Extend Window to track injection state
 declare global {
@@ -38,9 +45,9 @@ export function initApp(): void {
     if (cachedConfig) return Promise.resolve(cachedConfig);
     if (configLoadPromise) return configLoadPromise;
 
-    configLoadPromise = browser.runtime.sendMessage({ type: "GET_KEYBINDINGS" })
+    configLoadPromise = fetchKeybindings()
       .then((loadedConfig) => {
-        cachedConfig = loadedConfig as KeybindingsConfig;
+        cachedConfig = loadedConfig;
         cachedConfig.navigationMode = "standard";
         return cachedConfig;
       })
@@ -116,88 +123,78 @@ export function initApp(): void {
   // Runs on capture phase so pages that call stopPropagation() on keydown
   // can't break our keybinds. Fully synchronous — no microtask overhead.
 
+  interface GlobalActionRegistration {
+    action: keyof KeybindingsConfig["bindings"]["global"] | string;
+    run: (config: KeybindingsConfig) => void;
+  }
+
+  const globalActionRegistry: GlobalActionRegistration[] = [
+    {
+      action: "openTabManager",
+      run: (config) => openPanel(() => openTabManager(config)),
+    },
+    {
+      action: "addTab",
+      run: () => { void addCurrentTabToTabManager(); },
+    },
+    {
+      action: "jumpSlot1",
+      run: () => { void jumpToTabManagerSlot(1); },
+    },
+    {
+      action: "jumpSlot2",
+      run: () => { void jumpToTabManagerSlot(2); },
+    },
+    {
+      action: "jumpSlot3",
+      run: () => { void jumpToTabManagerSlot(3); },
+    },
+    {
+      action: "jumpSlot4",
+      run: () => { void jumpToTabManagerSlot(4); },
+    },
+    {
+      action: "cyclePrev",
+      run: () => { void cycleTabManagerSlot("prev"); },
+    },
+    {
+      action: "cycleNext",
+      run: () => { void cycleTabManagerSlot("next"); },
+    },
+    {
+      action: "searchInPage",
+      run: (config) => openPanel(() => openSearchCurrentPage(config)),
+    },
+    {
+      action: "openFrecency",
+      run: (config) => openPanel(() => openSearchOpenTabs(config)),
+    },
+    {
+      action: "openSessions",
+      run: (config) => openPanel(() => openSessionMenu(config)),
+    },
+    {
+      action: "openSessionSave",
+      run: (config) => openPanel(() => openSessionMenu(config, "saveSession")),
+    },
+    {
+      action: "openHelp",
+      run: (config) => openPanel(() => openHelpOverlay(config)),
+    },
+  ];
+
   function tryHandleGlobalActions(event: KeyboardEvent, config: KeybindingsConfig): boolean {
     // Block all actions when a panel is already open — user must close it first.
     if (hasLivePanelHost()) return false;
 
-    if (matchesAction(event, config, "global", "openTabManager")) {
+    for (const registration of globalActionRegistry) {
+      if (!matchesAction(event, config, "global", registration.action)) continue;
       event.preventDefault();
       event.stopPropagation();
-      openPanel(() => openTabManager(config));
+      registration.run(config);
       return true;
     }
-    if (matchesAction(event, config, "global", "addTab")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_ADD" });
-      return true;
-    }
-    if (matchesAction(event, config, "global", "jumpSlot1")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 1 });
-      return true;
-    }
-    if (matchesAction(event, config, "global", "jumpSlot2")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 2 });
-      return true;
-    }
-    if (matchesAction(event, config, "global", "jumpSlot3")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 3 });
-      return true;
-    }
-    if (matchesAction(event, config, "global", "jumpSlot4")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_JUMP", slot: 4 });
-      return true;
-    }
-    if (matchesAction(event, config, "global", "cyclePrev")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_CYCLE", direction: "prev" });
-      return true;
-    }
-    if (matchesAction(event, config, "global", "cycleNext")) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ type: "TAB_MANAGER_CYCLE", direction: "next" });
-      return true;
-    }
-    if (matchesAction(event, config, "global", "searchInPage")) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel(() => openSearchCurrentPage(config));
-      return true;
-    }
-    if (matchesAction(event, config, "global", "openFrecency")) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel(() => openSearchOpenTabs(config));
-      return true;
-    }
-    if (matchesAction(event, config, "global", "openSessions")) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel(() => openSessionMenu(config));
-      return true;
-    }
-    if (matchesAction(event, config, "global", "openSessionSave")) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel(() => openSessionMenu(config, "saveSession"));
-      return true;
-    }
-    if (matchesAction(event, config, "global", "openHelp")) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPanel(() => openHelpOverlay(config));
-      return true;
-    }
+
     return false;
   }
 
@@ -281,7 +278,7 @@ export function initApp(): void {
 
   // Signal background that this content script is ready to receive messages
   // (used for deferred scroll restoration on re-opened tabs)
-  browser.runtime.sendMessage({ type: "CONTENT_SCRIPT_READY" }).catch(() => {});
+  notifyContentScriptReady().catch(() => {});
 
   // Auto-close panels when switching tabs/windows
   function visibilityHandler(): void {

@@ -17,7 +17,8 @@ Contributor orientation: `README.md`
 
 1. Keep `manifest_v2.json`, `manifest_v3.json`, `STORE.md`, and `PRIVACY.md` updated together whenever permissions, storage limits, or privacy claims change.
 2. Run `npm run ci` before release; this includes `verify:compat`, `verify:upgrade`, and `verify:store`.
-3. Use `STORE.md` and `PRIVACY.md` as the canonical text for AMO/Chrome submission fields.
+3. Use `RELEASE.md` for reproducible packaging and submission artifacts.
+4. Use `STORE.md` and `PRIVACY.md` as the canonical text for AMO/Chrome submission fields.
 
 ## Naming Conventions
 

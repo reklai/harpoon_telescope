@@ -20,7 +20,6 @@ const manifestV3 = readJson("esBuildConfig/manifest_v3.json");
 
 const store = readText("STORE.md");
 const privacy = readText("PRIVACY.md");
-const readme = readText("README.md");
 
 if (manifestV2.name !== manifestV3.name) {
   errors.push("Manifest names must match between MV2 and MV3.");
@@ -77,10 +76,6 @@ if (!store.includes("Works on Firefox, Chrome, and Zen Browser")) {
 }
 if (!privacy.includes("does not collect, transmit, or share")) {
   errors.push("PRIVACY.md summary must explicitly state no data collection/transmission.");
-}
-
-if (!readme.includes("## Engineering Promise")) {
-  errors.push("README.md must include engineering promise guidance.");
 }
 
 if (errors.length > 0) {

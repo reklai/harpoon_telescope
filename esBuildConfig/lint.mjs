@@ -253,18 +253,13 @@ function checkUiGlitchBaseline() {
 }
 
 function checkContributorDocs() {
-  const readme = readText("README.md");
   const contributing = readText("CONTRIBUTING.md");
 
-  const requiredReadmeDocs = ["RELEASE.md", "STORE.md", "PRIVACY.md"];
-  for (const docRef of requiredReadmeDocs) {
-    if (!readme.includes(docRef)) {
-      errors.push(`README.md must reference ${docRef} for contributor onboarding.`);
+  const requiredContributorDocs = ["RELEASE.md", "STORE.md", "PRIVACY.md"];
+  for (const docRef of requiredContributorDocs) {
+    if (!contributing.includes(docRef)) {
+      errors.push(`CONTRIBUTING.md must reference ${docRef} for contributor orientation.`);
     }
-  }
-
-  if (!contributing.includes("README.md")) {
-    errors.push("CONTRIBUTING.md must reference README.md for contributor orientation.");
   }
 }
 

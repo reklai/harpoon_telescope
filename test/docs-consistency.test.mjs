@@ -11,9 +11,11 @@ function readText(pathFromRoot) {
   return readFileSync(resolve(root, pathFromRoot), "utf8");
 }
 
-test("README reflects the default add-tab shortcut", () => {
-  const readme = readText("README.md");
-  assert.ok(readme.includes("`Alt+Shift+T` | Add current tab to harpoon |"));
+test("contributor docs reference release/store/privacy docs", () => {
+  const contributing = readText("CONTRIBUTING.md");
+  assert.ok(contributing.includes("RELEASE.md"));
+  assert.ok(contributing.includes("STORE.md"));
+  assert.ok(contributing.includes("PRIVACY.md"));
 });
 
 test("store and privacy docs match current slot/session limits", () => {

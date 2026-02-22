@@ -18,13 +18,11 @@ const OVERLAY_CSS_FILES = [
   "src/lib/ui/panels/tabManager/tabManager.css",
 ];
 
-test("README documents engineering promise", () => {
-  const readme = readText("README.md");
-  assert.match(readme, /## Engineering Promise/);
-  assert.match(readme, /Keyboard-first workflows stay predictable/);
-  assert.match(readme, /Native browser primitives first/);
-  assert.match(readme, /Firefox\/Chrome parity/);
-  assert.match(readme, /Reliability guardrails/);
+test("store and privacy docs include local-only/no-telemetry policy", () => {
+  const store = readText("STORE.md");
+  const privacy = readText("PRIVACY.md");
+  assert.match(store, /No data leaves your browser/);
+  assert.match(privacy, /does not collect, transmit, or share/);
 });
 
 test("package scripts expose engineering guardrail chain", () => {

@@ -12,13 +12,6 @@ ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard-f
 
 ## Feature Snapshot
 
-### Search Current Page
-
-- Open with `Alt+F`.
-- Fuzzy search across page text with filters: `/code`, `/headings`, `/img`, `/links`.
-- Live preview pane with context and highlighted matches.
-- `Shift+Space` clears search input.
-
 ### Tab Manager (Harpoon)
 
 - Anchor up to 4 tabs to numbered slots.
@@ -31,6 +24,13 @@ ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard-f
 - `Alt+Shift+S` opens save view directly.
 - Save/load up to 4 named sessions.
 - Includes overwrite/delete/load confirmations and session preview.
+
+### Search Current Page
+
+- Open with `Alt+F`.
+- Fuzzy search across page text with filters: `/code`, `/headings`, `/img`, `/links`.
+- Live preview pane with context and highlighted matches.
+- `Shift+Space` clears search input.
 
 ### Search Open Tabs (Frecency)
 

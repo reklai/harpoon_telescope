@@ -29,9 +29,8 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
   const s = config.bindings.search;
   const k = (b: KeyBinding) => keyToDisplay(b.key);
   const paneSwitchHint = "Tab list F search";
-  const treeFocusHint = "l (tree) / h (results)";
   const closeHint = k(s.close);
-  const escHint = "Esc close/back";
+  const escHint = "Esc close";
 
   return [
     {
@@ -40,7 +39,8 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
         { label: "Search Current Page", key: k(g.searchInPage) },
         { label: "Search Open Tabs", key: k(g.openFrecency) },
         { label: "Tab Manager", key: k(g.openTabManager) },
-        { label: "Bookmarks", key: k(g.openBookmarks) },
+        { label: "Sessions", key: k(g.openSessions) },
+        { label: "Save Session", key: k(g.openSessionSave) },
         { label: "Help (this menu)", key: k(g.openHelp) },
       ],
     },
@@ -73,12 +73,19 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
         { label: "Swap mode", key: k(h.swap).toLowerCase() },
         { label: "Del entry", key: k(h.remove).toLowerCase() },
         { label: "Undo remove", key: "u" },
-        { label: "Save session", key: k(h.saveSession).toLowerCase() },
-        { label: "Load session", key: k(h.loadSession).toLowerCase() },
-        { label: "Save mode preview cycle", key: "Tab / Shift+Tab" },
+      ],
+    },
+    {
+      title: "Session Menu",
+      items: [
+        { label: "Open session menu", key: k(g.openSessions) },
+        { label: "Main view", key: "Load sessions list" },
+        { label: "Open save session", key: k(g.openSessionSave) },
+        { label: "Load selected session", key: "Enter" },
+        { label: "Save mode preview", key: "current tab-manager tabs" },
         { label: "Session list focus list", key: "Tab" },
         { label: "Session search focus", key: "f" },
-        { label: "Session clear-search", key: "Shift+C" },
+        { label: "Session clear-search", key: "Shift+Space" },
         { label: "Session list half-page jump", key: "Ctrl+D / Ctrl+U" },
         { label: "Start load confirmation", key: k(h.jump) },
         { label: "Load plan symbols", key: "NEW (+) · DELETED (-) · REPLACED (~) · UNCHANGED (=)" },
@@ -88,38 +95,15 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
       ],
     },
     {
-      title: "Bookmarks Panel",
-      items: [
-        { label: "Add bookmark", key: k(g.addBookmark) },
-        { label: "Focus tree", key: treeFocusHint },
-        { label: "Clear-search (any pane)", key: "Shift+C" },
-        { label: "Del bookmark", key: "d" },
-        { label: "Move to folder", key: "m" },
-        { label: "Move confirm / cancel", key: "Y / N" },
-      ],
-    },
-    {
-      title: "Add Bookmark Overlay",
-      items: [
-        { label: "Navigate list", key: "j/k or ↑/↓" },
-        { label: "Half-page jump", key: "Ctrl+D / Ctrl+U" },
-        { label: "Select type/destination", key: "Enter" },
-        { label: "Name step continue", key: "Enter" },
-        { label: "Confirm summary path", key: "Destination path > {path}" },
-        { label: "Final confirm / cancel", key: "Y / N" },
-        { label: "Back / cancel", key: "Esc" },
-      ],
-    },
-    {
       title: "Search Current Page",
       items: [
-        { label: "Clear-search", key: "Shift+C" },
+        { label: "Clear-search", key: "Shift+Space" },
       ],
     },
     {
       title: "Search Open Tabs",
       items: [
-        { label: "Clear-search", key: "Shift+C" },
+        { label: "Clear-search", key: "Shift+Space" },
       ],
     },
     {
@@ -130,7 +114,6 @@ function buildSections(config: KeybindingsConfig): HelpSection[] {
         { label: "Images (<img> alt text)", key: "/img" },
         { label: "Links (<a> elements)", key: "/links" },
         { label: "Combine filters (union)", key: "/code /links" },
-        { label: "Bookmark: folder path", key: "/folder" },
       ],
     },
   ];

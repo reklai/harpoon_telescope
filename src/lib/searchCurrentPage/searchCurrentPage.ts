@@ -24,7 +24,9 @@ import { parseSlashFilterQuery } from "../shared/filterInput";
 import { grepPage, enrichResult, initLineCache, destroyLineCache } from "./grep";
 import { scrollToText } from "../shared/scroll";
 import { showFeedback } from "../shared/feedback";
+import { toastMessages } from "../shared/toastMessages";
 import { withPerfTrace } from "../shared/perf";
+import previewPaneStyles from "../shared/previewPane.css";
 import searchCurrentPageStyles from "./searchCurrentPage.css";
 
 // Page size limits — only block truly massive pages
@@ -53,6 +55,21 @@ const TAG_COLORS: Record<string, { bg: string; fg: string }> = {
   IMG: { bg: "rgba(0,199,190,0.2)", fg: "#00c7be" },
 };
 const DEFAULT_TAG_COLOR = { bg: "rgba(255,255,255,0.08)", fg: "#808080" };
+const URL_BADGE_COLOR = { bg: "rgba(255,45,146,0.2)", fg: "#ff2d92" };
+
+function getTagBadgeColors(tag: string | undefined): { bg: string; fg: string } {
+  if (!tag) return DEFAULT_TAG_COLOR;
+  return TAG_COLORS[tag] || DEFAULT_TAG_COLOR;
+}
+
+function getTagBadgeInlineStyle(tag: string | undefined): string {
+  const colors = getTagBadgeColors(tag);
+  return ` style="background:${colors.bg};color:${colors.fg};"`;
+}
+
+function getUrlBadgeInlineStyle(): string {
+  return ` style="background:${URL_BADGE_COLOR.bg};color:${URL_BADGE_COLOR.fg};"`;
+}
 
 // Virtual scrolling constants
 const ITEM_HEIGHT = 28;    // px per result row (hardcoded in searchCurrentPage.css)
@@ -73,7 +90,7 @@ export async function openSearchCurrentPage(
     const textLength = document.body.textContent?.length ?? 0;
     if (elementCount > MAX_DOM_ELEMENTS || textLength > MAX_TEXT_BYTES) {
       destroyLineCache();
-      showFeedback("Page too large to search");
+      showFeedback(toastMessages.pageTooLargeToSearch);
       return;
     }
 
@@ -81,7 +98,7 @@ export async function openSearchCurrentPage(
     let panelOpen = true;
 
     const style = document.createElement("style");
-    style.textContent = getBaseStyles() + searchCurrentPageStyles;
+    style.textContent = getBaseStyles() + previewPaneStyles + searchCurrentPageStyles;
     shadow.appendChild(style);
 
     const wrapper = document.createElement("div");
@@ -150,7 +167,7 @@ export async function openSearchCurrentPage(
         </div>
         <div class="ht-footer-row">
           <span>${paneHint}</span>
-          <span>Shift+C clear-search</span>
+          <span>Shift+Space clear-search</span>
           <span>${acceptKey} jump</span>
           <span>${closeKey} close</span>
         </div>
@@ -315,7 +332,7 @@ export async function openSearchCurrentPage(
       // Update badge
       const badge = item.children[0] as HTMLElement;
       if (result.tag) {
-        const colors = TAG_COLORS[result.tag] || DEFAULT_TAG_COLOR;
+        const colors = getTagBadgeColors(result.tag);
         badge.style.background = colors.bg;
         badge.style.color = colors.fg;
         badge.textContent = result.tag;
@@ -510,12 +527,17 @@ export async function openSearchCurrentPage(
         previewHeader.textContent = `Preview \u2014 L${activeResult.lineNumber}`;
         showPreviewPlaceholder(false);
 
-        // Breadcrumb: [TAG] Section heading · href
-        let breadcrumbHtml = "";
-        if (tag) breadcrumbHtml += `<span class="ht-bc-tag">${escapeHtml(tag)}</span>`;
-        if (activeResult.ancestorHeading) {
-          breadcrumbHtml += `<span class="ht-bc-heading">${escapeHtml(activeResult.ancestorHeading)}</span>`;
+        // Breadcrumb: primary row ([TAG] + heading) and URL row.
+        let primaryRowHtml = "";
+        if (tag) {
+          primaryRowHtml += `<span class="ht-bc-tag"${getTagBadgeInlineStyle(tag)}>${escapeHtml(tag)}</span>`;
         }
+        if (activeResult.ancestorHeading) {
+          primaryRowHtml += `<span class="ht-bc-heading">${escapeHtml(activeResult.ancestorHeading)}</span>`;
+        }
+        let breadcrumbHtml = primaryRowHtml
+          ? `<span class="ht-bc-row ht-bc-row-main">${primaryRowHtml}</span>`
+          : "";
         if (activeResult.href) {
           // Show shortened href
           let displayHref = activeResult.href;
@@ -524,8 +546,7 @@ export async function openSearchCurrentPage(
           } catch (_) {
             // Ignore URL parsing failures and keep raw href
           }
-          if (displayHref.length > 60) displayHref = displayHref.slice(0, 57) + "...";
-          breadcrumbHtml += `<span class="ht-bc-href">\u2192 ${escapeHtml(displayHref)}</span>`;
+          breadcrumbHtml += `<span class="ht-bc-row ht-bc-row-url"><span class="ht-bc-href"><span class="ht-bc-tag"${getUrlBadgeInlineStyle()}>URL</span> -&gt; ${escapeHtml(displayHref)}</span></span>`;
         }
         if (breadcrumbHtml) {
           previewBreadcrumb.innerHTML = breadcrumbHtml;
@@ -696,7 +717,13 @@ export async function openSearchCurrentPage(
         return;
       }
 
-      if (event.key === "C" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      if (
+        event.code === "Space"
+        && event.shiftKey
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+      ) {
         event.preventDefault();
         event.stopPropagation();
         input.value = "";

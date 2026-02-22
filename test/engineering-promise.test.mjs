@@ -10,11 +10,10 @@ function readText(relativePath) {
 }
 
 const OVERLAY_CSS_FILES = [
-  "src/lib/addBookmark/addBookmark.css",
-  "src/lib/bookmarks/bookmarks.css",
   "src/lib/help/help.css",
   "src/lib/searchCurrentPage/searchCurrentPage.css",
   "src/lib/searchOpenTabs/searchOpenTabs.css",
+  "src/lib/sessionMenu/sessionMenu.css",
   "src/lib/tabManager/session.css",
   "src/lib/tabManager/tabManager.css",
 ];

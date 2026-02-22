@@ -6,11 +6,11 @@ import { DEFAULT_KEYBINDINGS, matchesAction } from "../shared/keybindings";
 import { grepPage, getPageContent } from "../searchCurrentPage/grep";
 import { scrollToText } from "../shared/scroll";
 import { showFeedback } from "../shared/feedback";
+import { toastMessages } from "../shared/toastMessages";
 import { openTabManager } from "../tabManager/tabManager";
+import { openSessionMenu } from "../sessionMenu/sessionMenu";
 import { openSearchCurrentPage } from "../searchCurrentPage/searchCurrentPage";
 import { openSearchOpenTabs } from "../searchOpenTabs/searchOpenTabs";
-import { openBookmarkOverlay } from "../bookmarks/bookmarks";
-import { openAddBookmarkOverlay } from "../addBookmark/addBookmark";
 import { openHelpOverlay } from "../help/help";
 import { dismissPanel } from "../shared/panelHost";
 import { ContentRuntimeMessage } from "../shared/runtimeMessages";
@@ -88,13 +88,13 @@ export function initApp(): void {
         void (maybePromise as Promise<void>).catch((err) => {
           console.error("[Harpoon Telescope] panel open failed:", err);
           dismissPanel();
-          showFeedback("Panel failed to open");
+          showFeedback(toastMessages.panelOpenFailed);
         });
       }
     } catch (err) {
       console.error("[Harpoon Telescope] panel open failed:", err);
       dismissPanel();
-      showFeedback("Panel failed to open");
+      showFeedback(toastMessages.panelOpenFailed);
     }
   }
 
@@ -180,16 +180,16 @@ export function initApp(): void {
       openPanel(() => openSearchOpenTabs(config));
       return true;
     }
-    if (matchesAction(event, config, "global", "openBookmarks")) {
+    if (matchesAction(event, config, "global", "openSessions")) {
       event.preventDefault();
       event.stopPropagation();
-      openPanel(() => openBookmarkOverlay(config));
+      openPanel(() => openSessionMenu(config));
       return true;
     }
-    if (matchesAction(event, config, "global", "addBookmark")) {
+    if (matchesAction(event, config, "global", "openSessionSave")) {
       event.preventDefault();
       event.stopPropagation();
-      openPanel(() => openAddBookmarkOverlay(config));
+      openPanel(() => openSessionMenu(config, "saveSession"));
       return true;
     }
     if (matchesAction(event, config, "global", "openHelp")) {
@@ -240,22 +240,22 @@ export function initApp(): void {
       case "OPEN_SEARCH_CURRENT_PAGE":
         if (!hasLivePanelHost())
           getConfig().then((config) => openPanel(() => openSearchCurrentPage(config)))
-            .catch(() => showFeedback("Panel failed to open"));
+            .catch(() => showFeedback(toastMessages.panelOpenFailed));
         return Promise.resolve({ ok: true });
       case "OPEN_TAB_MANAGER":
         if (!hasLivePanelHost())
           getConfig().then((config) => openPanel(() => openTabManager(config)))
-            .catch(() => showFeedback("Panel failed to open"));
+            .catch(() => showFeedback(toastMessages.panelOpenFailed));
         return Promise.resolve({ ok: true });
       case "OPEN_FRECENCY":
         if (!hasLivePanelHost())
           getConfig().then((config) => openPanel(() => openSearchOpenTabs(config)))
-            .catch(() => showFeedback("Panel failed to open"));
+            .catch(() => showFeedback(toastMessages.panelOpenFailed));
         return Promise.resolve({ ok: true });
-      case "OPEN_BOOKMARKS":
+      case "OPEN_SESSIONS":
         if (!hasLivePanelHost())
-          getConfig().then((config) => openPanel(() => openBookmarkOverlay(config)))
-            .catch(() => showFeedback("Panel failed to open"));
+          getConfig().then((config) => openPanel(() => openSessionMenu(config)))
+            .catch(() => showFeedback(toastMessages.panelOpenFailed));
         return Promise.resolve({ ok: true });
       case "SHOW_SESSION_RESTORE":
         if (!hasLivePanelHost())
@@ -267,12 +267,12 @@ export function initApp(): void {
       case "TAB_MANAGER_ADDED_FEEDBACK":
         showFeedback(
           receivedMessage.alreadyAdded
-            ? `Already in Tab Manager [${receivedMessage.slot}]`
-            : `Added to Tab Manager [${receivedMessage.slot}]`,
+            ? toastMessages.tabManagerAlreadyAdded(receivedMessage.slot)
+            : toastMessages.tabManagerAdded(receivedMessage.slot),
         );
         return Promise.resolve({ ok: true });
       case "TAB_MANAGER_FULL_FEEDBACK":
-        showFeedback(`Tab Manager is full (${receivedMessage.max}/${receivedMessage.max})`);
+        showFeedback(toastMessages.tabManagerFull(receivedMessage.max));
         return Promise.resolve({ ok: true });
     }
   }

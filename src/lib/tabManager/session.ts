@@ -12,8 +12,9 @@ import {
   vimBadgeHtml,
   dismissPanel,
 } from "../shared/panelHost";
-import { escapeHtml, escapeRegex, extractDomain, normalizeUrlForMatch, buildFuzzyPattern } from "../shared/helpers";
+import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../shared/helpers";
 import { showFeedback } from "../shared/feedback";
+import { toastMessages } from "../shared/toastMessages";
 import restoreStyles from "./session.css";
 
 // Rename mode — when true, the active session item shows an inline input
@@ -197,22 +198,44 @@ function buildLoadSummaryHtml(summary: SessionLoadSummary): string {
         NEW <strong>(+)</strong> &middot; DELETED <strong>(-)</strong> &middot; REPLACED <strong>(~)</strong> &middot; UNCHANGED <strong>(=)</strong>
       </div>
       <div class="ht-session-plan-list">${planRowsHtml}</div>
-      <div class="ht-session-confirm-hint">y confirm &middot; n cancel</div>
+      <div class="ht-session-confirm-hint">
+        <span class="ht-confirm-key ht-confirm-key-yes">Y</span> confirm
+        &middot;
+        <span class="ht-confirm-key ht-confirm-key-no">N</span> cancel
+      </div>
     </div>`;
 }
 
-function buildSessionPreviewHtml(session: TabManagerSession | undefined): string {
-  if (!session) {
-    return `<div class="ht-session-preview-empty">Select a session to preview its tabs.</div>`;
-  }
+function buildOverwriteConfirmationHtml(session: TabManagerSession | undefined): string {
+  const sessionName = session?.name || "session";
+  const savedCount = session?.entries.length ?? 0;
+  return `<div class="ht-session-confirm">
+      <div class="ht-session-confirm-icon">\u26A0</div>
+      <div class="ht-session-confirm-msg">
+        Overwrite <span class="ht-session-confirm-title">&ldquo;${escapeHtml(sessionName)}&rdquo;</span>?
+        <div class="ht-session-confirm-path">${savedCount} saved ${pluralize(savedCount, "tab")} will be replaced</div>
+      </div>
+      <div class="ht-session-confirm-hint">
+        <span class="ht-confirm-key ht-confirm-key-yes">Y</span> overwrite
+        &middot;
+        <span class="ht-confirm-key ht-confirm-key-no">N</span> cancel
+      </div>
+    </div>`;
+}
 
+interface SessionPreviewEntryLike {
+  title?: string;
+  url?: string;
+}
+
+function buildPreviewEntriesHtml(entries: SessionPreviewEntryLike[], emptyText: string): string {
   let html = `<div class="ht-session-preview-list">`;
 
-  if (session.entries.length === 0) {
-    html += `<div class="ht-session-preview-empty">No tabs in this session.</div>`;
+  if (entries.length === 0) {
+    html += `<div class="ht-session-preview-empty">${escapeHtml(emptyText)}</div>`;
   } else {
-    for (let i = 0; i < session.entries.length; i++) {
-      const entry = session.entries[i];
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
       html += `<div class="ht-session-preview-item">
         <span class="ht-session-preview-slot">${i + 1}</span>
         <div class="ht-session-preview-info">
@@ -227,6 +250,30 @@ function buildSessionPreviewHtml(session: TabManagerSession | undefined): string
   return html;
 }
 
+function buildSessionPreviewHtml(session: TabManagerSession | undefined): string {
+  if (!session) {
+    return "";
+  }
+  return buildPreviewEntriesHtml(session.entries, "No tabs in this session.");
+}
+
+function buildSessionPreviewPaneHtml(
+  tabCount: number,
+  hasPreview: boolean,
+  previewHtml: string,
+  placeholderText: string,
+): string {
+  const tabLabel = pluralize(tabCount, "Tab", "Tabs");
+
+  return `<div class="ht-session-preview-pane ht-preview-pane">
+      <div class="ht-preview-header ht-ui-pane-header">
+        <span class="ht-session-pane-header-text ht-ui-pane-header-text">Preview - ${tabCount} ${tabLabel}</span>
+      </div>
+      <div class="ht-preview-placeholder" ${hasPreview ? 'style="display:none;"' : ""}>${escapeHtml(placeholderText)}</div>
+      <div class="ht-preview-content" ${hasPreview ? "" : 'style="display:none;"'}>${previewHtml}</div>
+    </div>`;
+}
+
 async function beginLoadConfirmation(ctx: SessionContext, sessionIdx: number): Promise<void> {
   const target = ctx.sessions[sessionIdx];
   if (!target) return;
@@ -236,7 +283,7 @@ async function beginLoadConfirmation(ctx: SessionContext, sessionIdx: number): P
       name: target.name,
     })) as { ok: boolean; reason?: string; summary?: SessionLoadSummary };
     if (!result.ok || !result.summary) {
-      showFeedback(result.reason || "Failed to prepare session load");
+      showFeedback(result.reason || toastMessages.sessionLoadPlanFailed);
       return;
     }
     isLoadConfirmationActive = true;
@@ -256,7 +303,7 @@ async function confirmLoadSession(ctx: SessionContext): Promise<void> {
   pendingLoadSummary = null;
   pendingLoadSessionName = "";
   if (!target) {
-    showFeedback("Session not found");
+    showFeedback(toastMessages.sessionNotFound);
     ctx.render();
     return;
   }
@@ -266,29 +313,20 @@ async function confirmLoadSession(ctx: SessionContext): Promise<void> {
 export type SessionPanelMode = "saveSession" | "sessionList" | "replaceSession";
 
 function buildSaveSessionFooterHtml(config: KeybindingsConfig, saveKey: string, closeKey: string): string {
-  const backHint = config.navigationMode === "vim" ? "Esc back" : `${closeKey} back`;
+  const closeHint = config.navigationMode === "vim" ? "Esc close" : `${closeKey} close`;
   return `<div class="ht-footer-row">
-      <span>Tab ↓ / Shift+Tab ↑</span>
-    </div>
-    <div class="ht-footer-row">
       <span>${saveKey} save</span>
-      <span>${backHint}</span>
+      <span>${closeHint}</span>
     </div>`;
 }
 
 function buildSessionListFooterHtml(config: KeybindingsConfig, selectedSessionName?: string): string {
   if (isLoadConfirmationActive) {
-    return `<div class="ht-footer-row">
-      <span>Y confirm</span>
-      <span>N cancel</span>
-    </div>`;
+    return "";
   }
 
   if (isOverwriteConfirmationActive) {
-    return `<div class="ht-footer-row">
-      <span>Y overwrite "${escapeHtml(selectedSessionName || "session")}"</span>
-      <span>N cancel</span>
-    </div>`;
+    return "";
   }
 
   const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
@@ -306,12 +344,12 @@ function buildSessionListFooterHtml(config: KeybindingsConfig, selectedSessionNa
     </div>
     <div class="ht-footer-row">
       <span>${focusHint}</span>
-      <span>Shift+C clear-search</span>
+      <span>Shift+Space clear-search</span>
       <span>R rename</span>
       <span>O overwrite</span>
       <span>${removeKey} del</span>
       <span>Enter load</span>
-      <span>Esc back</span>
+      <span>Esc close</span>
     </div>`;
 }
 
@@ -321,7 +359,7 @@ function buildReplaceSessionFooterHtml(config: KeybindingsConfig): string {
     </div>
     <div class="ht-footer-row">
       <span>Enter replace</span>
-      <span>Esc back</span>
+      <span>Esc close</span>
     </div>`;
 }
 
@@ -352,20 +390,14 @@ export async function renderSaveSession(ctx: SessionContext): Promise<void> {
   const saveKey = keyToDisplay(ctx.config.bindings.tabManager.jump.key);
   const closeKey = keyToDisplay(ctx.config.bindings.tabManager.close.key);
 
-  // Fetch current sessions to show count
-  const currentSessions = (await browser.runtime.sendMessage({
-    type: "SESSION_LIST",
-  })) as TabManagerSession[];
+  // Fetch current sessions for name collision context + tab-manager list for live save preview.
+  const [currentSessions, tabManagerEntries] = await Promise.all([
+    browser.runtime.sendMessage({ type: "SESSION_LIST" }) as Promise<TabManagerSession[]>,
+    browser.runtime.sendMessage({ type: "TAB_MANAGER_LIST" }) as Promise<TabManagerEntry[]>,
+  ]);
   ctx.setSessions(currentSessions);
-  const selectedSessionIndex = currentSessions.length === 0
-    ? 0
-    : Math.min(ctx.sessionIndex, currentSessions.length - 1);
-  if (selectedSessionIndex !== ctx.sessionIndex) {
-    ctx.setSessionIndex(selectedSessionIndex);
-  }
-  const selectedSession = currentSessions[selectedSessionIndex];
   const count = currentSessions.length;
-  const previewTabsLabel = selectedSession ? `${selectedSession.entries.length} tabs` : "";
+  const previewHtml = buildPreviewEntriesHtml(tabManagerEntries, "No tabs in Tab Manager.");
   const saveTitleText = count > 0 ? `Save Session (${count})` : "Save Session";
 
   let html = `<div class="ht-backdrop"></div>
@@ -383,36 +415,12 @@ export async function renderSaveSession(ctx: SessionContext): Promise<void> {
           <input type="text" class="ht-session-input ht-ui-input-field" value="${escapeHtml(ctx.pendingSaveName)}" placeholder="e.g. Research, Debug, Feature..." maxlength="30" />
         </div>
         <div class="ht-session-error" style="display:none; padding: 4px 14px; font-size: 10px; color: #ff5f57;"></div>
-        <div class="ht-session-columns">
-          <div class="ht-session-list-pane">
-            <div class="ht-tab-manager-list ht-session-list-scroll">`;
-
-  if (currentSessions.length === 0) {
-    html += `<div class="ht-session-empty">No saved sessions yet.</div>`;
-  } else {
-    for (let i = 0; i < currentSessions.length; i++) {
-      const session = currentSessions[i];
-      const cls = i === selectedSessionIndex ? "ht-session-item active" : "ht-session-item";
-      const date = new Date(session.savedAt).toLocaleDateString();
-      html += `<div class="${cls}" data-index="${i}">
-        <div class="ht-session-name">${escapeHtml(session.name)}</div>
-        <span class="ht-session-meta">${session.entries.length} tabs \u00b7 ${date}</span>
-      </div>`;
-    }
-  }
-
-  html += `</div>
-          </div>
-          <div class="ht-session-preview-pane">
-            <div class="ht-session-pane-header ht-ui-pane-header">
-              <span class="ht-session-pane-header-text ht-ui-pane-header-text">Preview</span>
-              <span class="ht-session-pane-header-meta ht-ui-pane-header-meta">${previewTabsLabel}</span>
-            </div>
-            <div class="ht-session-detail-content">
-              ${buildSessionPreviewHtml(selectedSession)}
-            </div>
-          </div>
-        </div>
+        ${buildSessionPreviewPaneHtml(
+          tabManagerEntries.length,
+          tabManagerEntries.length > 0,
+          previewHtml,
+          "No tabs in Tab Manager.",
+        )}
         <div class="ht-footer">
           ${buildSaveSessionFooterHtml(ctx.config, saveKey, closeKey)}
         </div>
@@ -426,39 +434,12 @@ export async function renderSaveSession(ctx: SessionContext): Promise<void> {
   const input = shadow.querySelector(".ht-session-input") as HTMLInputElement;
 
   backdrop.addEventListener("click", () => {
-    resetSessionTransientState();
-    ctx.setViewMode("tabManager");
-    ctx.render();
+    ctx.close();
   });
   backdrop.addEventListener("mousedown", (event) => event.preventDefault());
   closeBtn.addEventListener("click", () => {
-    resetSessionTransientState();
-    ctx.setViewMode("tabManager");
-    ctx.render();
+    ctx.close();
   });
-
-  shadow.querySelectorAll(".ht-session-item").forEach((el) => {
-    el.addEventListener("click", () => {
-      const idx = parseInt((el as HTMLElement).dataset.index!);
-      if (Number.isNaN(idx)) return;
-      ctx.setSessionIndex(idx);
-      ctx.render();
-    });
-  });
-
-  const listScroll = shadow.querySelector(".ht-session-list-scroll") as HTMLElement | null;
-  if (listScroll) {
-    listScroll.addEventListener("wheel", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (ctx.sessions.length === 0) return;
-      const delta = event.deltaY > 0 ? 1 : -1;
-      const next = Math.max(0, Math.min(ctx.sessions.length - 1, ctx.sessionIndex + delta));
-      if (next === ctx.sessionIndex) return;
-      ctx.setSessionIndex(next);
-      ctx.render();
-    });
-  }
 
   input.addEventListener("input", () => {
     ctx.setPendingSaveName(input.value);
@@ -481,7 +462,6 @@ export function renderSessionList(ctx: SessionContext): void {
     ctx.setSessionIndex(selectedSessionIndex);
   }
   const selectedSession = selectedSessionIndex === -1 ? undefined : sessions[selectedSessionIndex];
-  const previewTabsLabel = selectedSession ? `${selectedSession.entries.length} tabs` : "";
   const baseTitleText = ctx.sessionFilterQuery.trim()
     ? `Load Sessions (${visibleIndices.length})`
     : "Load Sessions";
@@ -534,24 +514,24 @@ export function renderSessionList(ctx: SessionContext): void {
 
   const previewContent = isLoadConfirmationActive && pendingLoadSummary
     ? `${buildLoadSummaryHtml(pendingLoadSummary)}${buildSessionPreviewHtml(selectedSession)}`
-    : buildSessionPreviewHtml(selectedSession);
+    : isOverwriteConfirmationActive
+      ? `${buildOverwriteConfirmationHtml(selectedSession)}${buildSessionPreviewHtml(selectedSession)}`
+      : buildSessionPreviewHtml(selectedSession);
 
   html += `</div>
           </div>
-          <div class="ht-session-preview-pane">
-            <div class="ht-session-pane-header ht-ui-pane-header">
-              <span class="ht-session-pane-header-text ht-ui-pane-header-text">Preview</span>
-              <span class="ht-session-pane-header-meta ht-ui-pane-header-meta">${previewTabsLabel}</span>
-            </div>
-            <div class="ht-session-detail-content">
-              ${previewContent}
-            </div>
-          </div>
+          ${buildSessionPreviewPaneHtml(
+            selectedSession?.entries.length ?? 0,
+            !!selectedSession,
+            previewContent,
+            "Select a session to preview its tabs.",
+          )}
         </div>`;
 
-  html += `<div class="ht-footer">
-      ${buildSessionListFooterHtml(config, selectedSession?.name)}
-    </div>
+  const footerHtml = buildSessionListFooterHtml(config, selectedSession?.name);
+  html += `${footerHtml
+    ? `<div class="ht-footer">${footerHtml}</div>`
+    : ""}
     </div>
     </div>`;
 
@@ -570,17 +550,11 @@ export function renderSessionList(ctx: SessionContext): void {
   }
 
   backdrop.addEventListener("click", () => {
-    resetSessionTransientState();
-    ctx.setSessionFilterQuery("");
-    ctx.setViewMode("tabManager");
-    ctx.render();
+    ctx.close();
   });
   backdrop.addEventListener("mousedown", (event) => event.preventDefault());
   closeBtn.addEventListener("click", () => {
-    resetSessionTransientState();
-    ctx.setSessionFilterQuery("");
-    ctx.setViewMode("tabManager");
-    ctx.render();
+    ctx.close();
   });
 
   filterInput.addEventListener("focus", () => {
@@ -724,15 +698,11 @@ export function renderReplaceSession(ctx: SessionContext): void {
   const closeBtn = shadow.querySelector(".ht-dot-close") as HTMLElement;
 
   backdrop.addEventListener("click", () => {
-    resetSessionTransientState();
-    ctx.setViewMode("saveSession");
-    ctx.render();
+    ctx.close();
   });
   backdrop.addEventListener("mousedown", (event) => event.preventDefault());
   closeBtn.addEventListener("click", () => {
-    resetSessionTransientState();
-    ctx.setViewMode("saveSession");
-    ctx.render();
+    ctx.close();
   });
 
   // Click to replace
@@ -770,9 +740,9 @@ async function replaceSession(ctx: SessionContext, idx: number): Promise<void> {
       newName: ctx.pendingSaveName,
     })) as { ok: boolean; reason?: string };
     if (result.ok) {
-      showFeedback(`Session "${ctx.pendingSaveName}" saved (replaced "${oldName}")`);
+      showFeedback(toastMessages.sessionSaveReplacing(ctx.pendingSaveName, oldName));
     } else {
-      showFeedback(result.reason || "Failed to save session");
+      showFeedback(result.reason || toastMessages.sessionSaveFailed);
     }
     ctx.setViewMode("tabManager");
     ctx.render();
@@ -787,8 +757,7 @@ export function handleReplaceSessionKey(ctx: SessionContext, event: KeyboardEven
   if (event.key === "Escape") {
     event.preventDefault();
     event.stopPropagation();
-    ctx.setViewMode("saveSession");
-    ctx.render();
+    ctx.close();
     return true;
   }
   if (event.key === "Enter") {
@@ -828,7 +797,7 @@ export async function saveSession(ctx: SessionContext, name: string): Promise<vo
     })) as { ok: boolean; reason?: string };
     if (result.ok) {
       ctx.setPendingSaveName("");
-      showFeedback(`Session "${name.trim()}" saved`);
+      showFeedback(toastMessages.sessionSave(name.trim()));
       ctx.setViewMode("tabManager");
       ctx.render();
     } else if (result.reason && result.reason.includes(`Max ${MAX_SESSIONS}`)) {
@@ -841,9 +810,11 @@ export async function saveSession(ctx: SessionContext, name: string): Promise<vo
       ctx.setSessionIndex(0);
       ctx.setViewMode("replaceSession");
       ctx.render();
+    } else if (result.reason) {
+      showSaveSessionInlineError(ctx, result.reason);
     } else {
       ctx.setPendingSaveName("");
-      showFeedback(result.reason || "Failed to save session");
+      showFeedback(result.reason || toastMessages.sessionSaveFailed);
       ctx.setViewMode("tabManager");
       ctx.render();
     }
@@ -870,9 +841,7 @@ export async function loadSession(ctx: SessionContext, session: TabManagerSessio
     };
     if (result.ok) {
       const count = result.count ?? 0;
-      const opened = result.openCount ?? 0;
-      const reused = result.reuseCount ?? 0;
-      showFeedback(`Session "${session.name}" loaded (${count} tabs · ${opened} opened · ${reused} reused)`);
+      showFeedback(toastMessages.sessionLoad(session.name, count));
     }
   } catch (error) {
     reportSessionError("Load session failed", "Failed to load session", error);
@@ -898,83 +867,42 @@ export async function deleteSession(ctx: SessionContext, idx: number): Promise<v
   }
 }
 
-// -- Session keyboard handlers --
-
-/** Validate session save: check for duplicate name and identical content */
-async function validateSessionSave(name: string): Promise<string | null> {
-  const [tabManagerList, sessions] = await Promise.all([
-    browser.runtime.sendMessage({ type: "TAB_MANAGER_LIST" }) as Promise<TabManagerEntry[]>,
-    browser.runtime.sendMessage({ type: "SESSION_LIST" }) as Promise<TabManagerSession[]>,
-  ]);
-  // Check identical content first (more specific error)
-  const currentUrls = tabManagerList.map((entry) => normalizeUrlForMatch(entry.url)).join("\n");
-  for (const s of sessions) {
-    const sessionUrls = s.entries.map((entry) => normalizeUrlForMatch(entry.url)).join("\n");
-    if (currentUrls === sessionUrls) return `Identical to "${s.name}"`;
-  }
-  // Check duplicate name
-  const trimmed = name.trim().toLowerCase();
-  for (const s of sessions) {
-    if (s.name.toLowerCase() === trimmed) return `"${s.name}" already exists`;
-  }
-  return null;
+function showSaveSessionInlineError(ctx: SessionContext, message: string): boolean {
+  const input = ctx.shadow.querySelector(".ht-session-input") as HTMLInputElement | null;
+  const errorEl = ctx.shadow.querySelector(".ht-session-error") as HTMLElement | null;
+  if (!input || !errorEl) return false;
+  errorEl.textContent = message;
+  errorEl.style.display = "";
+  input.style.borderBottom = "1px solid #ff5f57";
+  setTimeout(() => {
+    errorEl.style.display = "none";
+    input.style.borderBottom = "";
+  }, 2000);
+  return true;
 }
+
+// -- Session keyboard handlers --
 
 /** Handle keydown events in saveSession view. Returns true if handled. */
 export function handleSaveSessionKey(ctx: SessionContext, event: KeyboardEvent): boolean {
   const input = ctx.shadow.querySelector(".ht-session-input") as HTMLInputElement | null;
 
-  if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (ctx.sessions.length === 0) return true;
-    const direction = event.shiftKey ? -1 : 1;
-    const length = ctx.sessions.length;
-    const next = (ctx.sessionIndex + direction + length) % length;
-    ctx.setSessionIndex(next);
-    ctx.render();
-    return true;
-  }
-
   if (event.key === "Escape") {
     event.preventDefault();
     event.stopPropagation();
-    ctx.setViewMode("tabManager");
-    ctx.render();
+    ctx.close();
     return true;
   }
   if (event.key === "Enter") {
     event.preventDefault();
     event.stopPropagation();
     if (input && !input.value.trim()) {
-      const errorEl = ctx.shadow.querySelector(".ht-session-error") as HTMLElement;
-      if (errorEl) {
-        errorEl.textContent = "A session name is required";
-        errorEl.style.display = "";
-        input.style.borderBottom = "1px solid #ff5f57";
-        setTimeout(() => { errorEl.style.display = "none"; input.style.borderBottom = ""; }, 2000);
-      }
+      showSaveSessionInlineError(ctx, "A session name is required");
       return true;
     }
     if (input) {
       void (async () => {
-        try {
-          const err = await validateSessionSave(input.value);
-          if (err) {
-            const errorEl = ctx.shadow.querySelector(".ht-session-error") as HTMLElement;
-            if (errorEl) {
-              errorEl.textContent = err;
-              errorEl.style.display = "";
-              input.style.borderBottom = "1px solid #ff5f57";
-              setTimeout(() => { errorEl.style.display = "none"; input.style.borderBottom = ""; }, 2000);
-            }
-          } else {
-            await saveSession(ctx, input.value);
-          }
-        } catch (error) {
-          reportSessionError("Validate session save failed", "Failed to validate session", error);
-        }
+        await saveSession(ctx, input.value);
       })();
     }
     return true;
@@ -1015,13 +943,13 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
             })) as { ok: boolean; reason?: string };
             isRenameModeActive = false;
             if (result.ok) {
-              showFeedback(`Renamed to "${newName}"`);
+              showFeedback(toastMessages.sessionRename(newName));
               const sessions = (await browser.runtime.sendMessage({
                 type: "SESSION_LIST",
               })) as TabManagerSession[];
               ctx.setSessions(sessions);
             } else {
-              showFeedback(result.reason || "Rename failed");
+              showFeedback(result.reason || toastMessages.sessionRenameFailed);
             }
           } catch (error) {
             isRenameModeActive = false;
@@ -1052,13 +980,13 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
             name: session.name,
           })) as { ok: boolean; reason?: string };
           if (result.ok) {
-            showFeedback(`Session "${session.name}" overwritten`);
+            showFeedback(toastMessages.sessionOverwrite(session.name));
             const sessions = (await browser.runtime.sendMessage({
               type: "SESSION_LIST",
             })) as TabManagerSession[];
             ctx.setSessions(sessions);
           } else {
-            showFeedback(result.reason || "Overwrite failed");
+            showFeedback(result.reason || toastMessages.sessionOverwriteFailed);
           }
         } catch (error) {
           reportSessionError("Overwrite session failed", "Overwrite failed", error);
@@ -1089,7 +1017,8 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
   }
 
   if (
-    event.key === "C"
+    event.code === "Space"
+    && event.shiftKey
     && !event.ctrlKey
     && !event.altKey
     && !event.metaKey
@@ -1208,10 +1137,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
   if (matchesAction(event, ctx.config, "tabManager", "close") || event.key === "Escape") {
     event.preventDefault();
     event.stopPropagation();
-    resetSessionTransientState();
-    ctx.setSessionFilterQuery("");
-    ctx.setViewMode("tabManager");
-    ctx.render();
+    ctx.close();
     return true;
   }
   if (matchesAction(event, ctx.config, "tabManager", "moveDown")) {
@@ -1407,7 +1333,7 @@ export async function openSessionRestoreOverlay(): Promise<void> {
           name: session.name,
         })) as { ok: boolean; count?: number };
         if (result.ok) {
-          showFeedback(`Session "${session.name}" restored (${result.count} tabs)`);
+          showFeedback(toastMessages.sessionRestore(session.name, result.count ?? 0));
         }
       } catch (error) {
         reportSessionError("Restore session failed", "Failed to restore session", error);

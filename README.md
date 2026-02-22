@@ -21,40 +21,32 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 - **Match count** in title bar
 - **Code block line splitting** — `<pre>` blocks are split into individual searchable lines
 - **Page size safety guard** — pages with >200k DOM elements or >10MB text show a toast and bail
-- **Shift+C clear-search** — clears the query from any pane
+- **Shift+Space clear-search** — clears the query from any pane
 
 ### Tab Manager (Harpoon)
 - **Anchor up to 4 tabs** to your harpoon list
 - **Remembers scroll position (X, Y)** — restores exactly where you left off
 - **Swap mode** (`w`) — stays active after a swap; press another slot to keep swapping, `w` or `Esc` to exit
-- **Sessions** — save (`s`), load (`l`), and delete named harpoon sessions (max 4)
+- **Cycle through slots** with `Alt+-` (prev) and `Alt+=` (next)
+- **Closed tabs persist** — entries dim when a tab is closed, re-open on jump with scroll restore
+
+### Session Menu
+- **`Alt+S`** opens the dedicated session menu
+- **Main view is load sessions** — searchable list with preview and load confirmation
+- **`Alt+Shift+S`** opens save-session flow directly
+- **`Enter`** loads the selected session
   - Session list includes a preview pane showing tabs in the selected profile
-  - Session search uses `Search Sessions . . .` with `Shift+C clear-search`
+  - Session search uses `Search Sessions . . .` with `Shift+Space clear-search`
   - Session load confirmation shows a minimal slot plan legend: `NEW (+)`, `DELETED (-)`, `REPLACED (~)`, `UNCHANGED (=)`
   - Duplicate session names rejected (case-insensitive)
   - Identical session content rejected (compares URL arrays)
   - Cannot save an empty harpoon list
-- **Cycle through slots** with `Alt+-` (prev) and `Alt+=` (next)
-- **Closed tabs persist** — entries dim when a tab is closed, re-open on jump with scroll restore
-
-### Bookmarks
-- **`Alt+B`** opens a two-pane bookmark browser with virtual scrolling
-- **Type to search** — fuzzy matching against title, URL, and folder path
-- **Slash filters** — `/folder` narrows by folder path
-- **Detail pane** — shows title, URL, folder path, date added, domain, and usage score
-- **Tree view** (`l` to focus tree, `h` to return to results) — full hierarchical folder/bookmark tree with collapse indicators (`▶`/`▼`), j/k cursor navigation, Enter to fold/open
-- **Open confirmation** — Enter or double-click on a tree entry opens a y/n confirmation prompt
-- **Move bookmark** (`m`) — folder picker to move a bookmark, then `y` confirm / `n` cancel
-- **Remove bookmark** (`d`) — delete with y/n confirmation
-- **Shift+C clear-search** — clears search from input, results list, or tree mode
-- **Add bookmark** (`Alt+Shift+B`) — wizard flow: choose Bookmark / Folder / Bookmark into New Folder → pick destination folder → (folder flows) enter name → confirm via `y/n` summary (`Title` and `Destination path > {path}`) (`Ctrl+D/U` half-page in list steps)
-- **Tab pane switching** — `Tab` moves to list, `f` focuses search input
 
 ### Frecency Tab List
 - **`Alt+Shift+F`** opens a frecency-scored list of all open tabs
 - **Type to search** — fuzzy matching against title and URL
 - **Tab key** cycles between search input and results list
-- **Shift+C clear-search** clears the query
+- **Shift+Space clear-search** clears the query
 - **Max 50 entries** — lowest-scored entry evicted when full
 
 ### Help Menu
@@ -78,8 +70,8 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 | `Alt+=` | Cycle to next harpoon slot |
 | `Alt+F` | Search in current page (Telescope) |
 | `Alt+Shift+F` | Open frecency tab list |
-| `Alt+B` | Open bookmarks browser |
-| `Alt+Shift+B` | Add bookmark (current page or new folder) |
+| `Alt+S` | Open session menu |
+| `Alt+Shift+S` | Open save session |
 | `Alt+M` | Open help menu |
 All keybindings are fully configurable in the extension options page with per-scope collision detection.
 
@@ -163,12 +155,11 @@ harpoon_telescope/
 │   │       └── toolbarPopup.css
 │   ├── lib/                                # Feature modules + shared utilities
 │   │   ├── appInit/
-│   │   ├── addBookmark/
 │   │   ├── background/                     # Background domains + message/command routers
-│   │   ├── bookmarks/
 │   │   ├── help/
 │   │   ├── searchCurrentPage/
 │   │   ├── searchOpenTabs/
+│   │   ├── sessionMenu/
 │   │   ├── tabManager/
 │   │   └── shared/
 │   ├── icons/
@@ -184,7 +175,7 @@ harpoon_telescope/
 ```
 ┌──────────────────────────────────────────────────────┐
 │                background.js                          │
-│   tab manager + sessions + frecency + bookmarks      │
+│   tab manager + sessions + frecency                  │
 │   + message routing                                   │
 └───────────────┬──────────────────────┬────────────────┘
                 │                      │
@@ -210,15 +201,14 @@ harpoon_telescope/
 - **Dual manifests** — MV2 for Firefox/Zen, MV3 for Chrome (service worker lifecycle)
 - **Compatibility guardrail** — `npm run verify:compat` checks manifest permission/command invariants
 - **Store policy guardrail** — `npm run verify:store` keeps manifests, store copy, and privacy policy aligned
-- **Background domain routing** — `background.ts` is orchestration; tab manager/bookmark handlers live in `src/lib/background/*`
+- **Background domain routing** — `background.ts` is orchestration; tab manager/session handlers live in `src/lib/background/*`
 - **`ensureTabManagerLoaded()` guards** — tab manager state is lazily reloaded when background context is cold-started
 - **Configurable keybindings** — all bindings in `browser.storage.local` with per-scope collision detection
 - **Navigation mode** — vim aliases are always enabled on top of basic keys
-- **rAF-throttled rendering** — frecency, telescope, and bookmark views defer DOM updates to animation frames
+- **rAF-throttled rendering** — frecency and telescope views defer DOM updates to animation frames
 - **Perf regression budgets** — filter/render hotspots use `withPerfTrace` + `src/lib/shared/perfBudgets.json` guardrails
 - **Shared design tokens** — overlays consume `panelHost` CSS variables for consistent Ghostty-inspired styling
-- **Virtual scrolling** — telescope and bookmark results render only ~25 visible items from a pool
-- **Tree views** — bookmark overlays provide hierarchical navigation with collapse/expand and confirmation flows
+- **Virtual scrolling** — heavy list panels render only the visible window from a pooled set of DOM nodes
 
 ## Storage Keys
 
@@ -227,7 +217,6 @@ harpoon_telescope/
 | `tabManagerList` | `TabManagerEntry[]` | Active tab manager slots (`closed` entries preserved) |
 | `tabManagerSessions` | `TabManagerSession[]` | Saved sessions (max 4) |
 | `frecencyData` | `FrecencyEntry[]` | Frecency visit history (max 50) |
-| `bookmarkUsage` | `Record<string, BookmarkUsage>` | Per-URL bookmark usage counts and recency |
 | `keybindings` | `KeybindingsConfig` | User keybindings + navigation mode |
 | `storageSchemaVersion` | `number` | Schema version used by startup migrations |
 

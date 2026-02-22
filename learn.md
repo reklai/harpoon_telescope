@@ -619,7 +619,7 @@ Keybinding storage and matching are centralized here:
 
 - Stored in `browser.storage.local` and merged with defaults for forward compatibility.
 - Vim navigation is always enabled (adds j/k, never replaces basic keys).
-- Core action matching is centralized (`matchesAction`), and panel-local controls (`d/m/l/h/f` plus `Shift+C clear-search`) are handled directly inside overlay key handlers.
+- Core action matching is centralized (`matchesAction`), and panel-local controls (`d/m/l/h/f` plus `Shift+Space clear-search`) are handled directly inside overlay key handlers.
 
 **Why merge with defaults?**
 
@@ -712,8 +712,8 @@ Manages list UI + sessions UI.
 - closed tabs persist and re-open on jump
 - sessions stored in `tabManagerSessions` (max 4)
 - session load uses preview + minimal slot-level load plan legend (`NEW (+)`, `DELETED (-)`, `REPLACED (~)`, `UNCHANGED (=)`)
-- load/save session panes support keyboard focus cycling (`Tab` / `Shift+Tab`)
-- session list search uses `Search Sessions . . .` and `Shift+C clear-search`
+- save-session pane shows the current tab-manager tabs in preview under the name input
+- session list search uses `Search Sessions . . .` and `Shift+Space clear-search`
 
 **Why max 4 slots?**
 
@@ -728,7 +728,7 @@ Two-pane UI (results + tree). `detailMode` controls tree focus and confirm state
 - `/folder` filter for folder path
 - `m` opens move picker
 - `l` focuses tree, `h` returns to results
-- `Shift+C clear-search` works from input/results/tree
+- `Shift+Space clear-search` works from input/results/tree
 - move/confirm prompts use `y` confirm and `n` cancel
 - `Ctrl+D/U` supports half-page jumps in bookmark results/tree and add-bookmark list steps
 - add-bookmark applies a final y/n confirmation card with `Title` and `Destination path > {path}`
@@ -846,7 +846,7 @@ Growth checkpoint:
 - Footer order: nav -> secondary (list/tree) -> action (clear/del/move) -> primary (open) -> close/back
 - Footer labels: uppercase key + lowercase label (ex: `D del`)
 - Vim navigation: j/k aliases are always enabled
-- Clear-search: `Shift+C` works from input/results/tree contexts
+- Clear-search: `Shift+Space` works from input/results/tree contexts
 - Search input placeholders follow `Search <Panel Name> . . .` across session load, bookmarks, open tabs, and current-page search
 
 **Why strict footer order?**

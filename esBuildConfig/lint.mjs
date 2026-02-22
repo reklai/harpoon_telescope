@@ -15,21 +15,19 @@ const BANNED_UI_PACKAGES = [
 ];
 
 const OVERLAY_TS_FILES = [
-  "src/lib/addBookmark/addBookmark.ts",
-  "src/lib/bookmarks/bookmarks.ts",
   "src/lib/help/help.ts",
   "src/lib/searchCurrentPage/searchCurrentPage.ts",
   "src/lib/searchOpenTabs/searchOpenTabs.ts",
+  "src/lib/sessionMenu/sessionMenu.ts",
   "src/lib/tabManager/session.ts",
   "src/lib/tabManager/tabManager.ts",
 ];
 
 const OVERLAY_CSS_FILES = [
-  "src/lib/addBookmark/addBookmark.css",
-  "src/lib/bookmarks/bookmarks.css",
   "src/lib/help/help.css",
   "src/lib/searchCurrentPage/searchCurrentPage.css",
   "src/lib/searchOpenTabs/searchOpenTabs.css",
+  "src/lib/sessionMenu/sessionMenu.css",
   "src/lib/tabManager/session.css",
   "src/lib/tabManager/tabManager.css",
 ];
@@ -42,18 +40,12 @@ const PERF_INSTRUMENTATION_REQUIREMENTS = {
     'withPerfTrace("searchCurrentPage.renderResults"',
     'withPerfTrace("searchCurrentPage.renderVisibleItems"',
   ],
-  "src/lib/bookmarks/bookmarks.ts": [
-    'withPerfTrace("bookmarks.applyFilter"',
-    'withPerfTrace("bookmarks.renderVisibleItems"',
-  ],
 };
 
 const REQUIRED_PERF_BUDGET_KEYS = [
   "searchOpenTabs.applyFilter",
   "searchCurrentPage.renderResults",
   "searchCurrentPage.renderVisibleItems",
-  "bookmarks.applyFilter",
-  "bookmarks.renderVisibleItems",
 ];
 
 const DISALLOWED_IDENTIFIER_PATTERNS = [

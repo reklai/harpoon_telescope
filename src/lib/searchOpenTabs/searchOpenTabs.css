@@ -11,6 +11,10 @@
   contain: layout style paint;
   overscroll-behavior: contain;
 }
+.ht-open-tabs-container .ht-titlebar-text {
+  font-size: 12px;
+  text-align: center;
+}
 .ht-open-tabs-input-wrap {
   display: flex;
   align-items: center;

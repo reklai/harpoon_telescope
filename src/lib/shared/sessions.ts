@@ -138,10 +138,11 @@ export async function sessionSave(
   name: string,
 ): Promise<{ ok: boolean; reason?: string }> {
   await state.ensureLoaded();
-  if (state.getList().length === 0) {
+  const currentList = state.getList();
+  if (currentList.length === 0) {
     return { ok: false, reason: "Cannot save empty tab manager list" };
   }
-  const sessionEntries: TabManagerSessionEntry[] = state.getList().map((entry) => ({
+  const sessionEntries: TabManagerSessionEntry[] = currentList.map((entry) => ({
     url: entry.url,
     title: entry.title,
     scrollX: entry.scrollX,
@@ -160,6 +161,16 @@ export async function sessionSave(
   );
   if (nameTaken) {
     return { ok: false, reason: `"${name}" already exists` };
+  }
+  const currentUrls = currentList.map((entry) => normalizeUrlForMatch(entry.url)).join("\n");
+  const identicalSession = sessions.find((existingSession) => {
+    const sessionUrls = existingSession.entries
+      .map((entry) => normalizeUrlForMatch(entry.url))
+      .join("\n");
+    return sessionUrls === currentUrls;
+  });
+  if (identicalSession) {
+    return { ok: false, reason: `Identical to "${identicalSession.name}"` };
   }
   if (sessions.length >= MAX_SESSIONS) {
     return { ok: false, reason: `Max ${MAX_SESSIONS} sessions — delete one first` };

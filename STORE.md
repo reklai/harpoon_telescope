@@ -57,7 +57,7 @@ Every keybinding can be changed in the options page. Collision detection warns y
 Toggle vim-enhanced navigation with Alt+V. This adds j/k movement on top of the standard arrow keys — it never replaces them. A badge in the panel titlebar shows whether vim mode is on or off.
 
 **Sessions**
-Save your current set of pinned tabs as a named session. Load it later to restore your workspace. Keep up to 4 sessions.
+Press Alt+S to open the session menu. Use S for save flow and L for load flow to restore your workspace quickly. Keep up to 4 sessions.
 
 **Privacy-first**
 No data leaves your browser. No analytics, no tracking, no network requests. Everything is stored locally. See the full privacy policy for details.
@@ -74,6 +74,5 @@ tabs, productivity, keyboard, navigation, search, vim, harpoon, telescope, tab m
 
 - **tabs**: Read tab titles and URLs so the extension can display them in the tab manager and frecency list, and switch between tabs on your behalf.
 - **activeTab**: Access the current page content to power the in-page search feature (Telescope).
-- **bookmarks**: Browse, create, move, and remove bookmarks from the extension overlays.
 - **storage**: Save your pinned tabs, sessions, frecency data, and keyboard shortcut preferences locally in the browser.
 - **host_permissions (<all_urls>)**: Inject the content script on every page so keyboard shortcuts and search overlays work everywhere.

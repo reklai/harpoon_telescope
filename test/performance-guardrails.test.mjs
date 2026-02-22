@@ -19,8 +19,6 @@ const REQUIRED_BUDGETS = {
   "searchOpenTabs.applyFilter": 20,
   "searchCurrentPage.renderResults": 30,
   "searchCurrentPage.renderVisibleItems": 16,
-  "bookmarks.applyFilter": 28,
-  "bookmarks.renderVisibleItems": 20,
 };
 
 const REQUIRED_INSTRUMENTATION = {
@@ -28,10 +26,6 @@ const REQUIRED_INSTRUMENTATION = {
   "src/lib/searchCurrentPage/searchCurrentPage.ts": [
     'withPerfTrace("searchCurrentPage.renderResults"',
     'withPerfTrace("searchCurrentPage.renderVisibleItems"',
-  ],
-  "src/lib/bookmarks/bookmarks.ts": [
-    'withPerfTrace("bookmarks.applyFilter"',
-    'withPerfTrace("bookmarks.renderVisibleItems"',
   ],
 };
 

@@ -8,8 +8,8 @@ export type ContentRuntimeMessage =
   | { type: "GET_CONTENT" }
   | { type: "OPEN_SEARCH_CURRENT_PAGE" }
   | { type: "OPEN_TAB_MANAGER" }
+  | { type: "OPEN_SESSIONS" }
   | { type: "OPEN_FRECENCY" }
-  | { type: "OPEN_BOOKMARKS" }
   | { type: "SHOW_SESSION_RESTORE" }
   | { type: "SCROLL_TO_TEXT"; text: string }
   | {
@@ -36,14 +36,6 @@ export type BackgroundRuntimeMessage =
   | { type: "SAVE_KEYBINDINGS"; config: KeybindingsConfig }
   | { type: "SWITCH_TO_TAB"; tabId: number }
   | { type: "FRECENCY_LIST" }
-  | { type: "BOOKMARK_LIST" }
-  | { type: "OPEN_BOOKMARK_TAB"; url: string }
-  | { type: "BOOKMARK_ADD"; parentId?: string }
-  | { type: "BOOKMARK_REMOVE"; id: string; url?: string }
-  | { type: "BOOKMARK_REMOVE_TREE"; id: string }
-  | { type: "BOOKMARK_FOLDERS" }
-  | { type: "BOOKMARK_CREATE_FOLDER"; title: string; parentId?: string }
-  | { type: "BOOKMARK_MOVE"; id: string; parentId?: string }
   | { type: "CONTENT_SCRIPT_READY" }
   | { type: "SESSION_SAVE"; name: string }
   | { type: "SESSION_LIST" }

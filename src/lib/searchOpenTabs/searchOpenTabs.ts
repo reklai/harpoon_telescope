@@ -61,7 +61,7 @@ export async function openSearchOpenTabs(
       </div>
       <div class="ht-footer-row">
         <span>${paneHint}</span>
-        <span>Shift+C clear-search</span>
+        <span>Shift+Space clear-search</span>
         <span>${acceptKey} jump</span>
         <span>${closeKey} close</span>
       </div>`;
@@ -409,7 +409,13 @@ export async function openSearchOpenTabs(
         return;
       }
 
-      if (event.key === "C" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      if (
+        event.code === "Space"
+        && event.shiftKey
+        && !event.ctrlKey
+        && !event.altKey
+        && !event.metaKey
+      ) {
         event.preventDefault();
         event.stopPropagation();
         input.value = "";

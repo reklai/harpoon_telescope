@@ -2,12 +2,10 @@
 
 import browser from "webextension-polyfill";
 import { recordFrecencyVisit, removeFrecencyEntry } from "../../lib/shared/frecencyScoring";
-import { createBookmarkDomain } from "../../lib/background/bookmarkDomain";
 import { registerCommandRouter } from "../../lib/background/commandRouter";
 import { createSessionMessageHandler } from "../../lib/background/sessionMessageHandler";
 import { createTabManagerDomain } from "../../lib/background/tabManagerDomain";
 import { createTabManagerMessageHandler } from "../../lib/background/tabManagerMessageHandler";
-import { createBookmarkMessageHandler } from "../../lib/background/bookmarkMessageHandler";
 import { miscMessageHandler } from "../../lib/background/miscMessageHandler";
 import { registerRuntimeMessageRouter } from "../../lib/background/runtimeRouter";
 import { registerStartupRestore } from "../../lib/background/startupRestore";
@@ -22,8 +20,6 @@ async function bootstrapBackground(): Promise<void> {
   }
 
   const tabManager = createTabManagerDomain();
-  const bookmarks = createBookmarkDomain();
-
   tabManager.registerLifecycleListeners({
     onTabClosed: async (tabId: number) => {
       await removeFrecencyEntry(tabId);
@@ -46,7 +42,6 @@ async function bootstrapBackground(): Promise<void> {
   registerRuntimeMessageRouter([
     createTabManagerMessageHandler(tabManager),
     createSessionMessageHandler(tabManager.state),
-    createBookmarkMessageHandler(bookmarks),
     miscMessageHandler,
   ]);
 

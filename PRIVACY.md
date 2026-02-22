@@ -35,7 +35,6 @@ None. The extension:
 |------------|----------------|
 | `tabs` | Read tab titles and URLs to display in harpoon and frecency lists, and to switch between tabs |
 | `activeTab` | Access the current page's content for in-page search (Telescope) |
-| `bookmarks` | Read, create, move, and delete bookmarks from the bookmark overlays |
 | `storage` | Save your harpoon list, sessions, frecency data, and keybinding preferences locally |
 | `<all_urls>` | Inject the content script that provides keyboard shortcuts and search overlays on any page |
 

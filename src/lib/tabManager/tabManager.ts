@@ -1,6 +1,6 @@
 // Tab Manager overlay — curated list of up to 4 tabs with scroll memory.
 // Supports keyboard nav (arrows, vim j/k), number keys 1-4 to jump,
-// "w" key to enter swap mode, "d" to delete, "s" to save session, "l" to load session.
+// "w" key to enter swap mode, and "d" to delete.
 
 import browser from "webextension-polyfill";
 import { MAX_TAB_MANAGER_SLOTS, matchesAction, keyToDisplay } from "../shared/keybindings";
@@ -14,22 +14,8 @@ import {
 } from "../shared/panelHost";
 import { escapeHtml, extractDomain } from "../shared/helpers";
 import { showFeedback } from "../shared/feedback";
-import {
-  SessionContext,
-  refreshSessionViewFooter,
-  renderSaveSession,
-  renderSessionList,
-  renderReplaceSession,
-  saveSession,
-  loadSession,
-  handleSaveSessionKey,
-  handleSessionListKey,
-  handleReplaceSessionKey,
-  resetSessionTransientState,
-} from "./session";
+import { toastMessages } from "../shared/toastMessages";
 import tabManagerStyles from "./tabManager.css";
-
-type ViewMode = "tabManager" | "saveSession" | "sessionList" | "replaceSession";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -67,9 +53,6 @@ export async function openTabManager(
     let list = await fetchTabManagerListWithRetry();
     let activeIndex = 0;
 
-    // View mode
-    let viewMode: ViewMode = "tabManager";
-
     // Swap mode state (toggled by "w" key)
     let swapMode = false;
     let swapSourceIndex: number | null = null;
@@ -77,20 +60,11 @@ export async function openTabManager(
     // Undo buffer — stores the last removed entry for single-slot undo
     let undoEntry: { entry: TabManagerEntry; index: number } | null = null;
 
-    // Session list state
-    let sessions: TabManagerSession[] = [];
-    let sessionIndex = 0;
-    let pendingSaveName = "";
-    let sessionFilterQuery = "";
-    resetSessionTransientState();
-
     const moveUpKey = keyToDisplay(config.bindings.tabManager.moveUp.key);
     const moveDownKey = keyToDisplay(config.bindings.tabManager.moveDown.key);
     const jumpKey = keyToDisplay(config.bindings.tabManager.jump.key);
     const removeKey = keyToDisplay(config.bindings.tabManager.remove.key);
     const swapKey = keyToDisplay(config.bindings.tabManager.swap.key);
-    const saveKey = keyToDisplay(config.bindings.tabManager.saveSession.key);
-    const loadKey = keyToDisplay(config.bindings.tabManager.loadSession.key);
     const closeKey = keyToDisplay(config.bindings.tabManager.close.key);
 
     function close(): void {
@@ -101,9 +75,7 @@ export async function openTabManager(
 
     function failToSafeTabManagerState(context: string, error: unknown): void {
       console.error(`[Harpoon Telescope] ${context}:`, error);
-      showFeedback("Tab Manager action failed");
-      resetSessionTransientState();
-      viewMode = "tabManager";
+      showFeedback(toastMessages.tabManagerActionFailed);
       exitSwapMode();
       try {
         renderTabManager();
@@ -117,24 +89,6 @@ export async function openTabManager(
       swapMode = false;
       swapSourceIndex = null;
     }
-
-    // Session context object shared with session-views module
-    const sessionCtx: SessionContext = {
-      shadow,
-      container,
-      config,
-      get sessions() { return sessions; },
-      get sessionIndex() { return sessionIndex; },
-      get pendingSaveName() { return pendingSaveName; },
-      get sessionFilterQuery() { return sessionFilterQuery; },
-      setSessionIndex(i: number) { sessionIndex = i; },
-      setSessions(s: TabManagerSession[]) { sessions = s; },
-      setPendingSaveName(name: string) { pendingSaveName = name; },
-      setSessionFilterQuery(query: string) { sessionFilterQuery = query; },
-      setViewMode(mode: ViewMode) { viewMode = mode; },
-      render,
-      close,
-    };
 
     function buildTabManagerFooterHtml(): string {
       const navHint = config.navigationMode === "vim"
@@ -150,10 +104,9 @@ export async function openTabManager(
         ${vimExtraHints}
       </div>
       <div class="ht-footer-row">
-        <span>${saveKey} save</span>
-        <span>${loadKey} load</span>
-        <span>${removeKey} del</span>
+        <span>U undo</span>
         <span class="${swapMode ? "ht-footer-hint-active" : ""}">${swapKey} swap</span>
+        <span>${removeKey} del</span>
         <span>${jumpKey} jump</span>
         <span>${closeKey} close</span>
       </div>`;
@@ -166,13 +119,7 @@ export async function openTabManager(
     }
 
     function onVimModeChanged(): void {
-      if (viewMode === "tabManager") {
-        refreshTabManagerFooter();
-        return;
-      }
-      if (viewMode === "saveSession" || viewMode === "sessionList" || viewMode === "replaceSession") {
-        refreshSessionViewFooter(sessionCtx, viewMode);
-      }
+      refreshTabManagerFooter();
     }
 
     // -- Tab Manager view render --
@@ -296,24 +243,9 @@ export async function openTabManager(
       }
     }
 
-    // -- Dispatch render by view mode --
+    // -- Render --
     function render(): void {
-      switch (viewMode) {
-        case "tabManager":
-          renderTabManager();
-          break;
-        case "saveSession":
-          void renderSaveSession(sessionCtx).catch((error) => {
-            failToSafeTabManagerState("Render save-session view failed", error);
-          });
-          break;
-        case "sessionList":
-          renderSessionList(sessionCtx);
-          break;
-        case "replaceSession":
-          renderReplaceSession(sessionCtx);
-          break;
-      }
+      renderTabManager();
     }
 
     /** Toggle .active class without rebuilding the DOM (arrow key navigation) */
@@ -357,7 +289,7 @@ export async function openTabManager(
             render();
           })
           .catch(() => {
-            showFeedback("Swap failed");
+            showFeedback(toastMessages.tabManagerSwapFailed);
             exitSwapMode();
             render();
           });
@@ -374,7 +306,7 @@ export async function openTabManager(
         });
       } catch (error) {
         console.error("[Harpoon Telescope] Jump to tab-manager slot failed:", error);
-        showFeedback("Jump failed");
+        showFeedback(toastMessages.tabManagerJumpFailed);
       }
     }
 
@@ -400,20 +332,6 @@ export async function openTabManager(
     function keyHandler(event: KeyboardEvent): void {
       if (!document.getElementById("ht-panel-host")) {
         document.removeEventListener("keydown", keyHandler, true);
-        return;
-      }
-
-      // Delegate to session view key handlers
-      if (viewMode === "saveSession") {
-        handleSaveSessionKey(sessionCtx, event);
-        return;
-      }
-      if (viewMode === "sessionList") {
-        handleSessionListKey(sessionCtx, event);
-        return;
-      }
-      if (viewMode === "replaceSession") {
-        handleReplaceSessionKey(sessionCtx, event);
         return;
       }
 
@@ -458,39 +376,6 @@ export async function openTabManager(
           swapSourceIndex = null;
         }
         render();
-        return;
-      }
-
-      // Save session ("s" key)
-      if (matchesAction(event, config, "tabManager", "saveSession")) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (list.length === 0) return;
-        pendingSaveName = "";
-        resetSessionTransientState();
-        viewMode = "saveSession";
-        render();
-        return;
-      }
-
-      // Load session ("l" key)
-      if (matchesAction(event, config, "tabManager", "loadSession")) {
-        event.preventDefault();
-        event.stopPropagation();
-        (async () => {
-          try {
-            sessions = (await browser.runtime.sendMessage({
-              type: "SESSION_LIST",
-            })) as TabManagerSession[];
-            sessionIndex = 0;
-            sessionFilterQuery = "";
-            resetSessionTransientState();
-            viewMode = "sessionList";
-            render();
-          } catch (error) {
-            failToSafeTabManagerState("Load sessions failed", error);
-          }
-        })();
         return;
       }
 
@@ -572,7 +457,7 @@ export async function openTabManager(
         if (!undoEntry) return;
         if (list.length >= MAX_TAB_MANAGER_SLOTS) {
           undoEntry = null;
-          showFeedback(`Tab Manager full (max ${MAX_TAB_MANAGER_SLOTS})`);
+          showFeedback(toastMessages.tabManagerFull(MAX_TAB_MANAGER_SLOTS));
           return;
         }
         (async () => {

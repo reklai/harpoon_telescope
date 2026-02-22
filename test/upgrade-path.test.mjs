@@ -45,9 +45,4 @@ test("stable storage keys remain backward-compatible", () => {
   assert.match(frecency, /browser\.storage\.local\.get\("frecencyData"\)/);
   assert.match(frecency, /frecencyData:\s*Array\.from\(frecencyMap\.values\(\)\)/);
   assert.match(frecency, /\(data\.frecencyData as FrecencyEntry\[\]\) \|\| \[\]/);
-
-  const bookmarks = readText("src/lib/background/bookmarkDomain.ts");
-  assert.match(bookmarks, /browser\.storage\.local\.get\("bookmarkUsage"\)/);
-  assert.match(bookmarks, /browser\.storage\.local\.set\(\{\s*bookmarkUsage:\s*bookmarkUsageMap\s*\}\)/);
-  assert.match(bookmarks, /\(data\.bookmarkUsage as Record<string, BookmarkUsage>\) \|\| \{\}/);
 });

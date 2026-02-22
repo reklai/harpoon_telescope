@@ -1,7 +1,5 @@
 {
   "searchOpenTabs.applyFilter": 14,
   "searchCurrentPage.renderResults": 16,
-  "searchCurrentPage.renderVisibleItems": 8,
-  "bookmarks.applyFilter": 18,
-  "bookmarks.renderVisibleItems": 10
+  "searchCurrentPage.renderVisibleItems": 8
 }

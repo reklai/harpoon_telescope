@@ -11,14 +11,13 @@ function readText(pathFromRoot) {
 
 const SPLIT_LAYOUT_FILES = [
   "src/lib/searchCurrentPage/searchCurrentPage.css",
-  "src/lib/bookmarks/bookmarks.css",
 ];
 
 const SINGLE_PANEL_FILES = [
   "src/lib/searchOpenTabs/searchOpenTabs.css",
+  "src/lib/sessionMenu/sessionMenu.css",
   "src/lib/tabManager/tabManager.css",
   "src/lib/tabManager/session.css",
-  "src/lib/addBookmark/addBookmark.css",
   "src/lib/help/help.css",
 ];
 

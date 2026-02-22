@@ -25,10 +25,10 @@ All feature modules live in `src/lib/*` and are imported by entryPoints.
 - `src/lib/shared/*`
   - Cross-feature contracts and primitives (`keybindings`, `runtimeMessages`, `panelHost`, `helpers`).
 - `src/lib/background/*`
-  - Background-only domains and routers (`tabManagerDomain`, `bookmarkDomain`, `runtimeRouter`, `commandRouter`, etc.).
+  - Background-only domains and routers (`tabManagerDomain`, `runtimeRouter`, `commandRouter`, etc.).
 - `src/lib/<feature>/*`
   - Feature-local logic and UI.
-  - Current features: `tabManager`, `searchCurrentPage`, `searchOpenTabs`, `bookmarks`, `addBookmark`, `help`.
+  - Current features: `tabManager`, `sessionMenu`, `searchCurrentPage`, `searchOpenTabs`, `help`.
 
 Rule of thumb:
 - Feature modules can use `shared`.

@@ -13,7 +13,11 @@
 9. Submit Firefox package to AMO with `STORE.md` copy + permissions rationale + privacy policy.
 10. Submit Chrome package to Chrome Web Store with same listing copy adapted to CWS form fields.
 11. Post-submission smoke test on production listing builds in both browsers.
-12. Regression-check composability layer paths before release (`src/lib/core/*` state transitions + `src/lib/adapters/runtime/*` API boundaries).
+12. Run focused structure-enabled regression tests before submission:
+    - `node --test test/runtime-wiring.test.mjs`
+    - `node --test test/session-core.test.mjs`
+    - `node --test test/upgrade-path.test.mjs`
+13. Regression-check composability layer paths before release (`src/lib/core/*` state transitions + `src/lib/adapters/runtime/*` API boundaries).
 
 Use this content when submitting to Firefox Add-ons (AMO) and Chrome Web Store.
 Category: **Productivity**

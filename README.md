@@ -126,6 +126,19 @@ npm run clean            # rm -rf dist
 
 The JS bundles are identical across targets — `webextension-polyfill` handles API differences at runtime. Only the manifest differs (MV2 vs MV3).
 
+## Testing
+
+The current structure is intentionally split for testability (contracts, utilities, runtime handlers/domains, and panel submodules). This enables focused regression checks that were harder before the refactor.
+
+- `npm run test` covers runtime wiring, session-core state transitions, compatibility checks, migration expectations, docs consistency, and store-policy guardrails.
+- Focused checks are available via Node test files when debugging specific layers:
+  - `node --test test/runtime-wiring.test.mjs`
+  - `node --test test/session-core.test.mjs`
+  - `node --test test/upgrade-path.test.mjs`
+  - `node --test test/performance-guardrails.test.mjs`
+
+Always run `npm run ci` before release/tag to validate structure, behavior, compatibility, upgrade safety, and store-policy consistency across both browser builds.
+
 ### Command Registration Strategy
 
 Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps only core shortcuts (`open`, `add`, `search`), and the content script handles slot jumps, cycling, standard aliases, and panel-local actions so behavior stays consistent across Firefox, Chrome, and Zen.
@@ -179,9 +192,9 @@ harpoon_telescope/
 │   │   ├── ui/
 │   │   │   ├── panels/
 │   │   │   │   ├── help/
-│   │   │   │   ├── searchCurrentPage/
+│   │   │   │   ├── searchCurrentPage/      # panel shell + composable grep/view modules
 │   │   │   │   ├── searchOpenTabs/
-│   │   │   │   ├── sessionMenu/            # Session overlays (load/save/restore)
+│   │   │   │   ├── sessionMenu/            # load/save views + restore overlay + shared view builders
 │   │   │   │   └── tabManager/             # Tab Manager overlay (slots/swap/undo/remove)
 │   │   └── common/
 │   │       ├── contracts/                  # Message shapes + shared type contracts
@@ -231,6 +244,7 @@ harpoon_telescope/
 - **Runtime adapter boundary** — runtime message calls are centralized in `src/lib/adapters/runtime/*` so UI modules don't send raw messages directly
 - **Pure core modules for UI state** — `src/lib/core/sessionMenu/sessionCore.ts` isolates session transient-state transitions and derived selectors
 - **Shared list-navigation engine** — `src/lib/core/panel/panelListController.ts` keeps wheel/arrow/half-page behavior consistent across overlays
+- **Testability by composition** — current-page grep internals and session view/restore flows are split into smaller modules with dedicated wiring/state regression tests
 - **Configurable keybindings** — all bindings in `browser.storage.local` with per-scope collision detection
 - **Navigation behavior** — standard mode is always enabled; `j/k` aliases are additive with base up/down bindings
 - **rAF-throttled rendering** — frecency and telescope views defer DOM updates to animation frames

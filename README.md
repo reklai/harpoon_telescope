@@ -1,6 +1,6 @@
 # TabScope — Browser Extension
 
-ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard-first driven (mouse supported out-of-box) tab navigation on Firefox, Chrome (Experimental), and Zen.
+ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard-first driven (mouse supported out-of-box) tab navigation and fuzzy searching through pages / tabs on Firefox, Chrome (Experimental), and Zen.
 
 ## What It Does
 

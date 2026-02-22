@@ -173,11 +173,14 @@ harpoon_telescope/
 │   │   ├── core/
 │   │   │   ├── panel/                      # Shared list-navigation controller
 │   │   │   └── sessionMenu/                # Pure session state machine + selectors
-│   │   ├── help/
-│   │   ├── searchCurrentPage/
-│   │   ├── searchOpenTabs/
-│   │   ├── sessionMenu/                    # Session overlays (load/save/restore)
-│   │   ├── tabManager/                     # Tab Manager overlay (slots/swap/undo/remove)
+│   │   ├── ui/
+│   │   │   ├── panels/
+│   │   │   │   ├── help/
+│   │   │   │   ├── searchCurrentPage/
+│   │   │   │   ├── searchOpenTabs/
+│   │   │   │   ├── sessionMenu/            # Session overlays (load/save/restore)
+│   │   │   │   └── tabManager/             # Tab Manager overlay (slots/swap/undo/remove)
+│   │   │   └── shared/                     # Panel host + preview shell styles
 │   │   └── shared/
 │   ├── icons/
 │   └── types.d.ts

@@ -3,18 +3,18 @@
 
 import browser from "webextension-polyfill";
 import { DEFAULT_KEYBINDINGS, matchesAction } from "../shared/keybindings";
-import { grepPage, getPageContent } from "../searchCurrentPage/grep";
+import { grepPage, getPageContent } from "../ui/panels/searchCurrentPage/grep";
 import { scrollToText } from "../shared/scroll";
 import { showFeedback } from "../shared/feedback";
 import { toastMessages } from "../shared/toastMessages";
-import { openTabManager } from "../tabManager/tabManager";
-import { openSessionMenu } from "../sessionMenu/sessionMenu";
-import { openSearchCurrentPage } from "../searchCurrentPage/searchCurrentPage";
-import { openSearchOpenTabs } from "../searchOpenTabs/searchOpenTabs";
-import { openHelpOverlay } from "../help/help";
-import { dismissPanel } from "../shared/panelHost";
+import { openTabManager } from "../ui/panels/tabManager/tabManager";
+import { openSessionMenu } from "../ui/panels/sessionMenu/sessionMenu";
+import { openSearchCurrentPage } from "../ui/panels/searchCurrentPage/searchCurrentPage";
+import { openSearchOpenTabs } from "../ui/panels/searchOpenTabs/searchOpenTabs";
+import { openHelpOverlay } from "../ui/panels/help/help";
+import { dismissPanel } from "../ui/shared/panelHost";
 import { ContentRuntimeMessage } from "../shared/runtimeMessages";
-import { openSessionRestoreOverlay } from "../sessionMenu/session";
+import { openSessionRestoreOverlay } from "../ui/panels/sessionMenu/session";
 import {
   addCurrentTabToTabManager,
   cycleTabManagerSlot,

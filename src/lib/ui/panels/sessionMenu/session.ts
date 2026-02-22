@@ -2,7 +2,7 @@
 // Renders the save-session input and session-list views inside the tab manager panel.
 // Also provides standalone session-restore overlay for browser startup.
 
-import { keyToDisplay, matchesAction, loadKeybindings, MAX_SESSIONS } from "../shared/keybindings";
+import { keyToDisplay, matchesAction, loadKeybindings, MAX_SESSIONS } from "../../../shared/keybindings";
 import {
   createPanelHost,
   removePanelHost,
@@ -11,10 +11,10 @@ import {
   footerRowHtml,
   vimBadgeHtml,
   dismissPanel,
-} from "../shared/panelHost";
-import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../shared/helpers";
-import { showFeedback } from "../shared/feedback";
-import { toastMessages } from "../shared/toastMessages";
+} from "../../shared/panelHost";
+import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../../../shared/helpers";
+import { showFeedback } from "../../../shared/feedback";
+import { toastMessages } from "../../../shared/toastMessages";
 import restoreStyles from "./session.css";
 import {
   SessionTransientState,
@@ -31,7 +31,7 @@ import {
   stopSessionOverwriteConfirmation,
   stopSessionRenameMode,
   withSessionListFocusTarget,
-} from "../core/sessionMenu/sessionCore";
+} from "../../../core/sessionMenu/sessionCore";
 import {
   deleteSessionByName as deleteSessionByNameRemote,
   listSessions,
@@ -41,13 +41,13 @@ import {
   replaceSession as replaceSessionByName,
   saveSessionByName,
   updateSession,
-} from "../adapters/runtime/sessionApi";
-import { listTabManagerEntries } from "../adapters/runtime/tabManagerApi";
+} from "../../../adapters/runtime/sessionApi";
+import { listTabManagerEntries } from "../../../adapters/runtime/tabManagerApi";
 import {
   moveVisibleSelectionByDirection,
   moveVisibleSelectionFromWheel,
   moveVisibleSelectionHalfPage,
-} from "../core/panel/panelListController";
+} from "../../../core/panel/panelListController";
 
 let sessionTransientState = createSessionTransientState();
 

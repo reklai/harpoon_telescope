@@ -2,7 +2,7 @@
 // trapping so keyboard input stays in the panel (not the address bar).
 
 import browser from "webextension-polyfill";
-import { escapeHtml } from "./helpers";
+import { escapeHtml } from "../../shared/helpers";
 
 export interface PanelHost {
   host: HTMLDivElement;

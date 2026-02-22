@@ -44,11 +44,11 @@ This guide is self-contained: no prerequisite docs are required to learn the sys
 7. [Keybinding System — src/lib/shared/keybindings.ts](#keybinding-system--srclibsharedkeybindingsts)
 8. [Content Script Boot — src/entryPoints/contentScript](#contentScript-boot--srcentryPointscontentScript)
 9. [Background Process — src/entryPoints/background](#background-process--srcentryPointsbackground)
-10. [Search Current Page — src/lib/searchCurrentPage](#search-current-page--srclibsearchcurrentpage)
-11. [Search Open Tabs — src/lib/searchOpenTabs](#search-open-tabs--srclibsearchopentabs)
-12. [Tab Manager — src/lib/tabManager](#tab-manager--srclibtabmanager)
-13. [Session Menu — src/lib/sessionMenu](#session-menu--srclibsessionmenu)
-14. [Help — src/lib/help](#help--srclibhelp)
+10. [Search Current Page — src/lib/ui/panels/searchCurrentPage](#search-current-page--srclibuipanelssearchcurrentpage)
+11. [Search Open Tabs — src/lib/ui/panels/searchOpenTabs](#search-open-tabs--srclibuipanelssearchopentabs)
+12. [Tab Manager — src/lib/ui/panels/tabManager](#tab-manager--srclibuipanelstabmanager)
+13. [Session Menu — src/lib/ui/panels/sessionMenu](#session-menu--srclibuipanelssessionmenu)
+14. [Help — src/lib/ui/panels/help](#help--srclibuipanelshelp)
 15. [Shared Utilities — src/lib/shared](#shared-utilities--srclibshared)
 16. [Panel Lifecycle + Guards](#panel-lifecycle--guards)
 17. [Performance Patterns](#performance-patterns)
@@ -185,11 +185,11 @@ Incident retrospective template (flow lens):
 
 ### Flow A — Open a Panel and Search
 
-User presses `Alt+F` on any page. The content script's global keydown handler in `src/lib/appInit/appInit.ts` catches the event, and `matchesAction(e, config, "global", "searchInPage")` returns true. The handler calls `openSearchCurrentPage(config)` from `src/lib/searchCurrentPage/searchCurrentPage.ts`, which creates a Shadow DOM host (`#ht-panel-host`) and builds the search UI inside it.
+User presses `Alt+F` on any page. The content script's global keydown handler in `src/lib/appInit/appInit.ts` catches the event, and `matchesAction(e, config, "global", "searchInPage")` returns true. The handler calls `openSearchCurrentPage(config)` from `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts`, which creates a Shadow DOM host (`#ht-panel-host`) and builds the search UI inside it.
 
 The content script owns DOM access because the background cannot touch page DOM — this is a fundamental browser security boundary. Panel lifecycle is one layer of this architecture: host integrity is validated before open, and open paths fail closed (`dismissPanel()`) on sync or async initialization failures, so stale host state does not poison later feature flows.
 
-When the user types a query, the `input` event fires and updates the closure-scoped state — `currentQuery` holds what the user typed, `activeFilters` holds structural filters like `/code` or `/headings`. Then `applyFilter()` runs `grepPage()` from `src/lib/searchCurrentPage/grep.ts`, which populates `results`. Finally `renderResults()` updates the DOM and `updatePreview()` shows context for the highlighted item.
+When the user types a query, the `input` event fires and updates the closure-scoped state — `currentQuery` holds what the user typed, `activeFilters` holds structural filters like `/code` or `/headings`. Then `applyFilter()` runs `grepPage()` from `src/lib/ui/panels/searchCurrentPage/grep.ts`, which populates `results`. Finally `renderResults()` updates the DOM and `updatePreview()` shows context for the highlighted item.
 
 This is unidirectional data flow: events mutate state, state drives render, render never mutates state. The pattern prevents bugs where UI and state diverge.
 
@@ -230,7 +230,7 @@ Interview articulation:
 2. "I kept algorithm and UI layers separate so changes stay low-risk."
 3. "I used lazy enrichment to avoid upfront cost on non-active rows."
 
-**Files to trace:** `src/lib/appInit/appInit.ts` (global key handler + host integrity guard), `src/lib/searchCurrentPage/searchCurrentPage.ts` (overlay UI + state), `src/lib/searchCurrentPage/grep.ts` (DOM walking + fuzzy scoring), `src/lib/shared/panelHost.ts` (host lifecycle + dismiss), `src/lib/shared/scroll.ts` (scroll-to-text).
+**Files to trace:** `src/lib/appInit/appInit.ts` (global key handler + host integrity guard), `src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts` (overlay UI + state), `src/lib/ui/panels/searchCurrentPage/grep.ts` (DOM walking + fuzzy scoring), `src/lib/ui/shared/panelHost.ts` (host lifecycle + dismiss), `src/lib/shared/scroll.ts` (scroll-to-text).
 
 Visual map (Flow A):
 
@@ -325,7 +325,7 @@ Interview articulation:
 2. "I used explicit message contracts to separate page and browser responsibilities."
 3. "I guarded state access for MV3 worker restarts."
 
-**Files to trace:** `src/lib/appInit/appInit.ts` (keybind handler), `src/entryPoints/background/background.ts` (router composition), `src/lib/background/commandRouter.ts` (command delivery retries), `src/lib/background/tabManagerDomain.ts` (state + commands), `src/lib/background/tabManagerMessageHandler.ts` (runtime API surface), `src/lib/tabManager/tabManager.ts` (open-list retry), `src/lib/shared/feedback.ts` (toast).
+**Files to trace:** `src/lib/appInit/appInit.ts` (keybind handler), `src/entryPoints/background/background.ts` (router composition), `src/lib/background/commandRouter.ts` (command delivery retries), `src/lib/background/tabManagerDomain.ts` (state + commands), `src/lib/background/tabManagerMessageHandler.ts` (runtime API surface), `src/lib/ui/panels/tabManager/tabManager.ts` (open-list retry), `src/lib/shared/feedback.ts` (toast).
 
 Visual map (Flow B):
 
@@ -376,7 +376,7 @@ Growth checkpoint:
 
 ### Flow C — Session Menu (Load / Save / Confirm)
 
-User presses `Alt+S` to open the load-session view. The content script opens `src/lib/sessionMenu/sessionMenu.ts`, which renders immediately with an empty list shell so the search input is responsive before async session fetch completes. Then it loads sessions from background and re-renders with the selected row + preview.
+User presses `Alt+S` to open the load-session view. The content script opens `src/lib/ui/panels/sessionMenu/sessionMenu.ts`, which renders immediately with an empty list shell so the search input is responsive before async session fetch completes. Then it loads sessions from background and re-renders with the selected row + preview.
 
 The session menu is a small state machine with explicit transient modes:
 
@@ -417,7 +417,7 @@ Interview articulation:
 2. "I separated planning from execution to prevent accidental destructive loads."
 3. "I kept panel-open latency low by rendering a shell before async hydration."
 
-**Files to trace:** `src/lib/sessionMenu/sessionMenu.ts` (panel orchestration), `src/lib/sessionMenu/session.ts` (view renderers + key handlers), `src/lib/background/sessionMessageHandler.ts` and `src/lib/shared/sessions.ts` (plan/load/save/rename/delete domain behavior).
+**Files to trace:** `src/lib/ui/panels/sessionMenu/sessionMenu.ts` (panel orchestration), `src/lib/ui/panels/sessionMenu/session.ts` (view renderers + key handlers), `src/lib/background/sessionMessageHandler.ts` and `src/lib/shared/sessions.ts` (plan/load/save/rename/delete domain behavior).
 
 Visual map (Flow C):
 
@@ -475,7 +475,7 @@ The challenge is timing. Content scripts load asynchronously, and at startup the
 
 The solution uses a retry loop with initial delay. The background waits 1.5 seconds after startup before even trying — this gives the browser time to load at least one tab. Then it attempts to send the message. If it fails (content script not ready), it waits 1 second and retries, up to 5 attempts. In the worst case, the restore prompt appears after ~6.5 seconds, but it reliably appears. If all retries fail, the user can still manually open Tab Manager and load a session — the feature degrades gracefully instead of breaking.
 
-Startup is a state transition at the application level, outside any single overlay. The restore prompt is triggered from `browser.runtime.onStartup`, then sent into an active tab via retries until a content script is ready. When the user picks a session in `src/lib/sessionMenu/session.ts`, the overlay sends `{ type: "SESSION_LOAD", name }`. The background rebuilds `tabManagerList` from the session entries, and the user's pinned tabs are restored.
+Startup is a state transition at the application level, outside any single overlay. The restore prompt is triggered from `browser.runtime.onStartup`, then sent into an active tab via retries until a content script is ready. When the user picks a session in `src/lib/ui/panels/sessionMenu/session.ts`, the overlay sends `{ type: "SESSION_LOAD", name }`. The background rebuilds `tabManagerList` from the session entries, and the user's pinned tabs are restored.
 
 Startup events are scheduled on the event loop like any other. The call to `setTimeout(tryShowRestore, 1500)` schedules a callback to run later, and the event loop executes it when the timer fires, after any pending events. There's nothing special about startup — it's just another event in the queue.
 
@@ -507,7 +507,7 @@ Interview articulation:
 2. "I separated persistent session data from runtime tab identity."
 3. "I designed a graceful fallback instead of hard failure."
 
-**Files to trace:** `src/lib/background/startupRestore.ts` (startup handler), `src/lib/sessionMenu/session.ts` (session restore UI).
+**Files to trace:** `src/lib/background/startupRestore.ts` (startup handler), `src/lib/ui/panels/sessionMenu/session.ts` (session restore UI).
 
 Visual map (Flow D):
 
@@ -585,11 +585,14 @@ harpoon_telescope/
 │   │   ├── core/
 │   │   │   ├── panel/               # shared list-navigation controller
 │   │   │   └── sessionMenu/         # pure session state machine + view selectors
-│   │   ├── help/                    # Help overlay
-│   │   ├── searchCurrentPage/       # Telescope search (current page)
-│   │   ├── searchOpenTabs/          # Frecency open tabs list
-│   │   ├── sessionMenu/             # Session overlays (load/save/restore)
-│   │   ├── tabManager/              # Tab Manager panel (slots/swap/undo/remove)
+│   │   ├── ui/
+│   │   │   ├── panels/
+│   │   │   │   ├── help/            # Help overlay
+│   │   │   │   ├── searchCurrentPage/ # Telescope search (current page)
+│   │   │   │   ├── searchOpenTabs/  # Frecency open tabs list
+│   │   │   │   ├── sessionMenu/     # Session overlays (load/save/restore)
+│   │   │   │   └── tabManager/      # Tab Manager panel (slots/swap/undo/remove)
+│   │   │   └── shared/              # panelHost + shared preview shell styles
 │   │   ├── shared/                  # keybindings, helpers, sessions, scroll, feedback
 │   └── icons/
 │       ├── icon-48.png
@@ -767,7 +770,7 @@ Background entry `src/entryPoints/background/background.ts` orchestrates:
 
 ---
 
-## Search Current Page — src/lib/searchCurrentPage
+## Search Current Page — src/lib/ui/panels/searchCurrentPage
 
 `grep.ts` walks the DOM, builds a cache, and scores results using character-by-character fuzzy scoring.
 
@@ -789,7 +792,7 @@ Background entry `src/entryPoints/background/background.ts` orchestrates:
 
 ---
 
-## Search Open Tabs — src/lib/searchOpenTabs
+## Search Open Tabs — src/lib/ui/panels/searchOpenTabs
 
 Uses frecency scores to rank open tabs. Filtering accepts both substring and fuzzy matches, then ranks by match quality (exact -> starts-with -> substring -> fuzzy), preferring title hits first, then tighter title matches, then URL matches.
 
@@ -799,7 +802,7 @@ A Mozilla-coined term: frequency + recency. Tabs visited often and recently rank
 
 ---
 
-## Tab Manager — src/lib/tabManager
+## Tab Manager — src/lib/ui/panels/tabManager
 
 Manages pinned-tab list UI and slot operations.
 
@@ -813,7 +816,7 @@ Opinionated design. More slots = harder to remember which is which. 4 is enough 
 
 ---
 
-## Session Menu — src/lib/sessionMenu
+## Session Menu — src/lib/ui/panels/sessionMenu
 
 Owns session UI overlays: load list, save panel, replace picker, and startup restore UI.
 
@@ -829,7 +832,7 @@ Owns session UI overlays: load list, save panel, replace picker, and startup res
 
 ---
 
-## Session Restore Overlay — src/lib/sessionMenu
+## Session Restore Overlay — src/lib/ui/panels/sessionMenu
 
 Startup restore prompt reuses session state with a lightweight standalone overlay:
 
@@ -840,7 +843,7 @@ Startup restore prompt reuses session state with a lightweight standalone overla
 
 ---
 
-## Help — src/lib/help
+## Help — src/lib/ui/panels/help
 
 Help overlay builds sections from live keybinding config. It documents the panel controls and filters.
 

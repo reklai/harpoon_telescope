@@ -2,7 +2,7 @@
 // Supports keyboard nav (arrows, vim j/k), number keys 1-4 to jump,
 // "w" key to enter swap mode, and "d" to delete.
 
-import { MAX_TAB_MANAGER_SLOTS, matchesAction, keyToDisplay } from "../shared/keybindings";
+import { MAX_TAB_MANAGER_SLOTS, matchesAction, keyToDisplay } from "../../../shared/keybindings";
 import {
   createPanelHost,
   removePanelHost,
@@ -11,10 +11,10 @@ import {
   footerRowHtml,
   vimBadgeHtml,
   dismissPanel,
-} from "../shared/panelHost";
-import { escapeHtml, extractDomain } from "../shared/helpers";
-import { showFeedback } from "../shared/feedback";
-import { toastMessages } from "../shared/toastMessages";
+} from "../../shared/panelHost";
+import { escapeHtml, extractDomain } from "../../../shared/helpers";
+import { showFeedback } from "../../../shared/feedback";
+import { toastMessages } from "../../../shared/toastMessages";
 import tabManagerStyles from "./tabManager.css";
 import {
   jumpToTabManagerSlot,
@@ -22,13 +22,13 @@ import {
   listTabManagerEntriesWithRetry,
   removeTabManagerEntry,
   reorderTabManagerEntries,
-} from "../adapters/runtime/tabManagerApi";
+} from "../../../adapters/runtime/tabManagerApi";
 import {
   movePanelListIndex,
   movePanelListIndexByDirection,
   movePanelListIndexFromWheel,
   movePanelListIndexHalfPage,
-} from "../core/panel/panelListController";
+} from "../../../core/panel/panelListController";
 
 export async function openTabManager(
   config: KeybindingsConfig,

@@ -4,10 +4,10 @@ import {
   registerPanelCleanup,
   getBaseStyles,
   dismissPanel,
-} from "../shared/panelHost";
-import { showFeedback } from "../shared/feedback";
-import { toastMessages } from "../shared/toastMessages";
-import previewPaneStyles from "../shared/previewPane.css";
+} from "../../shared/panelHost";
+import { showFeedback } from "../../../shared/feedback";
+import { toastMessages } from "../../../shared/toastMessages";
+import previewPaneStyles from "../../shared/previewPane.css";
 import tabManagerStyles from "../tabManager/tabManager.css";
 import sessionStyles from "./session.css";
 import sessionMenuStyles from "./sessionMenu.css";
@@ -23,9 +23,9 @@ import {
   handleReplaceSessionKey,
   resetSessionTransientState,
 } from "./session";
-import { normalizeUrlForMatch } from "../shared/helpers";
-import { listSessionsWithRetry } from "../adapters/runtime/sessionApi";
-import { listTabManagerEntriesWithRetry } from "../adapters/runtime/tabManagerApi";
+import { normalizeUrlForMatch } from "../../../shared/helpers";
+import { listSessionsWithRetry } from "../../../adapters/runtime/sessionApi";
+import { listTabManagerEntriesWithRetry } from "../../../adapters/runtime/tabManagerApi";
 
 type SessionMenuView = SessionPanelMode;
 

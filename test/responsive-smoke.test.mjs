@@ -10,15 +10,15 @@ function readText(pathFromRoot) {
 }
 
 const SPLIT_LAYOUT_FILES = [
-  "src/lib/searchCurrentPage/searchCurrentPage.css",
+  "src/lib/ui/panels/searchCurrentPage/searchCurrentPage.css",
 ];
 
 const SINGLE_PANEL_FILES = [
-  "src/lib/searchOpenTabs/searchOpenTabs.css",
-  "src/lib/sessionMenu/sessionMenu.css",
-  "src/lib/tabManager/tabManager.css",
-  "src/lib/sessionMenu/session.css",
-  "src/lib/help/help.css",
+  "src/lib/ui/panels/searchOpenTabs/searchOpenTabs.css",
+  "src/lib/ui/panels/sessionMenu/sessionMenu.css",
+  "src/lib/ui/panels/tabManager/tabManager.css",
+  "src/lib/ui/panels/sessionMenu/session.css",
+  "src/lib/ui/panels/help/help.css",
 ];
 
 test("split overlays stack into vertical layout on narrow viewports", () => {

@@ -1,9 +1,9 @@
 // Help overlay — read-only scrollable reference for all keybindings and features.
 // Alt+M to open, scroll with wheel / j/k / arrows, Esc to close.
 
-import { keyToDisplay } from "../shared/keybindings";
-import { matchesAction } from "../shared/keybindings";
-import { escapeHtml } from "../shared/helpers";
+import { keyToDisplay } from "../../../shared/keybindings";
+import { matchesAction } from "../../../shared/keybindings";
+import { escapeHtml } from "../../../shared/helpers";
 import {
   createPanelHost,
   removePanelHost,
@@ -12,7 +12,7 @@ import {
   footerRowHtml,
   vimBadgeHtml,
   dismissPanel,
-} from "../shared/panelHost";
+} from "../../shared/panelHost";
 import styles from "./help.css";
 
 /** Section definition for the help content */

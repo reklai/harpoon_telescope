@@ -15,28 +15,28 @@ const BANNED_UI_PACKAGES = [
 ];
 
 const OVERLAY_TS_FILES = [
-  "src/lib/help/help.ts",
-  "src/lib/searchCurrentPage/searchCurrentPage.ts",
-  "src/lib/searchOpenTabs/searchOpenTabs.ts",
-  "src/lib/sessionMenu/sessionMenu.ts",
-  "src/lib/sessionMenu/session.ts",
-  "src/lib/tabManager/tabManager.ts",
+  "src/lib/ui/panels/help/help.ts",
+  "src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts",
+  "src/lib/ui/panels/searchOpenTabs/searchOpenTabs.ts",
+  "src/lib/ui/panels/sessionMenu/sessionMenu.ts",
+  "src/lib/ui/panels/sessionMenu/session.ts",
+  "src/lib/ui/panels/tabManager/tabManager.ts",
 ];
 
 const OVERLAY_CSS_FILES = [
-  "src/lib/help/help.css",
-  "src/lib/searchCurrentPage/searchCurrentPage.css",
-  "src/lib/searchOpenTabs/searchOpenTabs.css",
-  "src/lib/sessionMenu/sessionMenu.css",
-  "src/lib/sessionMenu/session.css",
-  "src/lib/tabManager/tabManager.css",
+  "src/lib/ui/panels/help/help.css",
+  "src/lib/ui/panels/searchCurrentPage/searchCurrentPage.css",
+  "src/lib/ui/panels/searchOpenTabs/searchOpenTabs.css",
+  "src/lib/ui/panels/sessionMenu/sessionMenu.css",
+  "src/lib/ui/panels/sessionMenu/session.css",
+  "src/lib/ui/panels/tabManager/tabManager.css",
 ];
 
 const PERF_INSTRUMENTATION_REQUIREMENTS = {
-  "src/lib/searchOpenTabs/searchOpenTabs.ts": [
+  "src/lib/ui/panels/searchOpenTabs/searchOpenTabs.ts": [
     'withPerfTrace("searchOpenTabs.applyFilter"',
   ],
-  "src/lib/searchCurrentPage/searchCurrentPage.ts": [
+  "src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts": [
     'withPerfTrace("searchCurrentPage.renderResults"',
     'withPerfTrace("searchCurrentPage.renderVisibleItems"',
   ],
@@ -176,18 +176,18 @@ function checkUiGlitchBaseline() {
     }
   }
 
-  const panelHost = readText("src/lib/shared/panelHost.ts");
+  const panelHost = readText("src/lib/ui/shared/panelHost.ts");
   if (!panelHost.includes("requestAnimationFrame")) {
-    errors.push("src/lib/shared/panelHost.ts must reclaim focus through requestAnimationFrame.");
+    errors.push("src/lib/ui/shared/panelHost.ts must reclaim focus through requestAnimationFrame.");
   }
   if (!panelHost.includes("activePanelCleanup")) {
-    errors.push("src/lib/shared/panelHost.ts must keep single-panel cleanup state.");
+    errors.push("src/lib/ui/shared/panelHost.ts must keep single-panel cleanup state.");
   }
   if (!panelHost.includes("100dvh") || !panelHost.includes("100dvw")) {
-    errors.push("src/lib/shared/panelHost.ts must use dynamic viewport units (100dvw/100dvh).");
+    errors.push("src/lib/ui/shared/panelHost.ts must use dynamic viewport units (100dvw/100dvh).");
   }
   if (!panelHost.includes("--ht-color-bg") || !panelHost.includes("--ht-color-accent")) {
-    errors.push("src/lib/shared/panelHost.ts must define shared color tokens.");
+    errors.push("src/lib/ui/shared/panelHost.ts must define shared color tokens.");
   }
 }
 

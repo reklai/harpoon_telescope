@@ -22,8 +22,8 @@ const REQUIRED_BUDGETS = {
 };
 
 const REQUIRED_INSTRUMENTATION = {
-  "src/lib/searchOpenTabs/searchOpenTabs.ts": ['withPerfTrace("searchOpenTabs.applyFilter"'],
-  "src/lib/searchCurrentPage/searchCurrentPage.ts": [
+  "src/lib/ui/panels/searchOpenTabs/searchOpenTabs.ts": ['withPerfTrace("searchOpenTabs.applyFilter"'],
+  "src/lib/ui/panels/searchCurrentPage/searchCurrentPage.ts": [
     'withPerfTrace("searchCurrentPage.renderResults"',
     'withPerfTrace("searchCurrentPage.renderVisibleItems"',
   ],

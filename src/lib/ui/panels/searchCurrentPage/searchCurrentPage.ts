@@ -10,7 +10,7 @@
 //  - Line cache: DOM only walked once, re-filtered from cache on keystrokes
 //  - Direct DOM refs: no querySelector for active item toggling
 
-import { matchesAction, keyToDisplay } from "../shared/keybindings";
+import { matchesAction, keyToDisplay } from "../../../shared/keybindings";
 import {
   createPanelHost,
   removePanelHost,
@@ -19,20 +19,20 @@ import {
   footerRowHtml,
   vimBadgeHtml,
   dismissPanel,
-} from "../shared/panelHost";
-import { escapeHtml, escapeRegex } from "../shared/helpers";
-import { parseSlashFilterQuery } from "../shared/filterInput";
+} from "../../shared/panelHost";
+import { escapeHtml, escapeRegex } from "../../../shared/helpers";
+import { parseSlashFilterQuery } from "../../../shared/filterInput";
 import { grepPage, enrichResult, initLineCache, destroyLineCache } from "./grep";
-import { scrollToText } from "../shared/scroll";
-import { showFeedback } from "../shared/feedback";
-import { toastMessages } from "../shared/toastMessages";
-import { withPerfTrace } from "../shared/perf";
+import { scrollToText } from "../../../shared/scroll";
+import { showFeedback } from "../../../shared/feedback";
+import { toastMessages } from "../../../shared/toastMessages";
+import { withPerfTrace } from "../../../shared/perf";
 import {
   movePanelListIndexByDirection,
   movePanelListIndexFromWheel,
   movePanelListIndexHalfPage,
-} from "../core/panel/panelListController";
-import previewPaneStyles from "../shared/previewPane.css";
+} from "../../../core/panel/panelListController";
+import previewPaneStyles from "../../shared/previewPane.css";
 import searchCurrentPageStyles from "./searchCurrentPage.css";
 
 // Page size limits — only block truly massive pages

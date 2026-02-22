@@ -10,12 +10,12 @@ function readText(relativePath) {
 }
 
 const OVERLAY_CSS_FILES = [
-  "src/lib/help/help.css",
-  "src/lib/searchCurrentPage/searchCurrentPage.css",
-  "src/lib/searchOpenTabs/searchOpenTabs.css",
-  "src/lib/sessionMenu/sessionMenu.css",
-  "src/lib/sessionMenu/session.css",
-  "src/lib/tabManager/tabManager.css",
+  "src/lib/ui/panels/help/help.css",
+  "src/lib/ui/panels/searchCurrentPage/searchCurrentPage.css",
+  "src/lib/ui/panels/searchOpenTabs/searchOpenTabs.css",
+  "src/lib/ui/panels/sessionMenu/sessionMenu.css",
+  "src/lib/ui/panels/sessionMenu/session.css",
+  "src/lib/ui/panels/tabManager/tabManager.css",
 ];
 
 test("README documents engineering promise", () => {

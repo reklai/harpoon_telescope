@@ -5,9 +5,9 @@ ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard-f
 ## What It Does
 
 - Tab Manager (Harpoon): anchor up to 4 tabs and jump instantly with scroll-position memory.
+- Sessions: save/load up to 4 tab-manager session sets.
 - Search Current Page (Telescope): fuzzy in-page search with filters and live preview.
 - Search Open Tabs: fuzzy current open tabs sorted by frequency+recently-opened tab jumping.
-- Sessions: save/load up to 4 tab-manager session sets.
 - Keybinding customization: configurable global and panel bindings.
 
 ## Feature Snapshot

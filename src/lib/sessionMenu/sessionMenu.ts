@@ -1,4 +1,3 @@
-import browser from "webextension-polyfill";
 import {
   createPanelHost,
   removePanelHost,
@@ -25,39 +24,17 @@ import {
   resetSessionTransientState,
 } from "./session";
 import { normalizeUrlForMatch } from "../shared/helpers";
+import { listSessionsWithRetry } from "../adapters/runtime/sessionApi";
+import { listTabManagerEntriesWithRetry } from "../adapters/runtime/tabManagerApi";
 
 type SessionMenuView = SessionPanelMode;
 
 async function fetchSessionsWithRetry(): Promise<TabManagerSession[]> {
-  const retryDelaysMs = [0, 90, 240, 450];
-  let lastError: unknown = null;
-  for (const delay of retryDelaysMs) {
-    if (delay > 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, delay));
-    }
-    try {
-      return (await browser.runtime.sendMessage({ type: "SESSION_LIST" })) as TabManagerSession[];
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError || new Error("Failed to load sessions");
+  return listSessionsWithRetry();
 }
 
 async function fetchTabManagerEntriesWithRetry(): Promise<TabManagerEntry[]> {
-  const retryDelaysMs = [0, 90, 240, 450];
-  let lastError: unknown = null;
-  for (const delay of retryDelaysMs) {
-    if (delay > 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, delay));
-    }
-    try {
-      return (await browser.runtime.sendMessage({ type: "TAB_MANAGER_LIST" })) as TabManagerEntry[];
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError || new Error("Failed to load tab manager list");
+  return listTabManagerEntriesWithRetry();
 }
 
 export async function openSessionMenu(

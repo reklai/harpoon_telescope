@@ -2,7 +2,6 @@
 // Renders the save-session input and session-list views inside the tab manager panel.
 // Also provides standalone session-restore overlay for browser startup.
 
-import browser from "webextension-polyfill";
 import { keyToDisplay, matchesAction, loadKeybindings, MAX_SESSIONS } from "../shared/keybindings";
 import {
   createPanelHost,
@@ -17,29 +16,47 @@ import { escapeHtml, escapeRegex, extractDomain, buildFuzzyPattern } from "../sh
 import { showFeedback } from "../shared/feedback";
 import { toastMessages } from "../shared/toastMessages";
 import restoreStyles from "./session.css";
+import {
+  SessionTransientState,
+  createSessionTransientState,
+  deriveSessionListViewModel,
+  hasActiveSessionConfirmation,
+  resetSessionTransientState as resetSessionTransientStateValue,
+  startSessionDeleteConfirmation,
+  startSessionLoadConfirmation,
+  startSessionOverwriteConfirmation,
+  startSessionRenameMode,
+  stopSessionDeleteConfirmation,
+  stopSessionLoadConfirmation,
+  stopSessionOverwriteConfirmation,
+  stopSessionRenameMode,
+  withSessionListFocusTarget,
+} from "../core/sessionMenu/sessionCore";
+import {
+  deleteSessionByName as deleteSessionByNameRemote,
+  listSessions,
+  loadSessionByName,
+  loadSessionPlanByName,
+  renameSession,
+  replaceSession as replaceSessionByName,
+  saveSessionByName,
+  updateSession,
+} from "../adapters/runtime/sessionApi";
+import { listTabManagerEntries } from "../adapters/runtime/tabManagerApi";
+import {
+  moveVisibleSelectionByDirection,
+  moveVisibleSelectionFromWheel,
+  moveVisibleSelectionHalfPage,
+} from "../core/panel/panelListController";
 
-// Rename mode — when true, the active session item shows an inline input
-let isRenameModeActive = false;
-
-// Overwrite confirmation — when true, titlebar shows y/n prompt
-let isOverwriteConfirmationActive = false;
-let isDeleteConfirmationActive = false;
-
-let isLoadConfirmationActive = false;
-let pendingLoadSummary: SessionLoadSummary | null = null;
-let pendingLoadSessionName = "";
-let pendingDeleteSessionName = "";
-let sessionListFocusTarget: "filter" | "list" = "filter";
+let sessionTransientState = createSessionTransientState();
 
 export function resetSessionTransientState(): void {
-  isRenameModeActive = false;
-  isOverwriteConfirmationActive = false;
-  isDeleteConfirmationActive = false;
-  isLoadConfirmationActive = false;
-  pendingLoadSummary = null;
-  pendingLoadSessionName = "";
-  pendingDeleteSessionName = "";
-  sessionListFocusTarget = "filter";
+  sessionTransientState = resetSessionTransientStateValue();
+}
+
+function setSessionTransientState(nextState: SessionTransientState): void {
+  sessionTransientState = nextState;
 }
 
 function reportSessionError(context: string, feedbackMessage: string, error: unknown): void {
@@ -312,17 +329,14 @@ async function beginLoadConfirmation(ctx: SessionContext, sessionIdx: number): P
   const target = ctx.sessions[sessionIdx];
   if (!target) return;
   try {
-    const result = (await browser.runtime.sendMessage({
-      type: "SESSION_LOAD_PLAN",
-      name: target.name,
-    })) as { ok: boolean; reason?: string; summary?: SessionLoadSummary };
+    const result = await loadSessionPlanByName(target.name);
     if (!result.ok || !result.summary) {
       showFeedback(result.reason || toastMessages.sessionLoadPlanFailed);
       return;
     }
-    isLoadConfirmationActive = true;
-    pendingLoadSessionName = target.name;
-    pendingLoadSummary = result.summary;
+    setSessionTransientState(
+      startSessionLoadConfirmation(sessionTransientState, target.name, result.summary),
+    );
     ctx.setSessionIndex(sessionIdx);
     ctx.render();
   } catch (error) {
@@ -331,11 +345,9 @@ async function beginLoadConfirmation(ctx: SessionContext, sessionIdx: number): P
 }
 
 async function confirmLoadSession(ctx: SessionContext): Promise<void> {
-  if (!pendingLoadSessionName) return;
-  const target = ctx.sessions.find((session) => session.name === pendingLoadSessionName);
-  isLoadConfirmationActive = false;
-  pendingLoadSummary = null;
-  pendingLoadSessionName = "";
+  if (!sessionTransientState.pendingLoadSessionName) return;
+  const target = ctx.sessions.find((session) => session.name === sessionTransientState.pendingLoadSessionName);
+  setSessionTransientState(stopSessionLoadConfirmation(sessionTransientState));
   if (!target) {
     showFeedback(toastMessages.sessionNotFound);
     ctx.render();
@@ -354,15 +366,7 @@ function buildSaveSessionFooterHtml(config: KeybindingsConfig, saveKey: string, 
 }
 
 function buildSessionListFooterHtml(config: KeybindingsConfig): string {
-  if (isLoadConfirmationActive) {
-    return "";
-  }
-
-  if (isOverwriteConfirmationActive) {
-    return "";
-  }
-
-  if (isDeleteConfirmationActive) {
+  if (hasActiveSessionConfirmation(sessionTransientState)) {
     return "";
   }
 
@@ -447,8 +451,8 @@ export async function renderSaveSession(ctx: SessionContext): Promise<void> {
 
   // Fetch current sessions for name collision context + tab-manager list for live save preview.
   const [currentSessions, tabManagerEntries] = await Promise.all([
-    browser.runtime.sendMessage({ type: "SESSION_LIST" }) as Promise<TabManagerSession[]>,
-    browser.runtime.sendMessage({ type: "TAB_MANAGER_LIST" }) as Promise<TabManagerEntry[]>,
+    listSessions(),
+    listTabManagerEntries(),
   ]);
   ctx.setSessions(currentSessions);
   const count = currentSessions.length;
@@ -510,23 +514,20 @@ export function renderSessionList(ctx: SessionContext): void {
   const { shadow, container, config, sessions } = ctx;
   const visibleIndices = getFilteredSessionIndices(sessions, ctx.sessionFilterQuery);
   const highlightRegex = buildSessionNameHighlightRegex(ctx.sessionFilterQuery);
-  let selectedSessionIndex = visibleIndices.includes(ctx.sessionIndex)
-    ? ctx.sessionIndex
-    : (visibleIndices[0] ?? -1);
-  if (selectedSessionIndex !== -1 && selectedSessionIndex !== ctx.sessionIndex) {
+  const listModel = deriveSessionListViewModel(
+    sessions,
+    visibleIndices,
+    ctx.sessionIndex,
+    ctx.sessionFilterQuery,
+    sessionTransientState,
+  );
+  const selectedSessionIndex = listModel.selectedSessionIndex;
+  if (listModel.shouldSyncSessionIndex) {
     ctx.setSessionIndex(selectedSessionIndex);
-  } else if (selectedSessionIndex === -1 && ctx.sessionIndex !== -1) {
-    ctx.setSessionIndex(-1);
   }
-  const selectedSession = selectedSessionIndex === -1 ? undefined : sessions[selectedSessionIndex];
-  const pendingDeleteSession = isDeleteConfirmationActive
-    ? sessions.find((session) => session.name === pendingDeleteSessionName) || selectedSession
-    : undefined;
-  const previewTargetSession = pendingDeleteSession || selectedSession;
-  const baseTitleText = ctx.sessionFilterQuery.trim()
-    ? `Load Sessions (${visibleIndices.length})`
-    : "Load Sessions";
-  const titleText = baseTitleText;
+  const selectedSession = listModel.selectedSession;
+  const previewTargetSession = listModel.previewTargetSession;
+  const titleText = listModel.titleText;
   const closeKey = keyToDisplay(config.bindings.tabManager.close.key);
   const confirmYesKey = keyToDisplay(config.bindings.session.confirmYes.key);
   const confirmNoKey = keyToDisplay(config.bindings.session.confirmNo.key);
@@ -565,7 +566,7 @@ export function renderSessionList(ctx: SessionContext): void {
       const cls = globalIdx === selectedSessionIndex ? "ht-session-item active" : "ht-session-item";
       const itemTabIndex = globalIdx === selectedSessionIndex ? "0" : "-1";
       const date = new Date(s.savedAt).toLocaleDateString();
-      const nameContent = isRenameModeActive && globalIdx === selectedSessionIndex
+      const nameContent = sessionTransientState.isRenameModeActive && globalIdx === selectedSessionIndex
         ? `<input type="text" class="ht-session-rename-input" value="${escapeHtml(s.name)}" maxlength="30" />`
         : `<div class="ht-session-name">${highlightSessionName(s.name, highlightRegex)}</div>`;
       html += `<div class="${cls}" data-index="${globalIdx}" tabindex="${itemTabIndex}" role="button" aria-selected="${globalIdx === selectedSessionIndex ? "true" : "false"}">
@@ -576,11 +577,11 @@ export function renderSessionList(ctx: SessionContext): void {
     }
   }
 
-  const previewContent = isLoadConfirmationActive && pendingLoadSummary
-    ? `${buildLoadSummaryHtml(pendingLoadSummary, confirmYesKey, confirmNoKey)}${buildSessionPreviewHtml(selectedSession)}`
-    : isOverwriteConfirmationActive
+  const previewContent = sessionTransientState.isLoadConfirmationActive && sessionTransientState.pendingLoadSummary
+    ? `${buildLoadSummaryHtml(sessionTransientState.pendingLoadSummary, confirmYesKey, confirmNoKey)}${buildSessionPreviewHtml(selectedSession)}`
+    : sessionTransientState.isOverwriteConfirmationActive
       ? `${buildOverwriteConfirmationHtml(selectedSession, confirmYesKey, confirmNoKey)}${buildSessionPreviewHtml(selectedSession)}`
-      : isDeleteConfirmationActive
+      : sessionTransientState.isDeleteConfirmationActive
         ? `${buildDeleteConfirmationHtml(previewTargetSession, confirmYesKey, confirmNoKey)}${buildSessionPreviewHtml(previewTargetSession)}`
         : buildSessionPreviewHtml(selectedSession);
 
@@ -609,7 +610,7 @@ export function renderSessionList(ctx: SessionContext): void {
   const listPane = shadow.querySelector(".ht-session-list-pane") as HTMLElement | null;
 
   function setSessionListPaneFocus(target: "filter" | "list"): void {
-    sessionListFocusTarget = target;
+    setSessionTransientState(withSessionListFocusTarget(sessionTransientState, target));
     if (listPane) {
       listPane.classList.toggle("focused", target === "list");
     }
@@ -631,10 +632,8 @@ export function renderSessionList(ctx: SessionContext): void {
     const nextQuery = filterInput.value;
     const caretPos = filterInput.selectionStart ?? nextQuery.length;
     const nextVisibleIndices = getFilteredSessionIndices(ctx.sessions, nextQuery);
-    if (isLoadConfirmationActive) {
-      isLoadConfirmationActive = false;
-      pendingLoadSummary = null;
-      pendingLoadSessionName = "";
+    if (sessionTransientState.isLoadConfirmationActive) {
+      setSessionTransientState(stopSessionLoadConfirmation(sessionTransientState));
     }
     setSessionListPaneFocus("filter");
     ctx.setSessionFilterQuery(nextQuery);
@@ -657,10 +656,10 @@ export function renderSessionList(ctx: SessionContext): void {
     el.addEventListener("click", (event) => {
       if ((event.target as HTMLElement).closest(".ht-session-delete")) return;
       if (
-        isRenameModeActive
-        || isLoadConfirmationActive
-        || isOverwriteConfirmationActive
-        || isDeleteConfirmationActive
+        sessionTransientState.isRenameModeActive
+        || sessionTransientState.isLoadConfirmationActive
+        || sessionTransientState.isOverwriteConfirmationActive
+        || sessionTransientState.isDeleteConfirmationActive
       ) return;
       const idx = parseInt((el as HTMLElement).dataset.index!);
       if (Number.isNaN(idx)) return;
@@ -673,15 +672,15 @@ export function renderSessionList(ctx: SessionContext): void {
   shadow.querySelectorAll(".ht-session-delete").forEach((el) => {
     el.addEventListener("click", (event) => {
       event.stopPropagation();
-      if (isRenameModeActive) {
-        isRenameModeActive = false;
+      if (sessionTransientState.isRenameModeActive) {
+        setSessionTransientState(stopSessionRenameMode(sessionTransientState));
         ctx.render();
         return;
       }
       if (
-        isLoadConfirmationActive
-        || isOverwriteConfirmationActive
-        || isDeleteConfirmationActive
+        sessionTransientState.isLoadConfirmationActive
+        || sessionTransientState.isOverwriteConfirmationActive
+        || sessionTransientState.isDeleteConfirmationActive
       ) return;
       const idx = parseInt((el as HTMLElement).dataset.index!);
       if (Number.isNaN(idx)) return;
@@ -708,21 +707,17 @@ export function renderSessionList(ctx: SessionContext): void {
   }
   if (
     listScroll
-    && !isRenameModeActive
-    && !isOverwriteConfirmationActive
-    && !isDeleteConfirmationActive
-    && !isLoadConfirmationActive
+    && !sessionTransientState.isRenameModeActive
+    && !sessionTransientState.isOverwriteConfirmationActive
+    && !sessionTransientState.isDeleteConfirmationActive
+    && !sessionTransientState.isLoadConfirmationActive
   ) {
     listScroll.addEventListener("wheel", (event) => {
       event.preventDefault();
       event.stopPropagation();
       const indices = getFilteredSessionIndices(ctx.sessions, ctx.sessionFilterQuery);
       if (indices.length === 0) return;
-      const currentPos = Math.max(0, indices.indexOf(ctx.sessionIndex));
-      const nextPos = event.deltaY > 0
-        ? Math.min(currentPos + 1, indices.length - 1)
-        : Math.max(currentPos - 1, 0);
-      const nextIndex = indices[nextPos];
+      const nextIndex = moveVisibleSelectionFromWheel(indices, ctx.sessionIndex, event.deltaY);
       if (nextIndex === ctx.sessionIndex) return;
       setSessionListPaneFocus("list");
       ctx.setSessionIndex(nextIndex);
@@ -732,12 +727,12 @@ export function renderSessionList(ctx: SessionContext): void {
 
   if (
     filterInput
-    && !isRenameModeActive
-    && !isOverwriteConfirmationActive
-    && !isDeleteConfirmationActive
-    && !isLoadConfirmationActive
+    && !sessionTransientState.isRenameModeActive
+    && !sessionTransientState.isOverwriteConfirmationActive
+    && !sessionTransientState.isDeleteConfirmationActive
+    && !sessionTransientState.isLoadConfirmationActive
   ) {
-    if (sessionListFocusTarget === "filter") {
+    if (sessionTransientState.sessionListFocusTarget === "filter") {
       setSessionListPaneFocus("filter");
       const end = filterInput.value.length;
       filterInput.focus();
@@ -814,8 +809,11 @@ export function renderReplaceSession(ctx: SessionContext): void {
       event.preventDefault();
       event.stopPropagation();
       if (sessions.length === 0) return;
-      const delta = event.deltaY > 0 ? 1 : -1;
-      const next = Math.max(0, Math.min(sessions.length - 1, ctx.sessionIndex + delta));
+      const next = moveVisibleSelectionFromWheel(
+        sessions.map((_, index) => index),
+        ctx.sessionIndex,
+        event.deltaY,
+      );
       if (next === ctx.sessionIndex) return;
       ctx.setSessionIndex(next);
       ctx.render();
@@ -829,11 +827,7 @@ export function renderReplaceSession(ctx: SessionContext): void {
 async function replaceSession(ctx: SessionContext, idx: number): Promise<void> {
   try {
     const oldName = ctx.sessions[idx].name;
-    const result = (await browser.runtime.sendMessage({
-      type: "SESSION_REPLACE",
-      oldName,
-      newName: ctx.pendingSaveName,
-    })) as { ok: boolean; reason?: string };
+    const result = await replaceSessionByName(oldName, ctx.pendingSaveName);
     if (result.ok) {
       showFeedback(toastMessages.sessionSaveReplacing(ctx.pendingSaveName, oldName));
     } else {
@@ -865,7 +859,12 @@ export function handleReplaceSessionKey(ctx: SessionContext, event: KeyboardEven
     event.preventDefault();
     event.stopPropagation();
     if (ctx.sessions.length > 0) {
-      ctx.setSessionIndex(Math.min(ctx.sessionIndex + 1, ctx.sessions.length - 1));
+      const nextIndex = moveVisibleSelectionByDirection(
+        ctx.sessions.map((_, index) => index),
+        ctx.sessionIndex,
+        "down",
+      );
+      ctx.setSessionIndex(nextIndex);
       ctx.render();
     }
     return true;
@@ -874,7 +873,12 @@ export function handleReplaceSessionKey(ctx: SessionContext, event: KeyboardEven
     event.preventDefault();
     event.stopPropagation();
     if (ctx.sessions.length > 0) {
-      ctx.setSessionIndex(Math.max(ctx.sessionIndex - 1, 0));
+      const nextIndex = moveVisibleSelectionByDirection(
+        ctx.sessions.map((_, index) => index),
+        ctx.sessionIndex,
+        "up",
+      );
+      ctx.setSessionIndex(nextIndex);
       ctx.render();
     }
     return true;
@@ -886,10 +890,7 @@ export function handleReplaceSessionKey(ctx: SessionContext, event: KeyboardEven
 export async function saveSession(ctx: SessionContext, name: string): Promise<void> {
   if (!name.trim()) return;
   try {
-    const result = (await browser.runtime.sendMessage({
-      type: "SESSION_SAVE",
-      name: name.trim(),
-    })) as { ok: boolean; reason?: string };
+    const result = await saveSessionByName(name.trim());
     if (result.ok) {
       ctx.setPendingSaveName("");
       showFeedback(toastMessages.sessionSave(name.trim()));
@@ -898,9 +899,7 @@ export async function saveSession(ctx: SessionContext, name: string): Promise<vo
     } else if (result.reason && result.reason.includes(`Max ${MAX_SESSIONS}`)) {
       // At capacity — prompt user to pick a session to replace
       ctx.setPendingSaveName(name.trim());
-      const sessions = (await browser.runtime.sendMessage({
-        type: "SESSION_LIST",
-      })) as TabManagerSession[];
+      const sessions = await listSessions();
       ctx.setSessions(sessions);
       ctx.setSessionIndex(0);
       ctx.setViewMode("replaceSession");
@@ -927,16 +926,7 @@ export async function saveSession(ctx: SessionContext, name: string): Promise<vo
 export async function loadSession(ctx: SessionContext, session: TabManagerSession): Promise<void> {
   try {
     ctx.close();
-    const result = (await browser.runtime.sendMessage({
-      type: "SESSION_LOAD",
-      name: session.name,
-    })) as {
-      ok: boolean;
-      count?: number;
-      openCount?: number;
-      reuseCount?: number;
-      replaceCount?: number;
-    };
+    const result = await loadSessionByName(session.name);
     if (result.ok) {
       const count = result.count ?? 0;
       showFeedback(toastMessages.sessionLoad(session.name, count));
@@ -954,21 +944,14 @@ export async function deleteSession(ctx: SessionContext, idx: number): Promise<v
 
 async function deleteSessionByName(ctx: SessionContext, name: string): Promise<void> {
   try {
-    await browser.runtime.sendMessage({
-      type: "SESSION_DELETE",
-      name,
-    });
-    const sessions = (await browser.runtime.sendMessage({
-      type: "SESSION_LIST",
-    })) as TabManagerSession[];
-    isDeleteConfirmationActive = false;
-    pendingDeleteSessionName = "";
+    await deleteSessionByNameRemote(name);
+    const sessions = await listSessions();
+    setSessionTransientState(stopSessionDeleteConfirmation(sessionTransientState));
     ctx.setSessions(sessions);
     ctx.setSessionIndex(Math.min(ctx.sessionIndex, Math.max(sessions.length - 1, 0)));
     ctx.render();
   } catch (error) {
-    isDeleteConfirmationActive = false;
-    pendingDeleteSessionName = "";
+    setSessionTransientState(stopSessionDeleteConfirmation(sessionTransientState));
     reportSessionError("Delete session failed", "Failed to delete session", error);
     ctx.render();
   }
@@ -977,19 +960,14 @@ async function deleteSessionByName(ctx: SessionContext, name: string): Promise<v
 function beginDeleteConfirmation(ctx: SessionContext, sessionIdx: number): void {
   const target = ctx.sessions[sessionIdx];
   if (!target) return;
-  isLoadConfirmationActive = false;
-  pendingLoadSummary = null;
-  pendingLoadSessionName = "";
-  isOverwriteConfirmationActive = false;
-  isDeleteConfirmationActive = true;
-  pendingDeleteSessionName = target.name;
+  setSessionTransientState(startSessionDeleteConfirmation(sessionTransientState, target.name));
   ctx.setSessionIndex(sessionIdx);
   ctx.render();
 }
 
 async function confirmDeleteSession(ctx: SessionContext): Promise<void> {
-  if (!pendingDeleteSessionName) return;
-  const targetName = pendingDeleteSessionName;
+  if (!sessionTransientState.pendingDeleteSessionName) return;
+  const targetName = sessionTransientState.pendingDeleteSessionName;
   await deleteSessionByName(ctx, targetName);
 }
 
@@ -1052,11 +1030,11 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
   };
 
   // During rename mode, only handle jump/close — let all other keys through to the input
-  if (isRenameModeActive) {
+  if (sessionTransientState.isRenameModeActive) {
     if (matchesAction(event, ctx.config, "tabManager", "close")) {
       event.preventDefault();
       event.stopPropagation();
-      isRenameModeActive = false;
+      setSessionTransientState(stopSessionRenameMode(sessionTransientState));
       ctx.render();
       return true;
     }
@@ -1067,7 +1045,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
       if (input && input.value.trim()) {
         const target = ctx.sessions[ctx.sessionIndex];
         if (!target) {
-          isRenameModeActive = false;
+          setSessionTransientState(stopSessionRenameMode(sessionTransientState));
           ctx.render();
           return true;
         }
@@ -1075,23 +1053,17 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
         const newName = input.value.trim();
         (async () => {
           try {
-            const result = (await browser.runtime.sendMessage({
-              type: "SESSION_RENAME",
-              oldName,
-              newName,
-            })) as { ok: boolean; reason?: string };
-            isRenameModeActive = false;
+            const result = await renameSession(oldName, newName);
+            setSessionTransientState(stopSessionRenameMode(sessionTransientState));
             if (result.ok) {
               showFeedback(toastMessages.sessionRename(newName));
-              const sessions = (await browser.runtime.sendMessage({
-                type: "SESSION_LIST",
-              })) as TabManagerSession[];
+              const sessions = await listSessions();
               ctx.setSessions(sessions);
             } else {
               showFeedback(result.reason || toastMessages.sessionRenameFailed);
             }
           } catch (error) {
-            isRenameModeActive = false;
+            setSessionTransientState(stopSessionRenameMode(sessionTransientState));
             reportSessionError("Rename session failed", "Rename failed", error);
           }
           ctx.render();
@@ -1105,23 +1077,18 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
   }
 
   // During overwrite confirmation, only accept configured confirm/cancel keys.
-  if (isOverwriteConfirmationActive) {
+  if (sessionTransientState.isOverwriteConfirmationActive) {
     event.preventDefault();
     event.stopPropagation();
     if (isSessionConfirmYes) {
       const session = ctx.sessions[ctx.sessionIndex];
-      isOverwriteConfirmationActive = false;
+      setSessionTransientState(stopSessionOverwriteConfirmation(sessionTransientState));
       (async () => {
         try {
-          const result = (await browser.runtime.sendMessage({
-            type: "SESSION_UPDATE",
-            name: session.name,
-          })) as { ok: boolean; reason?: string };
+          const result = await updateSession(session.name);
           if (result.ok) {
             showFeedback(toastMessages.sessionOverwrite(session.name));
-            const sessions = (await browser.runtime.sendMessage({
-              type: "SESSION_LIST",
-            })) as TabManagerSession[];
+            const sessions = await listSessions();
             ctx.setSessions(sessions);
           } else {
             showFeedback(result.reason || toastMessages.sessionOverwriteFailed);
@@ -1132,36 +1099,33 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
         ctx.render();
       })();
     } else if (isSessionConfirmNo) {
-      isOverwriteConfirmationActive = false;
+      setSessionTransientState(stopSessionOverwriteConfirmation(sessionTransientState));
       ctx.render();
     }
     return true;
   }
 
   // During delete confirmation, only accept configured confirm/cancel keys.
-  if (isDeleteConfirmationActive) {
+  if (sessionTransientState.isDeleteConfirmationActive) {
     event.preventDefault();
     event.stopPropagation();
     if (isSessionConfirmYes) {
       void confirmDeleteSession(ctx);
     } else if (isSessionConfirmNo) {
-      isDeleteConfirmationActive = false;
-      pendingDeleteSessionName = "";
+      setSessionTransientState(stopSessionDeleteConfirmation(sessionTransientState));
       ctx.render();
     }
     return true;
   }
 
   // Pre-load confirmation: confirm/cancel only
-  if (isLoadConfirmationActive) {
+  if (sessionTransientState.isLoadConfirmationActive) {
     event.preventDefault();
     event.stopPropagation();
     if (isSessionConfirmYes) {
       void confirmLoadSession(ctx);
     } else if (isSessionConfirmNo) {
-      isLoadConfirmationActive = false;
-      pendingLoadSummary = null;
-      pendingLoadSessionName = "";
+      setSessionTransientState(stopSessionLoadConfirmation(sessionTransientState));
       ctx.render();
     }
     return true;
@@ -1170,7 +1134,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
   if (matchesAction(event, ctx.config, "session", "clearSearch")) {
     event.preventDefault();
     event.stopPropagation();
-    sessionListFocusTarget = "filter";
+    setSessionTransientState(withSessionListFocusTarget(sessionTransientState, "filter"));
     ctx.setSessionFilterQuery("");
     const visibleIndices = getFilteredSessionIndices(ctx.sessions, "");
     if (visibleIndices.length > 0) {
@@ -1190,7 +1154,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     event.stopPropagation();
     const visibleIndices = getFilteredSessionIndices(ctx.sessions, ctx.sessionFilterQuery);
     if (filterInputFocused) {
-      sessionListFocusTarget = "list";
+      setSessionTransientState(withSessionListFocusTarget(sessionTransientState, "list"));
       const topMatch = visibleIndices[0];
       if (typeof topMatch === "number" && ctx.sessionIndex !== topMatch) {
         ctx.setSessionIndex(topMatch);
@@ -1225,7 +1189,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
       event.preventDefault();
       event.stopPropagation();
       if (getVisibleSelectedSession()) {
-        sessionListFocusTarget = "list";
+        setSessionTransientState(withSessionListFocusTarget(sessionTransientState, "list"));
         void beginLoadConfirmation(ctx, ctx.sessionIndex);
       }
       return true;
@@ -1250,13 +1214,15 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
       event.stopPropagation();
       const visibleIndices = getFilteredSessionIndices(ctx.sessions, ctx.sessionFilterQuery);
       if (visibleIndices.length > 0) {
-        const currentPos = Math.max(0, visibleIndices.indexOf(ctx.sessionIndex));
         const jump = getSessionListHalfPageStep(ctx.shadow);
-        const nextPos = lowerKey === "d"
-          ? Math.min(currentPos + jump, visibleIndices.length - 1)
-          : Math.max(currentPos - jump, 0);
-        sessionListFocusTarget = "list";
-        ctx.setSessionIndex(visibleIndices[nextPos]);
+        const nextIndex = moveVisibleSelectionHalfPage(
+          visibleIndices,
+          ctx.sessionIndex,
+          jump,
+          lowerKey === "d" ? "down" : "up",
+        );
+        setSessionTransientState(withSessionListFocusTarget(sessionTransientState, "list"));
+        ctx.setSessionIndex(nextIndex);
         ctx.render();
       }
       return true;
@@ -1266,7 +1232,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
   if (filterInput && matchesAction(event, ctx.config, "session", "focusSearch")) {
     event.preventDefault();
     event.stopPropagation();
-    sessionListFocusTarget = "filter";
+    setSessionTransientState(withSessionListFocusTarget(sessionTransientState, "filter"));
     filterInput.focus();
     filterInput.setSelectionRange(filterInput.value.length, filterInput.value.length);
     return true;
@@ -1283,10 +1249,9 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     event.stopPropagation();
     const visibleIndices = getFilteredSessionIndices(ctx.sessions, ctx.sessionFilterQuery);
     if (visibleIndices.length > 0) {
-      const currentPos = Math.max(0, visibleIndices.indexOf(ctx.sessionIndex));
-      const nextPos = Math.min(currentPos + 1, visibleIndices.length - 1);
-      ctx.setSessionIndex(visibleIndices[nextPos]);
-      sessionListFocusTarget = "list";
+      const nextIndex = moveVisibleSelectionByDirection(visibleIndices, ctx.sessionIndex, "down");
+      ctx.setSessionIndex(nextIndex);
+      setSessionTransientState(withSessionListFocusTarget(sessionTransientState, "list"));
       ctx.render();
     }
     return true;
@@ -1296,10 +1261,9 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     event.stopPropagation();
     const visibleIndices = getFilteredSessionIndices(ctx.sessions, ctx.sessionFilterQuery);
     if (visibleIndices.length > 0) {
-      const currentPos = Math.max(0, visibleIndices.indexOf(ctx.sessionIndex));
-      const nextPos = Math.max(currentPos - 1, 0);
-      ctx.setSessionIndex(visibleIndices[nextPos]);
-      sessionListFocusTarget = "list";
+      const nextIndex = moveVisibleSelectionByDirection(visibleIndices, ctx.sessionIndex, "up");
+      ctx.setSessionIndex(nextIndex);
+      setSessionTransientState(withSessionListFocusTarget(sessionTransientState, "list"));
       ctx.render();
     }
     return true;
@@ -1308,7 +1272,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     event.preventDefault();
     event.stopPropagation();
     if (getVisibleSelectedSession()) {
-      sessionListFocusTarget = "list";
+      setSessionTransientState(withSessionListFocusTarget(sessionTransientState, "list"));
       void beginLoadConfirmation(ctx, ctx.sessionIndex);
     }
     return true;
@@ -1325,7 +1289,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     event.preventDefault();
     event.stopPropagation();
     if (!getVisibleSelectedSession()) return true;
-    isRenameModeActive = true;
+    setSessionTransientState(startSessionRenameMode(sessionTransientState));
     // Re-render to show inline input, then focus it
     ctx.render();
     const input = ctx.shadow.querySelector(".ht-session-rename-input") as HTMLInputElement;
@@ -1342,7 +1306,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
     event.preventDefault();
     event.stopPropagation();
     if (!getVisibleSelectedSession()) return true;
-    isOverwriteConfirmationActive = true;
+    setSessionTransientState(startSessionOverwriteConfirmation(sessionTransientState));
     ctx.render();
     return true;
   }
@@ -1355,9 +1319,7 @@ export function handleSessionListKey(ctx: SessionContext, event: KeyboardEvent):
 
 export async function openSessionRestoreOverlay(): Promise<void> {
   try {
-    const sessions = (await browser.runtime.sendMessage({
-      type: "SESSION_LIST",
-    })) as TabManagerSession[];
+    const sessions = await listSessions();
     if (sessions.length === 0) return;
 
     const config = await loadKeybindings();
@@ -1453,8 +1415,11 @@ export async function openSessionRestoreOverlay(): Promise<void> {
           event.preventDefault();
           event.stopPropagation();
           if (sessions.length === 0) return;
-          const delta = event.deltaY > 0 ? 1 : -1;
-          const next = Math.max(0, Math.min(sessions.length - 1, activeIndex + delta));
+          const next = moveVisibleSelectionFromWheel(
+            sessions.map((_, index) => index),
+            activeIndex,
+            event.deltaY,
+          );
           if (next === activeIndex) return;
           activeIndex = next;
           render();
@@ -1468,10 +1433,7 @@ export async function openSessionRestoreOverlay(): Promise<void> {
     async function restoreSession(session: TabManagerSession): Promise<void> {
       try {
         close();
-        const result = (await browser.runtime.sendMessage({
-          type: "SESSION_LOAD",
-          name: session.name,
-        })) as { ok: boolean; count?: number };
+        const result = await loadSessionByName(session.name);
         if (result.ok) {
           showFeedback(toastMessages.sessionRestore(session.name, result.count ?? 0));
         }
@@ -1501,14 +1463,22 @@ export async function openSessionRestoreOverlay(): Promise<void> {
       if (matchesAction(event, config, "tabManager", "moveDown")) {
         event.preventDefault();
         event.stopPropagation();
-        activeIndex = Math.min(activeIndex + 1, sessions.length - 1);
+        activeIndex = moveVisibleSelectionByDirection(
+          sessions.map((_, index) => index),
+          activeIndex,
+          "down",
+        );
         render();
         return;
       }
       if (matchesAction(event, config, "tabManager", "moveUp")) {
         event.preventDefault();
         event.stopPropagation();
-        activeIndex = Math.max(activeIndex - 1, 0);
+        activeIndex = moveVisibleSelectionByDirection(
+          sessions.map((_, index) => index),
+          activeIndex,
+          "up",
+        );
         render();
         return;
       }

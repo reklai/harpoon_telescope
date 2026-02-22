@@ -1,74 +1,51 @@
 # Harpoon Telescope — Browser Extension
 
-A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fast keyboard-first tab navigation. Works on **Firefox**, **Chrome**, and **Zen** (Firefox fork).
+A ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard-first tab navigation on Firefox, Chrome, and Zen.
 
-## Current Product Priority (Release Gate)
+## What It Does
 
-- Primary goal: Tab Manager + Session Manager must be fast, stable, and predictable under real rapid usage.
-- Must pass rapid-switch stress (`Alt+1..4`, `Alt+-`, `Alt+=`) with no UI lockups, missed jumps, or panel freeze.
-- Must restore saved scroll location reliably on jump, reopen, and session load (including reused tabs).
-- Store publishing happens only after this reliability gate is signed off on both Firefox and Chrome builds.
+- Tab Manager (Harpoon): anchor up to 4 tabs and jump instantly with scroll-position memory.
+- Search Current Page (Telescope): fuzzy in-page search with filters and live preview.
+- Search Open Tabs: frecency-ranked tab switching.
+- Sessions: save/load up to 4 tab-manager session sets.
+- Keybinding customization: configurable global and panel bindings.
 
-## Features
+## Feature Snapshot
 
-### Telescope Search
-- **Search in Page** (`Alt+F`) — full-text fuzzy search across the active page
-- **Live preview pane** — shows matched line with surrounding context
-- **Combinable structural filters** — `/code`, `/headings`, `/img`, `/links` narrow results by element type
-  - Filters combine as union: `/code /links api` searches code blocks AND links for "api"
-  - Backspace on empty input removes the last active filter pill
-- **Element type badges** — each result shows its source tag (e.g. `[PRE]`, `[H2]`, `[A]`) with color coding
-- **Match count** in title bar
-- **Code block line splitting** — `<pre>` blocks are split into individual searchable lines
-- **Page size safety guard** — pages with >200k DOM elements or >10MB text show a toast and bail
-- **Shift+Space clear-search** — clears the query from any pane
+### Search Current Page
+
+- Open with `Alt+F`.
+- Fuzzy search across page text with filters: `/code`, `/headings`, `/img`, `/links`.
+- Live preview pane with context and highlighted matches.
+- `Shift+Space` clears search input.
 
 ### Tab Manager (Harpoon)
-- **Anchor up to 4 tabs** to your harpoon list
-- **Remembers scroll position (X, Y)** — restores exactly where you left off
-- **Swap mode** (`W` default) — stays active after a swap; press another slot to keep swapping, `W` or close key to exit
-- **Undo last remove** (`U` default) — restores the most recently removed slot when space is available
-- **Cycle through slots** with `Alt+-` (prev) and `Alt+=` (next)
-- **Closed tabs persist** — entries dim when a tab is closed, re-open on jump with scroll restore
-  - Tab Manager footer action hints: `U undo` · `W swap` · `D del` · `Enter jump` · `Esc close`
 
-### Session Menu
-- **`Alt+S`** opens the dedicated session menu
-- **Main view is load sessions** — searchable list with preview
-- **`Alt+Shift+S`** opens save-session flow directly
-- **`Enter`** loads the selected session (confirmation shown first)
-  - Session list includes a preview pane showing tabs in the selected profile
-  - `D` (or `×`) prompts delete confirmation in preview (`Y` delete / `N` cancel)
-  - `O` prompts overwrite confirmation in preview (`Y` overwrite / `N` cancel)
-  - `R` renames the selected session inline
-  - Session search uses `Search Sessions . . .` with `Shift+Space clear-search`
-  - Save-session view shows a name input and the current Tab Manager tab preview
-  - Duplicate-name validation is inline in the save panel
-  - Identical-content save attempts are pre-guarded before open with toast: `No changes to save, already saved as "<name>"`
-  - Session load confirmation shows a minimal slot plan legend: `NEW (+)`, `DELETED (-)`, `REPLACED (~)`, `UNCHANGED (=)`
-  - Duplicate session names rejected (case-insensitive)
-  - Identical session content rejected (compares URL arrays)
-  - Cannot save an empty harpoon list
+- Anchor up to 4 tabs to numbered slots.
+- Jump/cycle with scroll restoration on reopen.
+- Swap mode (`W`), delete (`D`), undo remove (`U`).
 
-### Frecency Tab List
-- **`Alt+Shift+F`** opens a frecency-scored list of all open tabs
-- **Type to search** — fuzzy matching against title and URL
-- **Tab key** cycles between search input and results list
-- **Shift+Space clear-search** clears the query
-- **Max 50 entries** — lowest-scored entry evicted when full
+### Sessions
 
-### Help Menu
-- **`Alt+M`** opens a quick reference overlay showing all keybindings and features
-- Sections include panel-specific actions and filter cheatsheets
-- Reflects current (possibly customized) keybindings live
-- Scroll to browse, Esc to close
+- `Alt+S` opens load view.
+- `Alt+Shift+S` opens save view directly.
+- Save/load up to 4 named sessions.
+- Includes overwrite/delete/load confirmations and session preview.
 
-### Navigation Mode
-- Standard navigation is always enabled
-- `j/k` up/down aliases are always on (additive with configured arrow bindings)
-- List-focused overlays support fixed `Ctrl+D/U` half-page jumps
+### Search Open Tabs (Frecency)
 
-### Keyboard Shortcuts
+- Open with `Alt+Shift+F`.
+- Fuzzy search over open tab title + URL.
+- Ranked by recency/frequency score.
+
+### Help + Navigation
+
+- `Alt+M` opens the help overlay.
+- Standard navigation mode always on (`j/k` aliases + arrow keys).
+- Half-page jumps in list views: `Ctrl+D` / `Ctrl+U`.
+
+## Keyboard Shortcuts
+
 | Shortcut | Action |
 |----------|--------|
 | `Alt+T` | Open Tab Manager (Harpoon) |
@@ -81,214 +58,90 @@ A **ThePrimeagen Harpoon + Telescope** inspired browser extension for blazing-fa
 | `Alt+S` | Open session menu |
 | `Alt+Shift+S` | Open save session |
 | `Alt+M` | Open help menu |
-Global/panel keybindings are configurable in the extension options page with per-scope collision detection.
 
-### Keybinding Scope Coverage
-- Configurable (single source of truth in `src/lib/common/contracts/keybindings.ts`): global open commands, tab manager panel actions, search panel actions, and session panel actions.
-- Not currently configurable (fixed behavior): `j/k` standard aliases, `Ctrl+D/U` half-page jumps, mouse click/wheel interactions, text-edit keys (Backspace/Delete/etc inside inputs).
+Global and panel keybindings are configurable in the extension options page with per-scope collision detection.
 
-## Engineering Promise
-
-- Ghostty-inspired UX with fast keyboard-first workflows.
-- Native browser primitives first: Shadow DOM, DOM APIs, and WebExtension APIs over UI frameworks.
-- Cross-platform parity between Firefox/Zen and Chrome targets.
-- Minimal UI glitching through guarded panel lifecycle, responsive layout, and perf instrumentation.
-
-## Build
-
-TypeScript source in `src/` is compiled to `dist/` via esbuild. The `--target` flag controls which manifest is used:
-
-| Command | Target | Manifest |
-|---------|--------|----------|
-| `npm run build` | Firefox (default) | `manifest_v2.json` (MV2) |
-| `npm run build:firefox` | Firefox / Zen | `manifest_v2.json` (MV2) |
-| `npm run build:chrome` | Chrome | `manifest_v3.json` (MV3) |
-
-Watch mode rebuilds on file changes:
-
-```sh
-npm run watch            # firefox (default)
-npm run watch:chrome     # chrome
-```
-
-Other scripts:
-
-```sh
-npm run lint             # lightweight repository lint checks
-npm run test             # node:test suite (manifest/docs guardrails)
-npm run typecheck        # tsc --noEmit
-npm run verify:compat    # manifest + permission sanity checks
-npm run verify:upgrade   # fixture-based storage migration compatibility checks
-npm run verify:store     # manifest/store/privacy policy consistency checks
-npm run ci               # lint + test + typecheck + compat + upgrade + store + both builds
-npm run clean            # rm -rf dist
-```
-
-The JS bundles are identical across targets — `webextension-polyfill` handles API differences at runtime. Only the manifest differs (MV2 vs MV3).
-
-## Testing
-
-The current structure is intentionally split for testability (contracts, utilities, runtime handlers/domains, and panel submodules). This enables focused regression checks that were harder before the refactor.
-
-- `npm run test` covers runtime wiring, session-core state transitions, compatibility checks, migration expectations, docs consistency, and store-policy guardrails.
-- Focused checks are available via Node test files when debugging specific layers:
-  - `node --test test/runtime-wiring.test.mjs`
-  - `node --test test/session-core.test.mjs`
-  - `node --test test/upgrade-path.test.mjs`
-  - `node --test test/performance-guardrails.test.mjs`
-
-Always run `npm run ci` before release/tag to validate structure, behavior, compatibility, upgrade safety, and store-policy consistency across both browser builds.
-
-### Command Registration Strategy
-
-Chrome MV3 only supports up to 4 suggested command shortcuts. The manifest keeps only core shortcuts (`open`, `add`, `search`), and the content script handles slot jumps, cycling, standard aliases, and panel-local actions so behavior stays consistent across Firefox, Chrome, and Zen.
-
-### Release Flow
-
-1. Pass the Tab Manager/Session Manager reliability gate first: rapid-switch stability, consistent panel open behavior, and correct scroll restore on jump/reopen/session load.
-2. If permissions, storage limits, or privacy claims changed, update `manifest_v2.json`, `manifest_v3.json`, `STORE.md`, and `PRIVACY.md` together in the same PR.
-3. Run `npm run ci` before tagging a release. This includes `npm run verify:upgrade` and `npm run verify:store`, which block releases on migration regressions or manifest/docs/privacy-policy drift.
-4. Build the target package (`npm run build:firefox` and/or `npm run build:chrome`) and use `STORE.md` + `PRIVACY.md` as the source of truth for store submission text.
-
-### Store Submission (Tonight)
-
-Follow the full checklist in `STORE.md` (top section: `Tonight Submission Roadmap`), then package both targets:
-
-```sh
-VERSION=$(node -p "require('./package.json').version")
-mkdir -p release
-
-npm run ci
-
-npm run build:firefox
-(cd dist && zip -qr "../release/harpoon-telescope-firefox-v${VERSION}.xpi" .)
-
-npm run build:chrome
-(cd dist && zip -qr "../release/harpoon-telescope-chrome-v${VERSION}.zip" .)
-
-# AMO source submission archive
-git archive --format=zip -o "release/harpoon-telescope-source-v${VERSION}.zip" HEAD
-```
-
-The `release/` folder artifacts are ready to upload directly to AMO/CWS.
-
-## Installation (Development)
+## Quick Start (Development)
 
 ### Firefox / Zen
-1. Run `npm run build:firefox`
+
+1. `npm run build:firefox`
 2. Open `about:debugging` → **This Firefox** → **Load Temporary Add-on**
 3. Select `dist/manifest.json`
 
 ### Chrome
-1. Run `npm run build:chrome`
-2. Open `chrome://extensions` → enable **Developer mode**
-3. Click **Load unpacked** → select the `dist/` folder
+
+1. `npm run build:chrome`
+2. Open `chrome://extensions` and enable **Developer mode**
+3. Click **Load unpacked** and select `dist/`
+
+## Build And Test
+
+Build targets:
+
+| Command | Target | Manifest |
+|---------|--------|----------|
+| `npm run build` | Firefox (default) | `manifest_v2.json` |
+| `npm run build:firefox` | Firefox / Zen | `manifest_v2.json` |
+| `npm run build:chrome` | Chrome | `manifest_v3.json` |
+
+Core verification commands:
+
+```sh
+npm run lint
+npm run test
+npm run typecheck
+npm run verify:compat
+npm run verify:upgrade
+npm run verify:store
+npm run ci
+```
+
+## Engineering Promise
+
+- Keyboard-first workflows stay predictable across all panels.
+- Native browser primitives first (Shadow DOM + WebExtension APIs).
+- Firefox/Chrome parity is maintained through shared contracts and adapters.
+- Reliability guardrails (tests + compat/store checks) are part of release quality.
+
+## Source Submission Build Repro (AMO)
+
+Use `RELEASE.md` for full reproducible build instructions (environment requirements, exact build steps, and source archive packaging).
+
+Quick path:
+
+```sh
+npm ci
+npm run clean
+npm run build:firefox
+VERSION=$(node -p "require('./package.json').version")
+mkdir -p release
+(cd dist && zip -qr "../release/harpoon-telescope-firefox-v${VERSION}.xpi" .)
+```
+
+## Docs Map
+
+- Build/release runbook and reproducible packaging: `RELEASE.md`
+- Store metadata/policy reference: `STORE.md`
+- Privacy policy: `PRIVACY.md`
 
 ## Project Structure
 
-```
+```text
 harpoon_telescope/
 ├── src/
-│   ├── entryPoints/                        # Browser-executed entry bundles
-│   │   ├── backgroundRuntime/background.ts # Background bootstrap + router composition
-│   │   ├── contentScript/contentScript.ts
-│   │   ├── optionsPage/
-│   │   │   ├── optionsPage.ts
-│   │   │   ├── optionsPage.html
-│   │   │   └── optionsPage.css
-│   │   └── toolbarPopup/
-│   │       ├── toolbarPopup.ts
-│   │       ├── toolbarPopup.html
-│   │       └── toolbarPopup.css
-│   ├── lib/                                # Feature modules + common contracts/utils
-│   │   ├── appInit/
-│   │   ├── adapters/
-│   │   │   └── runtime/                    # Single runtime-message boundary layer
-│   │   ├── backgroundRuntime/              # Privileged background runtime modules
-│   │   │   ├── domains/                    # Tab/session/page domain logic
-│   │   │   ├── handlers/                   # Runtime + command message handlers
-│   │   │   └── lifecycle/                  # Startup restore + boot-time flows
-│   │   ├── core/
-│   │   │   ├── panel/                      # Shared list-navigation controller
-│   │   │   └── sessionMenu/                # Pure session state machine + selectors
-│   │   ├── ui/
-│   │   │   ├── panels/
-│   │   │   │   ├── help/
-│   │   │   │   ├── searchCurrentPage/      # panel shell + composable grep/view modules
-│   │   │   │   ├── searchOpenTabs/
-│   │   │   │   ├── sessionMenu/            # load/save views + restore overlay + shared view builders
-│   │   │   │   └── tabManager/             # Tab Manager overlay (slots/swap/undo/remove)
-│   │   └── common/
-│   │       ├── contracts/                  # Message shapes + shared type contracts
-│   │       └── utils/                      # Helpers, parsing, formatting, shared UI primitives
+│   ├── entryPoints/                # background/content/options/popup bundles
+│   ├── lib/                        # appInit, adapters, core, ui, common, backgroundRuntime
 │   ├── icons/
 │   └── types.d.ts
-├── esBuildConfig/                          # Build script + MV2/MV3 manifests
-├── package.json
-├── tsconfig.json
-└── dist/                                   # Build output loaded by browser
+├── esBuildConfig/                  # build scripts + MV2/MV3 manifests
+├── test/                           # node:test guardrails
+├── RELEASE.md
+├── STORE.md
+├── PRIVACY.md
+└── README.md
 ```
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────────────┐
-│                background.js                          │
-│   tab manager + sessions + frecency                  │
-│   + message routing                                   │
-└───────────────┬──────────────────────┬────────────────┘
-                │                      │
-      runtime messages          runtime messages
-                │                      │
-   ┌────────────▼──────────┐   ┌──────▼───────────────┐
-   │ contentScript.js      │   │ optionsPage.js      │
-   │ overlay UI + keybinds │   │ keybinding editor    │
-   │ + action registry     │   │ + nav mode settings  │
-   │ + page grep + preview │   │                      │
-   └────────────┬──────────┘   └──────────────────────┘
-                │
-        opens/jumps tabs
-                │
-       ┌────────▼─────────┐
-       │ toolbarPopup.js │
-       │ quick tab actions│
-       └──────────────────┘
-```
-
-### Key Design Decisions
-- **Shadow DOM** — overlays are injected as Shadow DOM elements to prevent style leakage from host pages
-- **webextension-polyfill** — unified `browser.*` API across Chrome and Firefox
-- **Dual manifests** — MV2 for Firefox/Zen, MV3 for Chrome (service worker lifecycle)
-- **Compatibility guardrail** — `npm run verify:compat` checks manifest permission/command invariants
-- **Store policy guardrail** — `npm run verify:store` keeps manifests, store copy, and privacy policy aligned
-- **Background domain routing** — `background.ts` is orchestration; business logic lives in `src/lib/backgroundRuntime/domains/*` and message routing in `src/lib/backgroundRuntime/handlers/*`
-- **`ensureTabManagerLoaded()` guards** — tab manager state is lazily reloaded when background context is cold-started
-- **Runtime adapter boundary** — runtime message calls are centralized in `src/lib/adapters/runtime/*` so UI modules don't send raw messages directly
-- **Pure core modules for UI state** — `src/lib/core/sessionMenu/sessionCore.ts` isolates session transient-state transitions and derived selectors
-- **Shared list-navigation engine** — `src/lib/core/panel/panelListController.ts` keeps wheel/arrow/half-page behavior consistent across overlays
-- **Testability by composition** — current-page grep internals and session view/restore flows are split into smaller modules with dedicated wiring/state regression tests
-- **Configurable keybindings** — all bindings in `browser.storage.local` with per-scope collision detection
-- **Navigation behavior** — standard mode is always enabled; `j/k` aliases are additive with base up/down bindings
-- **rAF-throttled rendering** — frecency and telescope views defer DOM updates to animation frames
-- **Perf regression budgets** — filter/render hotspots use `withPerfTrace` + `src/lib/common/utils/perfBudgets.json` guardrails
-- **Shared design tokens** — overlays consume `panelHost` CSS variables for consistent Ghostty-inspired styling
-- **Virtual scrolling** — heavy list panels render only the visible window from a pooled set of DOM nodes
-
-## Storage Keys
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `tabManagerList` | `TabManagerEntry[]` | Active tab manager slots (`closed` entries preserved) |
-| `tabManagerSessions` | `TabManagerSession[]` | Saved sessions (max 4) |
-| `frecencyData` | `FrecencyEntry[]` | Frecency ranking data (max 50) |
-| `keybindings` | `KeybindingsConfig` | User keybindings + navigation mode |
-| `storageSchemaVersion` | `number` | Schema version used by startup migrations |
-
-## Contributing
-
-See `CONTRIBUTING.md` for naming conventions, module boundaries, and PR checklist.
-Architecture walkthrough for contributors: `docs/ARCHITECTURE.md`.
 
 ## License
 
-MIT
+MIT — see `LICENSE`.

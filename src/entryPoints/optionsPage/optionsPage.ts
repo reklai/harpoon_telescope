@@ -26,6 +26,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const container = document.getElementById("bindingsContainer")!;
   const resetAllBtn = document.getElementById("resetAllBtn")!;
+  const disableAllBtn = document.getElementById("disableAllBtn")!;
   const statusBar = document.getElementById("statusBar")!;
 
   function renderBindings(): void {
@@ -42,6 +43,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       for (const [action, binding] of Object.entries(actions)) {
         const label = ACTION_LABELS[scope]?.[action] || action;
         const isModified = binding.key !== binding.default;
+        const isUnbound = !binding.key;
 
         const row = document.createElement("div");
         row.className = "binding-row";
@@ -50,16 +52,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         row.innerHTML = `
           <span class="binding-action">${escapeHtml(label)}</span>
-          <span class="binding-key${isModified ? " modified" : ""}">${escapeHtml(keyToDisplay(binding.key))}</span>
+          <span class="binding-key${isModified ? " modified" : ""}${isUnbound ? " unbound" : ""}">${escapeHtml(keyToDisplay(binding.key))}</span>
           <button class="btn change-btn">change</button>
+          <button class="btn unbind-btn"${isUnbound ? ' style="opacity:0.3;pointer-events:none"' : ""}>unbind</button>
           <button class="btn reset-btn"${!isModified ? ' style="opacity:0.3;pointer-events:none"' : ""}>reset</button>
         `;
 
         const changeBtn = row.querySelector(".change-btn") as HTMLButtonElement;
+        const unbindBtn = row.querySelector(".unbind-btn") as HTMLButtonElement;
         const resetBtn = row.querySelector(".reset-btn") as HTMLButtonElement;
 
         changeBtn.addEventListener("click", () =>
           startRecording(scope as BindingScope, action, row),
+        );
+        unbindBtn.addEventListener("click", () =>
+          unbindBinding(scope as BindingScope, action),
         );
         resetBtn.addEventListener("click", () =>
           resetBinding(scope as BindingScope, action),
@@ -159,10 +166,33 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderBindings();
   }
 
+  async function unbindBinding(
+    scope: BindingScope,
+    action: string,
+  ): Promise<void> {
+    if (!config.bindings[scope][action].key) return;
+    config.bindings[scope][action].key = "";
+    await saveKeybindings(config);
+    const label = ACTION_LABELS[scope]?.[action] || action;
+    showStatus(`${label} \u2192 Unbound`, "success");
+    renderBindings();
+  }
+
   resetAllBtn.addEventListener("click", async () => {
     config = JSON.parse(JSON.stringify(DEFAULT_KEYBINDINGS));
     await saveKeybindings(config);
     showStatus("All keybindings reset to defaults.", "success");
+    renderBindings();
+  });
+
+  disableAllBtn.addEventListener("click", async () => {
+    for (const [scope, actions] of Object.entries(config.bindings)) {
+      for (const action of Object.keys(actions)) {
+        config.bindings[scope as BindingScope][action].key = "";
+      }
+    }
+    await saveKeybindings(config);
+    showStatus("All keybindings disabled (unbound).", "success");
     renderBindings();
   });
 

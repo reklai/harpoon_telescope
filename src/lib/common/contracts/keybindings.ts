@@ -167,6 +167,7 @@ export function checkCollision(
   action: string,
   key: string,
 ): CollisionResult | null {
+  if (!key) return null;
   const scopeBindings = config.bindings[scope];
   for (const [existingAction, binding] of Object.entries(scopeBindings)) {
     if (existingAction === action) continue;
@@ -281,7 +282,7 @@ export function getKeysForAction(
   action: string,
 ): string[] {
   const scopeBindings = config.bindings[scope as keyof KeybindingsConfig["bindings"]];
-  const keys = [scopeBindings[action].key];
+  const keys = scopeBindings[action].key ? [scopeBindings[action].key] : [];
   if (config.navigationMode === "standard" && STANDARD_NAV_ALIASES[scope]?.[action]) {
     keys.push(...STANDARD_NAV_ALIASES[scope][action]);
   }
@@ -299,7 +300,7 @@ export function matchesAction(
   const binding = scopeBindings?.[action];
   if (!binding) return false;
 
-  if (matchesKey(event, binding.key)) return true;
+  if (binding.key && matchesKey(event, binding.key)) return true;
 
   if (config.navigationMode !== "standard") return false;
   const standardAliases = STANDARD_NAV_ALIASES[scope]?.[action];
@@ -314,7 +315,7 @@ export function matchesAction(
 
 /** Format a key string for display (replace arrow names with symbols, etc.) */
 export function keyToDisplay(keyString: string): string {
-  if (!keyString) return "";
+  if (!keyString) return "Unbound";
   return keyString
     .replace("ArrowUp", "\u2191")
     .replace("ArrowDown", "\u2193")

@@ -212,6 +212,11 @@ body {
   background: rgba(249,212,92,0.1);
 }
 
+.binding-key.unbound {
+  color: #808080;
+  background: rgba(255,255,255,0.03);
+}
+
 .binding-key.recording-indicator {
   background: #0a84ff;
   color: #fff;
@@ -249,6 +254,11 @@ body {
   border-color: #808080;
 }
 
+.btn.unbind-btn:hover {
+  border-color: #ff9f0a;
+  color: #ff9f0a;
+}
+
 .btn.cancel-btn {
   background: #ff5f57;
   color: #fff;
@@ -256,19 +266,35 @@ body {
 }
 
 /* Reset all */
+.disable-all-btn,
 .reset-all-btn {
   display: block;
   width: 100%;
   padding: 10px;
-  background: rgba(255,95,87,0.08);
-  color: #ff5f57;
-  border: 1px solid rgba(255,95,87,0.2);
   border-radius: 8px;
   cursor: pointer;
   font-family: inherit;
   font-size: 12px;
   font-weight: 500;
   transition: background 0.2s, border-color 0.2s;
+}
+
+.disable-all-btn {
+  background: rgba(255,159,10,0.08);
+  color: #ff9f0a;
+  border: 1px solid rgba(255,159,10,0.2);
+  margin-top: 12px;
+}
+
+.disable-all-btn:hover {
+  background: rgba(255,159,10,0.15);
+  border-color: #ff9f0a;
+}
+
+.reset-all-btn {
+  background: rgba(255,95,87,0.08);
+  color: #ff5f57;
+  border: 1px solid rgba(255,95,87,0.2);
   margin-top: 12px;
 }
 

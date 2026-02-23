@@ -15,6 +15,8 @@ ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard-f
 ### Tab Manager (Harpoon)
 
 - Anchor up to 4 tabs to numbered slots.
+- Anchored Tabs that were closed can be recovered via keybind associated with it
+    - Recovered Tabs will restore last known scroll position
 - Jump/cycle with scroll restoration on reopen.
 - Swap mode (`W`), delete (`D`), undo remove (`U`).
 

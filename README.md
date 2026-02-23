@@ -24,7 +24,8 @@ ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard-f
 
 - `Alt+S` opens load view.
 - `Alt+Shift+S` opens save view directly.
-- Save/load up to 4 named sessions.
+- Save/load up to 4 named tab manager set sessions.
+- Sessions include holding scroll position, tabs sets with their associated keybinds
 - Includes overwrite/delete/load confirmations and session preview.
 
 ### Search Current Page

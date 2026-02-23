@@ -74,7 +74,7 @@ if (suggestedCount > 4) {
   errors.push(`MV3 declares ${suggestedCount} suggested shortcuts; Chrome allows at most 4.`);
 }
 
-const expectedAddShortcut = "Alt+Shift+T";
+const expectedAddShortcut = "Alt+Shift+Y";
 const v2AddShortcut = manifestV2.commands?.["tab-manager-add"]?.suggested_key?.default;
 const v3AddShortcut = manifestV3.commands?.["tab-manager-add"]?.suggested_key?.default;
 if (v2AddShortcut !== expectedAddShortcut || v3AddShortcut !== expectedAddShortcut) {

@@ -30,7 +30,7 @@ ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard-f
 
 ### Search Current Page
 
-- Open with `Alt+F`.
+- Open with `Alt+G`.
 - Fuzzy search across page text with filters: `/code`, `/headings`, `/img`, `/links`.
 - Live preview pane with context and highlighted matches.
 - `Shift+Space` clears search input.
@@ -52,11 +52,11 @@ ThePrimeagen Harpoon + Telescope inspired browser extension for fast, keyboard-f
 | Shortcut | Action |
 |----------|--------|
 | `Alt+T` | Open Tab Manager (Harpoon) |
-| `Alt+Shift+T` | Add current tab to harpoon |
+| `Alt+Shift+Y` | Add current tab to harpoon |
 | `Alt+1` — `Alt+4` | Jump to harpoon slot 1–4 |
 | `Alt+-` | Cycle to previous harpoon slot |
 | `Alt+=` | Cycle to next harpoon slot |
-| `Alt+F` | Search in current page (Telescope) |
+| `Alt+G` | Search in current page (Telescope) |
 | `Alt+Shift+F` | Open frecency tab list |
 | `Alt+S` | Open session menu |
 | `Alt+Shift+S` | Open save session |

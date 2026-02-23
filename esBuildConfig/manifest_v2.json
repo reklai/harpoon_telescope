@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "Harpoon Telescope",
+  "name": "TabScope",
   "version": "2.0.0",
-  "description": "Harpoon + Telescope inspired browser extension — search pages, live preview, and anchor up to 4 tabs with scroll memory.",
+  "description": "Keyboard-first tab pinning: instant jump+scroll restore, local tab sessions save/load, fuzzy-search pages/open tab, custom keybinds.",
   "browser_specific_settings": {
     "gecko": {
       "id": "@harpoon-telescope.reklai",
@@ -35,7 +35,7 @@
       "description": "Open Tab Manager panel"
     },
     "tab-manager-add": {
-      "suggested_key": { "default": "Alt+Shift+T" },
+      "suggested_key": { "default": "Alt+Shift+Y" },
       "description": "Add current tab to Tab Manager"
     },
     "tab-manager-tab-1": {
@@ -55,7 +55,7 @@
       "description": "Jump to Tab Manager slot 4"
     },
     "open-search-current": {
-      "suggested_key": { "default": "Alt+F" },
+      "suggested_key": { "default": "Alt+G" },
       "description": "Search in current tab"
     }
   },
@@ -69,7 +69,7 @@
       "96": "icons/icon-96.png"
     },
     "default_popup": "toolbarPopup/toolbarPopup.html",
-    "default_title": "Harpoon Telescope"
+    "default_title": "TabScope"
   },
   "icons": {
     "48": "icons/icon-48.png",

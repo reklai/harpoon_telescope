@@ -26,7 +26,7 @@ test("verifyCompat script succeeds", () => {
 test("manifests keep add-tab command shortcut aligned", () => {
   const v2 = readJson("esBuildConfig/manifest_v2.json");
   const v3 = readJson("esBuildConfig/manifest_v3.json");
-  const expectedShortcut = "Alt+Shift+T";
+  const expectedShortcut = "Alt+Shift+Y";
   assert.equal(v2.commands["tab-manager-add"].suggested_key.default, expectedShortcut);
   assert.equal(v3.commands["tab-manager-add"].suggested_key.default, expectedShortcut);
 });

@@ -1,18 +1,18 @@
-# Store Reference — Harpoon Telescope
+# Store Reference — TabScope
 
 This document is a reference for store-facing metadata, product claims, and permission rationale.
 
 ## Extension Name
 
-Harpoon Telescope
+TabScope
 
 ## Summary (short — 132 characters max for AMO)
 
-Pin your most-used tabs, search any page instantly, switch tabs by frequency. Built-in j/k aliases. No data collection.
+Keyboard-first tab pinning: instant jump+scroll restore, local tab sessions save/load, fuzzy-search pages/open tab, custom keybinds.
 
 ## Description
 
-Harpoon Telescope is a keyboard-first tab and page navigation extension.
+Keyboard-first that lets you pin tabs: jump instantly with scroll restore via key-press, and save/load pinned tabs sessions-all locally. Fuzzy-search in pages or opened tabs. Fully customizable key-binds for focused daily workflow.
 
 Core capabilities:
 

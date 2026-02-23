@@ -11,14 +11,14 @@ export const DEFAULT_KEYBINDINGS: KeybindingsConfig = {
   bindings: {
     global: {
       openTabManager:    { key: "Alt+T",       default: "Alt+T"       },
-      addTab:         { key: "Alt+Shift+T", default: "Alt+Shift+T" },
+      addTab:         { key: "Alt+Shift+Y", default: "Alt+Shift+Y" },
       jumpSlot1:      { key: "Alt+1",       default: "Alt+1"       },
       jumpSlot2:      { key: "Alt+2",       default: "Alt+2"       },
       jumpSlot3:      { key: "Alt+3",       default: "Alt+3"       },
       jumpSlot4:      { key: "Alt+4",       default: "Alt+4"       },
       cyclePrev:      { key: "Alt+-",       default: "Alt+-"       },
       cycleNext:      { key: "Alt+=",       default: "Alt+="       },
-      searchInPage:   { key: "Alt+F",       default: "Alt+F"       },
+      searchInPage:   { key: "Alt+G",       default: "Alt+G"       },
       openFrecency:   { key: "Alt+Shift+F", default: "Alt+Shift+F" },
       openSessions:   { key: "Alt+S",       default: "Alt+S"       },
       openSessionSave: { key: "Alt+Shift+S", default: "Alt+Shift+S" },
@@ -242,7 +242,7 @@ function parseKeyCombo(keyString: string): ParsedKeyCombo | null {
   return parsed;
 }
 
-/** Convert a KeyboardEvent into a normalized string like "Alt+F" or "Ctrl+Shift+K" */
+/** Convert a KeyboardEvent into a normalized string like "Alt+G" or "Ctrl+Shift+K" */
 export function keyEventToString(event: KeyboardEvent): string | null {
   const parts: string[] = [];
   if (event.ctrlKey) parts.push("Ctrl");

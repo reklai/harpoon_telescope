@@ -20,7 +20,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function renderList(tabManagerEntries: TabManagerEntry[]): void {
     if (tabManagerEntries.length === 0) {
       listEl.innerHTML =
-        '<div class="empty-state">No tabs added. Use Alt+Shift+T or click + Add.</div>';
+        '<div class="empty-state">No tabs added. Use Alt+Shift+Y or click + Add.</div>';
       return;
     }
 

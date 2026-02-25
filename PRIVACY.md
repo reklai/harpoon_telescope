@@ -1,10 +1,10 @@
-# Privacy Policy — Harpoon Telescope
+# Privacy Policy — TabScope
 
-**Last updated:** February 22, 2026
+**Last updated:** February 25, 2026
 
 ## Summary
 
-Harpoon Telescope does not collect, transmit, or share any user data. Everything stays in your browser.
+TabScope does not collect, transmit, or share any user data. Everything stays in your browser.
 No account is required. No cloud sync is used.
 
 ## Data Storage
@@ -56,7 +56,7 @@ There are none. No third-party services, SDKs, libraries that phone home, or ext
 
 ## Data Sharing
 
-None. Harpoon Telescope does not sell, rent, transfer, or disclose your data to third parties.
+None. TabScope does not sell, rent, transfer, or disclose your data to third parties.
 
 ## Data Retention
 
